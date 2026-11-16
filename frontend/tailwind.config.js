@@ -1,0 +1,1 @@
+export default { content: ['./index.html', './src/**/*.{ts,tsx}'], theme: { extend: { colors: { primary: '#315A42', secondary: '#E7A06C', canvas: '#F6F7F3', ink: '#263A31' }, fontFamily: { sans: ['Inter', 'sans-serif'] }, borderRadius: { card: '12px' }, spacing: { sidebar: '240px' } } }, plugins: [] };
