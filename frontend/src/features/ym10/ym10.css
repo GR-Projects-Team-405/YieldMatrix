@@ -1,0 +1,191 @@
+.ym10-page {
+  display: grid;
+  gap: 24px;
+  color: var(--text);
+}
+
+.ym10-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ym10-page-heading p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ym10-page-heading .ym-button {
+  flex: 0 0 auto;
+}
+
+.ym10-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ym10-stats .ym-stat-card {
+  border-radius: 12px;
+}
+
+.ym10-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(130px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.ym10-request-card {
+  min-width: 0;
+  padding: 24px;
+}
+
+.ym10-request-card .ym-card-heading {
+  margin-bottom: 16px;
+}
+
+.ym10-request-table {
+  min-width: 940px;
+}
+
+.ym10-request-table td:first-child,
+.ym10-request-table td:nth-child(2) {
+  min-width: 145px;
+}
+
+.ym10-table-primary,
+.ym10-table-secondary {
+  display: block;
+  line-height: 16px;
+}
+
+.ym10-table-primary {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ym10-table-secondary {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ym10-request-table .ym-table-row td {
+  padding: 8px 16px;
+  vertical-align: middle;
+}
+
+.ym10-table-footer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.ym10-view-link {
+  color: var(--accent-text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ym10-view-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ym10-status--open .ym-status {
+  color: var(--accent-text);
+  background: var(--soft);
+}
+
+.ym10-status--closing .ym-status {
+  color: #854500;
+  background: #fff0e3;
+}
+
+.ym10-status--sent .ym-status {
+  color: #245b80;
+  background: #e8f2f8;
+}
+
+.ym10-status--matching .ym-status {
+  color: var(--accent-text);
+  background: var(--soft);
+}
+
+:root[data-theme='dark'] .ym10-status--closing .ym-status {
+  color: #ffd2a1;
+  background: #483322;
+}
+
+:root[data-theme='dark'] .ym10-status--sent .ym-status {
+  color: #b5ddf8;
+  background: #213c4e;
+}
+
+.ym10-placeholder,
+.ym10-not-found {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1100px) {
+  .ym10-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ym10-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ym10-filters .ym-field:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .ym10-page {
+    gap: 16px;
+  }
+
+  .ym10-page-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ym10-page-heading .ym-button {
+    width: 100%;
+  }
+
+  .ym10-stats {
+    gap: 12px;
+  }
+
+  .ym10-stats .ym-stat-card {
+    padding: 16px;
+  }
+
+  .ym10-stats .ym-stat-value {
+    font-size: 24px;
+  }
+
+  .ym10-filters {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .ym10-filters .ym-field:first-child {
+    grid-column: auto;
+  }
+
+  .ym10-request-card {
+    padding: 16px 16px 24px;
+  }
+}
