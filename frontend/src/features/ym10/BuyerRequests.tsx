@@ -25,6 +25,7 @@ const statusClass: Record<BuyerRequestStatus, string> = {
   'Closing soon': 'ym10-status--closing',
   'Offer sent': 'ym10-status--sent',
   Matching: 'ym10-status--matching',
+  Closed: 'ym10-status--closed',
 };
 
 export default function BuyerRequests() {
