@@ -1,0 +1,113 @@
+.ym02-auth {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 640px) 1fr;
+  background: var(--canvas);
+  color: var(--text);
+}
+
+/* Left brand panel */
+.ym02-auth__brand {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  padding: 64px;
+  background-color: #315a42;
+  background-size: cover;
+  background-position: center;
+  color: #ffffff;
+}
+.ym02-auth__brand::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(49, 90, 66, 0.35) 0%, rgba(38, 58, 49, 0.9) 100%);
+}
+.ym02-auth__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e7a06c;
+}
+.ym02-auth__headline {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.ym02-auth__body {
+  max-width: 460px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
+}
+.ym02-auth__chip {
+  align-self: flex-start;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Right side */
+.ym02-auth__main {
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+}
+.ym02-auth__panel {
+  width: min(100%, 440px);
+}
+.ym02-auth__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 32px;
+  font-size: 24px;
+  color: var(--accent-text);
+}
+
+/* Form pieces used by all four YM02 pages */
+.ym02-form {
+  display: grid;
+  gap: 16px;
+}
+.ym02-form .ym-button {
+  width: 100%;
+}
+.ym02-link {
+  color: var(--accent-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ym02-links {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Narrow screens: brand panel becomes a short banner on top */
+@media (max-width: 900px) {
+  .ym02-auth {
+    grid-template-columns: 1fr;
+  }
+  .ym02-auth__brand {
+    padding: 24px 16px;
+    gap: 8px;
+  }
+  .ym02-auth__headline {
+    font-size: 24px;
+  }
+  .ym02-auth__body,
+  .ym02-auth__chip {
+    display: none;
+  }
+}
