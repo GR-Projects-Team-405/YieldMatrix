@@ -56,7 +56,7 @@ export default function TraceRecords() {
     );
   }, [searchQuery]);
 
-  const tableHeaders = ['Batch ID', 'Produce', 'Farm', 'Harvest Date', 'Status', 'Actions'];
+  const tableHeaders = ['Batch ID', 'Produce', 'Farm', 'Harvest Date', 'Status', <div key="actions" className="text-center">Actions</div>];
 
   return (
     <div className="space-y-6">
@@ -76,52 +76,52 @@ export default function TraceRecords() {
       </div>
 
       {/* Reusing StatCard component for the 4 metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+      {/* 4 Stat Cards matching your UI design */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Batches */}
         <StatCard
-          label="Total Batches"
-          value={
-            <div className="flex flex-col items-center">
-              <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42] mb-1">
-                <Sprout size={18} />
-              </div>
-              <span>{INITIAL_STATS.totalBatches}</span>
-            </div>
-          }
+        icon={
+        <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42]">
+            <Sprout size={16} />
+        </div>
+        }
+        label="Total Batches"
+        value={INITIAL_STATS.totalBatches}
         />
+        
+        {/* Delivered */}
         <StatCard
-          label="Delivered"
-          value={
-            <div className="flex flex-col items-center">
-              <div className="w-8 h-8 rounded-full bg-[#e8f2f8] flex items-center justify-center text-[#245b80] mb-1">
-                <Truck size={18} />
-              </div>
-              <span>{INITIAL_STATS.delivered}</span>
-            </div>
-          }
+        icon={
+        <div className="w-8 h-8 rounded-full bg-[#e8f2f8] flex items-center justify-center text-[#245b80]">
+            <Truck size={16} />
+        </div>
+        }
+        label="Delivered"
+        value={INITIAL_STATS.delivered}
         />
+        
+        {/* Verified */}
         <StatCard
-          label="Verified"
-          value={
-            <div className="flex flex-col items-center">
-              <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42] mb-1">
-                <CheckCircle2 size={18} />
-              </div>
-              <span>{INITIAL_STATS.verifiedRate}</span>
-            </div>
-          }
+        icon={
+        <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42]">
+            <CheckCircle2 size={16} />
+        </div>
+        }
+        label="Verified"
+        value={INITIAL_STATS.verifiedRate}
         />
+        
+        {/* Scan Count */}
         <StatCard
-          label="Scan Count"
-          value={
-            <div className="flex flex-col items-center">
-              <div className="w-8 h-8 rounded-full bg-[#f3e8ff] flex items-center justify-center text-[#7c3aed] mb-1">
-                <Scan size={18} />
-              </div>
-              <span>{INITIAL_STATS.scanCount}</span>
-            </div>
-          }
+        icon={
+        <div className="w-8 h-8 rounded-full bg-[#f3e8ff] flex items-center justify-center text-[#7c3aed]">
+            <Scan size={16} />
+        </div>
+        }
+        label="Scan Count"
+        value={INITIAL_STATS.scanCount}
         />
-      </div>
+    </div>
 
       {/* Search Bar & Filter Button (reusing Button variant="outline") */}
       <div className="flex items-center gap-3">
@@ -158,11 +158,13 @@ export default function TraceRecords() {
                   {/* Reusing StatusBadge component */}
                   <StatusBadge status={record.status} />
                 </td>
-                <td className="py-4 px-6 text-center">
-                    <Button variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`history/${record.id}`)}} className="!h-8 !px-3 !py-1 text-[13px] gap-1.5 hover:!border-[#315A42] hover:!text-[#315A42] hover:!bg-[#eaf2e8] shadow-sm" title={`View trace history for ${record.id}`}>
-                      <Eye size={16} />
-                      <span>View</span>
-                    </Button>
+                <td className="text-center">
+                    <div className="flex items-center justify-center">
+                        <Button variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`history/${record.id}`)}} className="!h-8 !px-3 !py-1 text-[13px] gap-1.5 hover:!border-[#315A42] hover:!text-[#315A42] hover:!bg-[#eaf2e8] shadow-sm" title={`View trace history for ${record.id}`}>
+                            <Eye size={16} />
+                            <span>View</span>
+                        </Button>
+                    </div>
                   
                 </td>
               </TableRow>

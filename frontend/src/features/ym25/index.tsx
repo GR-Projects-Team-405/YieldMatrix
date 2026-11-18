@@ -1,7 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import TraceRecords from './TraceRecords';
 import BatchTraceHistory from './BatchTraceHistory';
-import QrPreview from './QrPreview';
+import QrPreview from './QRPreview';
 import VerificationDetails from './VerificationDetails';
 
 export default function YM25() {
