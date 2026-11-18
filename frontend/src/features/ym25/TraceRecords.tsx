@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
@@ -14,7 +14,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
-// 1. Reusable shared components from frontend/src/components/
+// Reusable shared components from frontend/src/components/
 import { Table, TableRow } from '../../components/Table';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Button } from '../../components/Button';
@@ -43,8 +43,9 @@ export default function TraceRecords() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange] = useState('Last 30 days');
   const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
 
-  // Filter records based on search input
+  // Filter records based on search input (Batch ID, Produce, or Farm)
   const filteredRecords = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return INITIAL_RECORDS;
@@ -56,11 +57,37 @@ export default function TraceRecords() {
     );
   }, [searchQuery]);
 
-  const tableHeaders = ['Batch ID', 'Produce', 'Farm', 'Harvest Date', 'Status', <div key="actions" className="text-center">Actions</div>];
+  // Reset to page 1 whenever the search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  // Dynamic pagination calculations
+  const totalRecords = filteredRecords.length;
+  const totalPages = Math.ceil(totalRecords / ITEMS_PER_PAGE) || 1;
+
+  // Slice the 5 records for the active page
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredRecords.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredRecords, currentPage]);
+
+  // Indexes for the "Showing X–Y of Z records" text
+  const startIndex = totalRecords === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, totalRecords);
+
+  const tableHeaders = [
+    'Batch ID',
+    'Produce',
+    'Farm',
+    'Harvest Date',
+    'Status',
+    <div key="actions" className="text-center">Actions</div>,
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Top Bar: Subtitle & Date Filter Button (reusing Button variant="outline") */}
+      {/* Top Bar: Subtitle & Date Filter Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 -mt-2">
         <p className="text-[14px] text-[var(--muted)]">
           View and track the journey of harvested produce from farm to delivery.
@@ -75,55 +102,54 @@ export default function TraceRecords() {
         </Button>
       </div>
 
-      {/* Reusing StatCard component for the 4 metrics */}
       {/* 4 Stat Cards matching your UI design */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Batches */}
         <StatCard
-        icon={
-        <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42]">
-            <Sprout size={16} />
-        </div>
-        }
-        label="Total Batches"
-        value={INITIAL_STATS.totalBatches}
+          icon={
+            <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42]">
+              <Sprout size={16} />
+            </div>
+          }
+          label="Total Batches"
+          value={INITIAL_STATS.totalBatches}
         />
-        
+
         {/* Delivered */}
         <StatCard
-        icon={
-        <div className="w-8 h-8 rounded-full bg-[#e8f2f8] flex items-center justify-center text-[#245b80]">
-            <Truck size={16} />
-        </div>
-        }
-        label="Delivered"
-        value={INITIAL_STATS.delivered}
+          icon={
+            <div className="w-8 h-8 rounded-full bg-[#e8f2f8] flex items-center justify-center text-[#245b80]">
+              <Truck size={16} />
+            </div>
+          }
+          label="Delivered"
+          value={INITIAL_STATS.delivered}
         />
-        
+
         {/* Verified */}
         <StatCard
-        icon={
-        <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42]">
-            <CheckCircle2 size={16} />
-        </div>
-        }
-        label="Verified"
-        value={INITIAL_STATS.verifiedRate}
+          icon={
+            <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42]">
+              <CheckCircle2 size={16} />
+            </div>
+          }
+          label="Verified"
+          value={INITIAL_STATS.verifiedRate}
         />
-        
+
         {/* Scan Count */}
         <StatCard
-        icon={
-        <div className="w-8 h-8 rounded-full bg-[#f3e8ff] flex items-center justify-center text-[#7c3aed]">
-            <Scan size={16} />
-        </div>
-        }
-        label="Scan Count"
-        value={INITIAL_STATS.scanCount}
+          icon={
+            <div className="w-8 h-8 rounded-full bg-[#f3e8ff] flex items-center justify-center text-[#7c3aed]">
+              <Scan size={16} />
+            </div>
+          }
+          label="Scan Count"
+          value={INITIAL_STATS.scanCount}
         />
-    </div>
+      </div>
 
-      {/* Search Bar & Filter Button (reusing Button variant="outline") */}
+      {/* Search Bar & Filter Button */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
           <Search
@@ -148,79 +174,99 @@ export default function TraceRecords() {
       {filteredRecords.length > 0 ? (
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[12px] overflow-hidden">
           <Table headers={tableHeaders}>
-            {filteredRecords.map((record) => (
+            {paginatedRecords.map((record) => (
               <TableRow key={record.id}>
                 <td className="font-semibold text-[var(--text)]">{record.id}</td>
                 <td>{record.produce}</td>
                 <td>{record.farm}</td>
                 <td className="text-[var(--muted)]">{record.harvestDate}</td>
                 <td>
-                  {/* Reusing StatusBadge component */}
                   <StatusBadge status={record.status} />
                 </td>
                 <td className="text-center">
-                    <div className="flex items-center justify-center">
-                        <Button variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`history/${record.id}`)}} className="!h-8 !px-3 !py-1 text-[13px] gap-1.5 hover:!border-[#315A42] hover:!text-[#315A42] hover:!bg-[#eaf2e8] shadow-sm" title={`View trace history for ${record.id}`}>
-                            <Eye size={16} />
-                            <span>View</span>
-                        </Button>
-                    </div>
-                  
+                  <div className="flex items-center justify-center">
+                    <Button
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`history/${record.id}`);
+                      }}
+                      className="!h-8 !px-3 !py-1 text-[13px] gap-1.5 hover:!border-[#315A42] hover:!text-[#315A42] hover:!bg-[#eaf2e8] shadow-sm"
+                      title={`View trace history for ${record.id}`}
+                      aria-label={`View trace history for batch ${record.id}`}
+                    >
+                      <Eye size={15} />
+                      <span>View</span>
+                    </Button>
+                  </div>
                 </td>
               </TableRow>
             ))}
           </Table>
         </div>
       ) : (
-        /* Reusing EmptyState component when search yields no results */
         <EmptyState
           title="No trace records found"
           description="We couldn't find any batches matching your search query. Try searching by a different crop, farm, or ID."
         />
       )}
 
-      {/* Pagination Footer */}
+      {/* Dynamic Pagination Footer */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2">
         <p className="text-[13px] text-[var(--muted)]">
-          Showing 1–5 of 48 records
+          {totalRecords === 0
+            ? 'Showing 0 records'
+            : `Showing ${startIndex}–${endIndex} of ${totalRecords} records`}
         </p>
+
         <div className="flex items-center gap-1.5">
+          {/* Previous Page Button */}
           <button
             type="button"
-            className="w-9 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] hover:bg-[var(--canvas)] transition"
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="w-9 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] hover:bg-[var(--canvas)] disabled:opacity-40 disabled:cursor-not-allowed transition"
             aria-label="Previous page"
           >
             <ChevronLeft size={16} />
           </button>
-          {[1, 2, 3].map((page) => (
-            <button
-              key={page}
-              type="button"
-              onClick={() => setCurrentPage(page)}
-              className={`w-9 h-9 rounded-lg text-[13px] font-medium transition ${
-                currentPage === page
-                  ? 'bg-[#315A42] text-white'
-                  : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--canvas)]'
-              }`}
-            >
-              {page}
-            </button>
-          ))}
-          <span className="px-2 text-[var(--muted)] text-[13px]">...</span>
+
+          {/* Page 1 (Always shown) */}
           <button
             type="button"
-            onClick={() => setCurrentPage(10)}
+            onClick={() => setCurrentPage(1)}
             className={`w-9 h-9 rounded-lg text-[13px] font-medium transition ${
-              currentPage === 10
+              currentPage === 1
                 ? 'bg-[#315A42] text-white'
                 : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--canvas)]'
             }`}
           >
-            10
+            1
           </button>
+
+          {/* Next pages: Only rendered if more than 5 batches (totalPages > 1) */}
+          {totalPages > 1 &&
+            Array.from({ length: totalPages - 1 }, (_, index) => index + 2).map((page) => (
+              <button
+                key={page}
+                type="button"
+                onClick={() => setCurrentPage(page)}
+                className={`w-9 h-9 rounded-lg text-[13px] font-medium transition ${
+                  currentPage === page
+                    ? 'bg-[#315A42] text-white'
+                    : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--canvas)]'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+          {/* Next Page Button */}
           <button
             type="button"
-            className="w-9 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] hover:bg-[var(--canvas)] transition"
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={currentPage >= totalPages}
+            className="w-9 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] hover:bg-[var(--canvas)] disabled:opacity-40 disabled:cursor-not-allowed transition"
             aria-label="Next page"
           >
             <ChevronRight size={16} />
