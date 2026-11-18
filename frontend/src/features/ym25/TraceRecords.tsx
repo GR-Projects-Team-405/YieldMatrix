@@ -1,0 +1,230 @@
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Calendar,
+  ChevronDown,
+  Search,
+  Filter,
+  Eye,
+  Sprout,
+  Truck,
+  CheckCircle2,
+  Scan,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
+
+// 1. Reusable shared components from frontend/src/components/
+import { Table, TableRow } from '../../components/Table';
+import { StatusBadge } from '../../components/StatusBadge';
+import { Button } from '../../components/Button';
+import { StatCard } from '../../components/StatCard';
+import { EmptyState } from '../../components/EmptyState';
+
+import type { TraceRecord, TraceStats } from './types';
+
+const INITIAL_STATS: TraceStats = {
+  totalBatches: 48,
+  delivered: 42,
+  verifiedRate: '98%',
+  scanCount: '1.2K',
+};
+
+const INITIAL_RECORDS: TraceRecord[] = [
+  { id: 'YM25-B001', produce: 'Tomatoes', farm: 'Green Valley Farm', harvestDate: '28 Oct 2026', status: 'Delivered' },
+  { id: 'YM25-B002', produce: 'Carrots', farm: 'Highland Harvest', harvestDate: '27 Oct 2026', status: 'In Transit' },
+  { id: 'YM25-B003', produce: 'Lettuce', farm: 'Sunrise Organics', harvestDate: '26 Oct 2026', status: 'Verified' },
+  { id: 'YM25-B004', produce: 'Spinach', farm: 'Green Valley Farm', harvestDate: '25 Oct 2026', status: 'Processing' },
+  { id: 'YM25-B005', produce: 'Cabbage', farm: 'Highland Harvest', harvestDate: '24 Oct 2026', status: 'Delivered' },
+];
+
+export default function TraceRecords() {
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateRange] = useState('Last 30 days');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Filter records based on search input
+  const filteredRecords = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return INITIAL_RECORDS;
+    return INITIAL_RECORDS.filter(
+      (r) =>
+        r.id.toLowerCase().includes(q) ||
+        r.produce.toLowerCase().includes(q) ||
+        r.farm.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
+  const tableHeaders = ['Batch ID', 'Produce', 'Farm', 'Harvest Date', 'Status', 'Actions'];
+
+  return (
+    <div className="space-y-6">
+      {/* Top Bar: Subtitle & Date Filter Button (reusing Button variant="outline") */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 -mt-2">
+        <p className="text-[14px] text-[var(--muted)]">
+          View and track the journey of harvested produce from farm to delivery.
+        </p>
+        <Button
+          variant="outline"
+          className="!h-10 !px-4 text-[13px] self-start sm:self-auto"
+        >
+          <Calendar size={15} className="text-[var(--muted)]" />
+          <span>{dateRange}</span>
+          <ChevronDown size={15} className="text-[var(--muted)] ml-1" />
+        </Button>
+      </div>
+
+      {/* Reusing StatCard component for the 4 metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+        <StatCard
+          label="Total Batches"
+          value={
+            <div className="flex flex-col items-center">
+              <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42] mb-1">
+                <Sprout size={18} />
+              </div>
+              <span>{INITIAL_STATS.totalBatches}</span>
+            </div>
+          }
+        />
+        <StatCard
+          label="Delivered"
+          value={
+            <div className="flex flex-col items-center">
+              <div className="w-8 h-8 rounded-full bg-[#e8f2f8] flex items-center justify-center text-[#245b80] mb-1">
+                <Truck size={18} />
+              </div>
+              <span>{INITIAL_STATS.delivered}</span>
+            </div>
+          }
+        />
+        <StatCard
+          label="Verified"
+          value={
+            <div className="flex flex-col items-center">
+              <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42] mb-1">
+                <CheckCircle2 size={18} />
+              </div>
+              <span>{INITIAL_STATS.verifiedRate}</span>
+            </div>
+          }
+        />
+        <StatCard
+          label="Scan Count"
+          value={
+            <div className="flex flex-col items-center">
+              <div className="w-8 h-8 rounded-full bg-[#f3e8ff] flex items-center justify-center text-[#7c3aed] mb-1">
+                <Scan size={18} />
+              </div>
+              <span>{INITIAL_STATS.scanCount}</span>
+            </div>
+          }
+        />
+      </div>
+
+      {/* Search Bar & Filter Button (reusing Button variant="outline") */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search
+            size={18}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)] pointer-events-none"
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by batch ID, produce or farm..."
+            className="w-full h-[48px] pl-11 pr-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[14px] text-[var(--text)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[#315A42] focus:border-transparent transition"
+          />
+        </div>
+        <Button variant="outline" className="gap-2">
+          <span>Filter</span>
+          <Filter size={16} />
+        </Button>
+      </div>
+
+      {/* Reusing Table and TableRow components */}
+      {filteredRecords.length > 0 ? (
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[12px] overflow-hidden">
+          <Table headers={tableHeaders}>
+            {filteredRecords.map((record) => (
+              <TableRow key={record.id}>
+                <td className="font-semibold text-[var(--text)]">{record.id}</td>
+                <td>{record.produce}</td>
+                <td>{record.farm}</td>
+                <td className="text-[var(--muted)]">{record.harvestDate}</td>
+                <td>
+                  {/* Reusing StatusBadge component */}
+                  <StatusBadge status={record.status} />
+                </td>
+                <td className="py-4 px-6 text-center">
+                    <Button variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`history/${record.id}`)}} className="!h-8 !px-3 !py-1 text-[13px] gap-1.5 hover:!border-[#315A42] hover:!text-[#315A42] hover:!bg-[#eaf2e8] shadow-sm" title={`View trace history for ${record.id}`}>
+                      <Eye size={16} />
+                      <span>View</span>
+                    </Button>
+                  
+                </td>
+              </TableRow>
+            ))}
+          </Table>
+        </div>
+      ) : (
+        /* Reusing EmptyState component when search yields no results */
+        <EmptyState
+          title="No trace records found"
+          description="We couldn't find any batches matching your search query. Try searching by a different crop, farm, or ID."
+        />
+      )}
+
+      {/* Pagination Footer */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2">
+        <p className="text-[13px] text-[var(--muted)]">
+          Showing 1–5 of 48 records
+        </p>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="w-9 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] hover:bg-[var(--canvas)] transition"
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          {[1, 2, 3].map((page) => (
+            <button
+              key={page}
+              type="button"
+              onClick={() => setCurrentPage(page)}
+              className={`w-9 h-9 rounded-lg text-[13px] font-medium transition ${
+                currentPage === page
+                  ? 'bg-[#315A42] text-white'
+                  : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--canvas)]'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          <span className="px-2 text-[var(--muted)] text-[13px]">...</span>
+          <button
+            type="button"
+            onClick={() => setCurrentPage(10)}
+            className={`w-9 h-9 rounded-lg text-[13px] font-medium transition ${
+              currentPage === 10
+                ? 'bg-[#315A42] text-white'
+                : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--canvas)]'
+            }`}
+          >
+            10
+          </button>
+          <button
+            type="button"
+            className="w-9 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] hover:bg-[var(--canvas)] transition"
+            aria-label="Next page"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
