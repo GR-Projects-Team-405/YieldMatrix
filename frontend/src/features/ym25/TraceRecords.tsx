@@ -16,7 +16,6 @@ import {
 
 // Reusable shared components from frontend/src/components/
 import { Table, TableRow } from '../../components/Table';
-import { StatusBadge } from '../../components/StatusBadge';
 import { Button } from '../../components/Button';
 import { StatCard } from '../../components/StatCard';
 import { EmptyState } from '../../components/EmptyState';
@@ -37,6 +36,20 @@ const INITIAL_RECORDS: TraceRecord[] = [
   { id: 'YM25-B004', produce: 'Spinach', farm: 'Green Valley Farm', harvestDate: '25 Oct 2026', status: 'Processing' },
   { id: 'YM25-B005', produce: 'Cabbage', farm: 'Highland Harvest', harvestDate: '24 Oct 2026', status: 'Delivered' },
 ];
+
+const getStatusToneClass = (status: TraceRecord['status']) => {
+  switch (status) {
+    case 'Delivered':
+    case 'Verified':
+      return 'ym-tone--success';
+    case 'Processing':
+      return 'ym-tone--warning';
+    case 'In Transit':
+      return 'ym-tone--info';
+    default:
+      return 'ym-tone--neutral';
+  }
+};
 
 export default function TraceRecords() {
   const navigate = useNavigate();
@@ -181,7 +194,9 @@ export default function TraceRecords() {
                 <td>{record.farm}</td>
                 <td className="text-[var(--muted)]">{record.harvestDate}</td>
                 <td>
-                  <StatusBadge status={record.status} />
+                  <span className={`ym-status ${getStatusToneClass(record.status)}`}>
+                    {record.status}
+                  </span>
                 </td>
                 <td className="text-center">
                   <div className="flex items-center justify-center">
