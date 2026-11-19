@@ -30,6 +30,20 @@ const AVAILABILITY_OPTIONS: { value: SearchAvailabilityMode; label: string }[] =
   { value: 'planned', label: 'Planned future harvests' },
 ];
 
+interface SearchFilterDraft {
+  q: string;
+  cropId: string;
+  category: string;
+  gradeIds: string[];
+  district: string;
+  minPriceLkr: string;
+  maxPriceLkr: string;
+  availability: SearchAvailabilityMode;
+  minKg: string;
+  sort: SearchSortMode;
+  page?: number;
+}
+
 export default function MarketplaceSearchPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,7 +53,6 @@ export default function MarketplaceSearchPage() {
   const [error, setError] = useState('');
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
 
-  // Local filter form controls synced with URL params
   const [qInput, setQInput] = useState(searchParams.get('q') || '');
   const [cropId, setCropId] = useState(searchParams.get('cropId') || '');
   const [category, setCategory] = useState(searchParams.get('category') || '');
@@ -71,8 +84,9 @@ export default function MarketplaceSearchPage() {
       setLoading(true);
       setError('');
       try {
+        const parsed = new URLSearchParams(paramsKey);
         const params: Record<string, string> = {};
-        searchParams.forEach((value, key) => {
+        parsed.forEach((value, key) => {
           if (value) params[key] = value;
         });
         const { data } = await api.get<MarketplaceSearchResponse>('/ym11/marketplace/search', {
@@ -87,24 +101,24 @@ export default function MarketplaceSearchPage() {
         setLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [paramsKey]
   );
 
   useEffect(() => {
-    setQInput(searchParams.get('q') || '');
-    setCropId(searchParams.get('cropId') || '');
-    setCategory(searchParams.get('category') || '');
-    setGradeIds((searchParams.get('gradeIds') || '').split(',').filter(Boolean));
-    setDistrict(searchParams.get('district') || '');
-    const minC = searchParams.get('minPriceCents');
-    const maxC = searchParams.get('maxPriceCents');
+    const parsed = new URLSearchParams(paramsKey);
+    setQInput(parsed.get('q') || '');
+    setCropId(parsed.get('cropId') || '');
+    setCategory(parsed.get('category') || '');
+    setGradeIds((parsed.get('gradeIds') || '').split(',').filter(Boolean));
+    setDistrict(parsed.get('district') || '');
+    const minC = parsed.get('minPriceCents');
+    const maxC = parsed.get('maxPriceCents');
     setMinPriceLkr(minC ? String(Number(minC) / 100) : '');
     setMaxPriceLkr(maxC ? String(Number(maxC) / 100) : '');
-    setAvailability((searchParams.get('availability') as SearchAvailabilityMode) || 'all');
-    setMinKg(searchParams.get('minKg') || '');
-    setSort((searchParams.get('sort') as SearchSortMode) || 'price_asc');
-  }, [paramsKey, searchParams]);
+    setAvailability((parsed.get('availability') as SearchAvailabilityMode) || 'all');
+    setMinKg(parsed.get('minKg') || '');
+    setSort((parsed.get('sort') as SearchSortMode) || 'price_asc');
+  }, [paramsKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -112,55 +126,78 @@ export default function MarketplaceSearchPage() {
     return () => controller.abort();
   }, [fetchSearch]);
 
-  function applyFilters(overrides?: { page?: number; sort?: SearchSortMode }) {
+  function commitFilters(overrides?: Partial<SearchFilterDraft>) {
     setValidationError('');
-    const next = new URLSearchParams();
-    if (qInput.trim()) next.set('q', qInput.trim());
-    if (cropId) next.set('cropId', cropId);
-    if (category) next.set('category', category);
-    if (gradeIds.length > 0) next.set('gradeIds', gradeIds.join(','));
-    if (district) next.set('district', district);
+    const draft: SearchFilterDraft = {
+      q: overrides?.q ?? qInput,
+      cropId: overrides?.cropId ?? cropId,
+      category: overrides?.category ?? category,
+      gradeIds: overrides?.gradeIds ?? gradeIds,
+      district: overrides?.district ?? district,
+      minPriceLkr: overrides?.minPriceLkr ?? minPriceLkr,
+      maxPriceLkr: overrides?.maxPriceLkr ?? maxPriceLkr,
+      availability: overrides?.availability ?? availability,
+      minKg: overrides?.minKg ?? minKg,
+      sort: overrides?.sort ?? sort,
+      page: overrides?.page ?? 1,
+    };
 
-    if (minPriceLkr.trim() !== '') {
-      const val = Number(minPriceLkr);
+    const next = new URLSearchParams();
+    if (draft.q.trim()) next.set('q', draft.q.trim());
+    if (draft.cropId) next.set('cropId', draft.cropId);
+    if (draft.category) next.set('category', draft.category);
+    if (draft.gradeIds.length > 0) next.set('gradeIds', draft.gradeIds.join(','));
+    if (draft.district) next.set('district', draft.district);
+
+    if (draft.minPriceLkr.trim() !== '') {
+      const val = Number(draft.minPriceLkr);
       if (!Number.isFinite(val) || val < 0) {
         setValidationError('Minimum price must be a non-negative LKR amount.');
         return;
       }
       next.set('minPriceCents', String(Math.round(val * 100)));
     }
-    if (maxPriceLkr.trim() !== '') {
-      const val = Number(maxPriceLkr);
+    if (draft.maxPriceLkr.trim() !== '') {
+      const val = Number(draft.maxPriceLkr);
       if (!Number.isFinite(val) || val < 0) {
         setValidationError('Maximum price must be a non-negative LKR amount.');
         return;
       }
       next.set('maxPriceCents', String(Math.round(val * 100)));
     }
-    if (minPriceLkr.trim() !== '' && maxPriceLkr.trim() !== '' && Number(minPriceLkr) > Number(maxPriceLkr)) {
+    if (
+      draft.minPriceLkr.trim() !== '' &&
+      draft.maxPriceLkr.trim() !== '' &&
+      Number(draft.minPriceLkr) > Number(draft.maxPriceLkr)
+    ) {
       setValidationError('Maximum price must be greater than or equal to minimum price.');
       return;
     }
 
-    if (minKg.trim() !== '') {
-      if (!/^\d+(?:\.\d{1,3})?$/.test(minKg.trim())) {
+    if (draft.minKg.trim() !== '') {
+      if (!/^\d+(?:\.\d{1,3})?$/.test(draft.minKg.trim())) {
         setValidationError('Minimum quantity must be a non-negative kg number (up to 3 decimals).');
         return;
       }
-      next.set('minKg', minKg.trim());
+      next.set('minKg', draft.minKg.trim());
     }
 
-    if (availability && availability !== 'all') next.set('availability', availability);
-    const chosenSort = overrides?.sort ?? sort;
-    if (chosenSort && chosenSort !== 'price_asc') next.set('sort', chosenSort);
-    if (overrides?.page && overrides.page > 1) next.set('page', String(overrides.page));
+    if (draft.availability && draft.availability !== 'all') {
+      next.set('availability', draft.availability);
+    }
+    if (draft.sort && draft.sort !== 'price_asc') {
+      next.set('sort', draft.sort);
+    }
+    if (draft.page && draft.page > 1) {
+      next.set('page', String(draft.page));
+    }
 
     setSearchParams(next);
   }
 
   function handleFormSubmit(e: FormEvent) {
     e.preventDefault();
-    applyFilters({ page: 1 });
+    commitFilters({ page: 1 });
   }
 
   function clearAllFilters() {
@@ -169,7 +206,7 @@ export default function MarketplaceSearchPage() {
   }
 
   function removeSingleParam(key: string, valueToRemove?: string) {
-    const next = new URLSearchParams(searchParams);
+    const next = new URLSearchParams(paramsKey);
     if (key === 'gradeIds' && valueToRemove) {
       const remaining = (next.get('gradeIds') || '')
         .split(',')
@@ -184,9 +221,11 @@ export default function MarketplaceSearchPage() {
   }
 
   function toggleGrade(id: string) {
-    setGradeIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    const nextGrades = gradeIds.includes(id)
+      ? gradeIds.filter((item) => item !== id)
+      : [...gradeIds, id];
+    setGradeIds(nextGrades);
+    commitFilters({ gradeIds: nextGrades, page: 1 });
   }
 
   function toggleSaved(id: string) {
@@ -203,41 +242,41 @@ export default function MarketplaceSearchPage() {
   const filterDistricts = result?.filters.districts || [];
   const filterCategories = result?.filters.categories || [];
 
-  // Build removable active filter chips
+  const activeParams = new URLSearchParams(paramsKey);
   const chips: { key: string; label: string; value?: string }[] = [];
-  if (searchParams.get('q')) chips.push({ key: 'q', label: `"${searchParams.get('q')}"` });
-  if (searchParams.get('cropId')) {
-    const found = filterCrops.find((c) => c.id === searchParams.get('cropId'));
+  if (activeParams.get('q')) chips.push({ key: 'q', label: `"${activeParams.get('q')}"` });
+  if (activeParams.get('cropId')) {
+    const found = filterCrops.find((c) => c.id === activeParams.get('cropId'));
     chips.push({ key: 'cropId', label: found?.name || 'Crop filter' });
   }
-  if (searchParams.get('category')) {
-    const found = filterCategories.find((c) => c.key === searchParams.get('category'));
-    chips.push({ key: 'category', label: found?.label || searchParams.get('category') || '' });
+  if (activeParams.get('category')) {
+    const found = filterCategories.find((c) => c.key === activeParams.get('category'));
+    chips.push({ key: 'category', label: found?.label || activeParams.get('category') || '' });
   }
-  for (const gid of (searchParams.get('gradeIds') || '').split(',').filter(Boolean)) {
+  for (const gid of (activeParams.get('gradeIds') || '').split(',').filter(Boolean)) {
     const found = filterGrades.find((g) => g.id === gid);
     chips.push({ key: 'gradeIds', label: found?.name || 'Grade', value: gid });
   }
-  if (searchParams.get('district')) {
-    chips.push({ key: 'district', label: searchParams.get('district') || '' });
+  if (activeParams.get('district')) {
+    chips.push({ key: 'district', label: activeParams.get('district') || '' });
   }
-  if (searchParams.get('availability') && searchParams.get('availability') !== 'all') {
-    const found = AVAILABILITY_OPTIONS.find((a) => a.value === searchParams.get('availability'));
+  if (activeParams.get('availability') && activeParams.get('availability') !== 'all') {
+    const found = AVAILABILITY_OPTIONS.find((a) => a.value === activeParams.get('availability'));
     chips.push({ key: 'availability', label: found?.label || '' });
   }
-  if (searchParams.get('minKg')) {
-    chips.push({ key: 'minKg', label: `Min ${searchParams.get('minKg')} kg` });
+  if (activeParams.get('minKg')) {
+    chips.push({ key: 'minKg', label: `Min ${activeParams.get('minKg')} kg` });
   }
-  if (searchParams.get('minPriceCents')) {
+  if (activeParams.get('minPriceCents')) {
     chips.push({
       key: 'minPriceCents',
-      label: `Min LKR ${Number(searchParams.get('minPriceCents')) / 100}/kg`,
+      label: `Min LKR ${Number(activeParams.get('minPriceCents')) / 100}/kg`,
     });
   }
-  if (searchParams.get('maxPriceCents')) {
+  if (activeParams.get('maxPriceCents')) {
     chips.push({
       key: 'maxPriceCents',
-      label: `Max LKR ${Number(searchParams.get('maxPriceCents')) / 100}/kg`,
+      label: `Max LKR ${Number(activeParams.get('maxPriceCents')) / 100}/kg`,
     });
   }
 
@@ -256,21 +295,21 @@ export default function MarketplaceSearchPage() {
       <MarketplaceSubnav />
 
       {/* Top Search Bar */}
-      <ContentCard>
+      <ContentCard className="ym11-mkt-search-card">
         <form className="ym11-search-bar" onSubmit={handleFormSubmit}>
           <div className="ym11-search-input-wrap">
-            <Search size={18} className="ym11-search-icon" aria-hidden="true" />
+            <Search size={17} className="ym11-search-icon" aria-hidden="true" />
             <input
               type="search"
-              className="ym11-search-input"
+              className="ym11-search-input ym11-search-input--soft"
               placeholder="Search by crop, grower farm, grade, or district…"
               aria-label="Search marketplace harvests"
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
             />
           </div>
-          <Button type="submit" variant="primary">
-            <Search size={16} aria-hidden="true" />
+          <Button type="submit" variant="primary" className="ym11-search-btn">
+            <Search size={15} aria-hidden="true" />
             Search
           </Button>
         </form>
@@ -303,7 +342,11 @@ export default function MarketplaceSearchPage() {
                 { value: '', label: 'All crops' },
                 ...filterCrops.map((c) => ({ value: c.id, label: c.name })),
               ]}
-              onChange={(e) => setCropId(e.target.value)}
+              onChange={(e) => {
+                const nextCrop = e.target.value;
+                setCropId(nextCrop);
+                commitFilters({ cropId: nextCrop, page: 1 });
+              }}
             />
 
             <SelectField
@@ -313,7 +356,11 @@ export default function MarketplaceSearchPage() {
                 { value: '', label: 'All categories' },
                 ...filterCategories.map((c) => ({ value: c.key, label: c.label })),
               ]}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                const nextCategory = e.target.value;
+                setCategory(nextCategory);
+                commitFilters({ category: nextCategory, page: 1 });
+              }}
             />
 
             <div className="ym11-filter-group">
@@ -339,7 +386,11 @@ export default function MarketplaceSearchPage() {
                 { value: '', label: 'All districts' },
                 ...filterDistricts.map((d) => ({ value: d, label: d })),
               ]}
-              onChange={(e) => setDistrict(e.target.value)}
+              onChange={(e) => {
+                const nextDistrict = e.target.value;
+                setDistrict(nextDistrict);
+                commitFilters({ district: nextDistrict, page: 1 });
+              }}
             />
 
             <div className="ym11-filter-group">
@@ -375,7 +426,10 @@ export default function MarketplaceSearchPage() {
                       type="radio"
                       name="ym11-availability"
                       checked={availability === opt.value}
-                      onChange={() => setAvailability(opt.value)}
+                      onChange={() => {
+                        setAvailability(opt.value);
+                        commitFilters({ availability: opt.value, page: 1 });
+                      }}
                     />
                     <span>{opt.label}</span>
                   </label>
@@ -425,7 +479,7 @@ export default function MarketplaceSearchPage() {
               onChange={(e) => {
                 const nextSort = e.target.value as SearchSortMode;
                 setSort(nextSort);
-                applyFilters({ page: 1, sort: nextSort });
+                commitFilters({ sort: nextSort, page: 1 });
               }}
             />
           </div>
@@ -524,14 +578,14 @@ export default function MarketplaceSearchPage() {
                     <Button
                       variant="outline"
                       disabled={result.pagination.page <= 1}
-                      onClick={() => applyFilters({ page: result.pagination.page - 1 })}
+                      onClick={() => commitFilters({ page: result.pagination.page - 1 })}
                     >
                       Previous
                     </Button>
                     <Button
                       variant="outline"
                       disabled={result.pagination.page >= result.pagination.totalPages}
-                      onClick={() => applyFilters({ page: result.pagination.page + 1 })}
+                      onClick={() => commitFilters({ page: result.pagination.page + 1 })}
                     >
                       Next
                     </Button>

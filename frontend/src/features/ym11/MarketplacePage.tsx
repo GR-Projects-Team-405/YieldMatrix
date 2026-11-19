@@ -17,6 +17,7 @@ import {
   Sprout,
   Store,
   Wheat,
+  X,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Alert } from '../../components/Alert';
@@ -25,7 +26,12 @@ import { ContentCard } from '../../components/ContentCard';
 import { EmptyState } from '../../components/EmptyState';
 import { getProduceImage } from './produceImages';
 import { ProduceCard } from './ProduceCard';
-import type { CropCategoryKey, MarketplaceOverviewResponse } from './types';
+import type {
+  CropCategoryKey,
+  MarketplaceItem,
+  MarketplaceOverviewResponse,
+  MarketplaceSearchResponse,
+} from './types';
 import { formatColomboShortDate, formatKg } from './utils';
 import './ym11.css';
 
@@ -46,6 +52,31 @@ function CategoryIcon({ category }: { category: CropCategoryKey }) {
   }
 }
 
+function buildMarketplaceSearchParams(filters: {
+  q?: string;
+  cropId?: string;
+  gradeId?: string;
+  district?: string;
+  pricePreset?: string;
+  availability?: string;
+}): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.q?.trim()) params.set('q', filters.q.trim());
+  if (filters.cropId) params.set('cropId', filters.cropId);
+  if (filters.gradeId) params.set('gradeIds', filters.gradeId);
+  if (filters.district) params.set('district', filters.district);
+  if (filters.availability) params.set('availability', filters.availability);
+  if (filters.pricePreset === 'under_200') {
+    params.set('maxPriceCents', '20000');
+  } else if (filters.pricePreset === '200_400') {
+    params.set('minPriceCents', '20000');
+    params.set('maxPriceCents', '40000');
+  } else if (filters.pricePreset === 'over_400') {
+    params.set('minPriceCents', '40000');
+  }
+  return params;
+}
+
 export default function MarketplacePage() {
   const navigate = useNavigate();
 
@@ -60,6 +91,12 @@ export default function MarketplacePage() {
   const [pricePreset, setPricePreset] = useState('');
   const [availability, setAvailability] = useState('');
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
+
+  const [filteredItems, setFilteredItems] = useState<MarketplaceItem[] | null>(null);
+  const [filterLoading, setFilterLoading] = useState(false);
+  const [filterError, setFilterError] = useState('');
+
+  const hasQuickFilter = Boolean(cropId || gradeId || district || pricePreset || availability);
 
   const loadMarketplace = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -81,6 +118,51 @@ export default function MarketplacePage() {
     return () => controller.abort();
   }, [loadMarketplace]);
 
+  // Immediately run live filter query when any quick filter dropdown changes
+  useEffect(() => {
+    if (!hasQuickFilter) {
+      setFilteredItems(null);
+      setFilterError('');
+      setFilterLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setFilterLoading(true);
+    setFilterError('');
+
+    const params = buildMarketplaceSearchParams({
+      q: queryText,
+      cropId,
+      gradeId,
+      district,
+      pricePreset,
+      availability,
+    });
+    const paramsObj: Record<string, string> = {};
+    params.forEach((value, key) => {
+      paramsObj[key] = value;
+    });
+
+    api
+      .get<MarketplaceSearchResponse>('/ym11/marketplace/search', {
+        params: paramsObj,
+        signal: controller.signal,
+      })
+      .then((res) => {
+        setFilteredItems(res.data.items);
+      })
+      .catch((err) => {
+        if ((err as { name?: string })?.name === 'CanceledError') return;
+        setFilterError('Could not apply filters right now. Please try again.');
+      })
+      .finally(() => {
+        setFilterLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [hasQuickFilter, cropId, gradeId, district, pricePreset, availability, queryText]);
+
   function toggleSaved(id: string) {
     setSavedIds((prev) => {
       const next = new Set(prev);
@@ -90,20 +172,27 @@ export default function MarketplacePage() {
     });
   }
 
+  function clearQuickFilters() {
+    setQueryText('');
+    setCropId('');
+    setGradeId('');
+    setDistrict('');
+    setPricePreset('');
+    setAvailability('');
+    setFilteredItems(null);
+    setFilterError('');
+  }
+
   function handleSearchSubmit(event: FormEvent) {
     event.preventDefault();
-    const params = new URLSearchParams();
-    if (queryText.trim()) params.set('q', queryText.trim());
-    if (cropId) params.set('cropId', cropId);
-    if (gradeId) params.set('gradeIds', gradeId);
-    if (district) params.set('district', district);
-    if (availability) params.set('availability', availability);
-    if (pricePreset === 'under_200') params.set('maxPriceCents', '20000');
-    else if (pricePreset === '200_400') {
-      params.set('minPriceCents', '20000');
-      params.set('maxPriceCents', '40000');
-    } else if (pricePreset === 'over_400') params.set('minPriceCents', '40000');
-
+    const params = buildMarketplaceSearchParams({
+      q: queryText,
+      cropId,
+      gradeId,
+      district,
+      pricePreset,
+      availability,
+    });
     const qs = params.toString();
     navigate(`/buyer/marketplace/search${qs ? `?${qs}` : ''}`);
   }
@@ -133,6 +222,19 @@ export default function MarketplacePage() {
     );
   }
 
+  const displayedHarvests = hasQuickFilter ? filteredItems || [] : data.availableNow;
+  const fullSearchUrl = (() => {
+    const qs = buildMarketplaceSearchParams({
+      q: queryText,
+      cropId,
+      gradeId,
+      district,
+      pricePreset,
+      availability,
+    }).toString();
+    return `/buyer/marketplace/search${qs ? `?${qs}` : ''}`;
+  })();
+
   return (
     <div className="ym11-overview">
       {/* Page Header */}
@@ -161,7 +263,7 @@ export default function MarketplacePage() {
               <input
                 type="search"
                 className="ym11-search-input ym11-search-input--soft"
-                placeholder="Tomatoes"
+                placeholder="Search produce, farms, or districts (e.g. Tomatoes)"
                 aria-label="Search marketplace produce"
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
@@ -253,6 +355,18 @@ export default function MarketplacePage() {
                 </select>
                 <ChevronDown size={13} className="ym11-pill-caret" aria-hidden="true" />
               </label>
+
+              {hasQuickFilter && (
+                <button
+                  type="button"
+                  className="ym11-chip"
+                  onClick={clearQuickFilters}
+                  aria-label="Clear quick filters"
+                >
+                  <span>Clear filters</span>
+                  <X size={12} aria-hidden="true" />
+                </button>
+              )}
             </div>
 
             <div className="ym11-pill-filters-right">
@@ -260,7 +374,7 @@ export default function MarketplacePage() {
                 <CalendarDays size={14} aria-hidden="true" />
                 Harvest availability
               </Link>
-              <Link className="ym11-subtle-action" to="/buyer/marketplace/search">
+              <Link className="ym11-subtle-action" to={fullSearchUrl}>
                 <SlidersHorizontal size={14} aria-hidden="true" />
                 More filters
               </Link>
@@ -301,36 +415,63 @@ export default function MarketplacePage() {
         </div>
       </section>
 
-      {/* Fresh Harvests Available Now */}
+      {/* Fresh Harvests Available Now (or Live Filtered Results) */}
       <section aria-label="Fresh harvests available now">
         <div className="ym11-section-head">
           <div>
-            <h3 className="ym11-card-title">Fresh harvests available now</h3>
-            <p className="ym11-card-sub">Explore active produce listings from approved farmers.</p>
+            <h3 className="ym11-card-title">
+              {hasQuickFilter ? 'Filtered harvests' : 'Fresh harvests available now'}
+            </h3>
+            <p className="ym11-card-sub">
+              {hasQuickFilter
+                ? filterLoading
+                  ? 'Filtering matching harvests…'
+                  : `Showing ${displayedHarvests.length} matching ${displayedHarvests.length === 1 ? 'harvest' : 'harvests'}.`
+                : 'Explore active produce listings from approved farmers.'}
+            </p>
           </div>
           <Link
             className="ym11-inline-link"
             style={{ marginTop: 0 }}
-            to="/buyer/marketplace/search?availability=available_now"
+            to={hasQuickFilter ? fullSearchUrl : '/buyer/marketplace/search?availability=available_now'}
           >
-            View all harvests
+            {hasQuickFilter ? 'Open full search' : 'View all harvests'}
             <ArrowRight size={14} aria-hidden="true" />
           </Link>
         </div>
 
-        {data.availableNow.length === 0 ? (
+        {filterError && <Alert type="error">{filterError}</Alert>}
+
+        {filterLoading ? (
+          <ContentCard>
+            <div className="ym11-loading-card" role="status">
+              <RefreshCw size={18} aria-hidden="true" />
+              <span>Updating marketplace results…</span>
+            </div>
+          </ContentCard>
+        ) : displayedHarvests.length === 0 ? (
           <EmptyState
-            title="No ready harvests right now"
-            description="Approved grower listings will appear here as soon as stock is harvested and listed. You can also post a demand request."
+            title={hasQuickFilter ? 'No harvests match these filters' : 'No ready harvests right now'}
+            description={
+              hasQuickFilter
+                ? 'Try clearing a filter or open advanced search to adjust your criteria.'
+                : 'Approved grower listings will appear here as soon as stock is harvested and listed.'
+            }
             action={
-              <Button variant="primary" onClick={() => navigate('/buyer/demands')}>
-                Create demand
-              </Button>
+              hasQuickFilter ? (
+                <Button variant="outline" onClick={clearQuickFilters}>
+                  Clear filters
+                </Button>
+              ) : (
+                <Button variant="primary" onClick={() => navigate('/buyer/demands')}>
+                  Create demand
+                </Button>
+              )
             }
           />
         ) : (
           <div className="ym11-produce-grid">
-            {data.availableNow.map((item) => (
+            {displayedHarvests.map((item) => (
               <ProduceCard
                 key={item.id}
                 item={item}

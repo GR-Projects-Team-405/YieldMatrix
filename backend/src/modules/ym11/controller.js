@@ -23,6 +23,25 @@ const SEARCH_AVAILABILITY_MODES = new Set(['all', 'available_now', 'within_7_day
 const AVAILABILITY_STATUS_MODES = new Set(['all', 'available_now', 'planned']);
 const SEARCH_SORT_MODES = new Set(['price_asc', 'price_desc', 'quantity_desc', 'harvest_asc', 'newest']);
 
+function isTransientDbError(error) {
+  const msg = String(error?.message || '');
+  const code = String(error?.code || '');
+  if (/timeout/i.test(msg)) return false;
+  return (
+    /connection terminated unexpectedly|econnreset|socket hang up/i.test(msg) ||
+    ['57P01', '57P02', '57P03', '08006', '08003', '08000'].includes(code)
+  );
+}
+
+async function runQuery(sql, params = []) {
+  try {
+    return await pool.query(sql, params);
+  } catch (error) {
+    if (!isTransientDbError(error)) throw error;
+    return await pool.query(sql, params);
+  }
+}
+
 function classifyCropCategory(cropName) {
   const name = String(cropName || '').trim().toLowerCase();
   if (!name) return 'other';
@@ -155,7 +174,7 @@ function validateInsightFilters(query) {
 }
 
 async function getApprovedBuyerWithWallet(userId, role) {
-  const { rows } = await pool.query(
+  const { rows } = await runQuery(
     `SELECT u.id,
             u.name,
             u.role,
@@ -850,24 +869,24 @@ export async function getBuyingInsights(req, res, next) {
 }
 
 async function loadMarketplaceFilterOptions() {
-  const [cropsRes, gradesRes, districtsRes] = await Promise.all([
-    pool.query('SELECT id, name FROM crops WHERE active = true ORDER BY name ASC'),
-    pool.query('SELECT id, name FROM grades WHERE active = true ORDER BY name ASC'),
-    pool.query(
-      `SELECT DISTINCT district
-       FROM farms
-       WHERE status = 'active' AND district IS NOT NULL AND length(trim(district)) > 0
-       ORDER BY district ASC`
-    ),
-  ]);
+  const { rows } = await runQuery(
+    `SELECT
+       COALESCE((SELECT json_agg(json_build_object('id', c.id, 'name', c.name) ORDER BY c.name ASC) FROM crops c WHERE c.active = true), '[]'::json) AS crops,
+       COALESCE((SELECT json_agg(json_build_object('id', g.id, 'name', g.name) ORDER BY g.name ASC) FROM grades g WHERE g.active = true), '[]'::json) AS grades,
+       COALESCE((SELECT json_agg(d.district ORDER BY d.district ASC) FROM (SELECT DISTINCT district FROM farms WHERE status = 'active' AND district IS NOT NULL AND length(trim(district)) > 0) d), '[]'::json) AS districts`
+  );
+  const row = rows[0] || {};
+  const rawCrops = Array.isArray(row.crops) ? row.crops : [];
+  const rawGrades = Array.isArray(row.grades) ? row.grades : [];
+  const rawDistricts = Array.isArray(row.districts) ? row.districts : [];
   return {
-    crops: cropsRes.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      category: classifyCropCategory(row.name),
+    crops: rawCrops.map((crop) => ({
+      id: crop.id,
+      name: crop.name,
+      category: classifyCropCategory(crop.name),
     })),
-    grades: gradesRes.rows,
-    districts: districtsRes.rows.map((row) => row.district),
+    grades: rawGrades,
+    districts: rawDistricts,
   };
 }
 
@@ -963,20 +982,18 @@ export async function getMarketplaceOverview(req, res, next) {
       return res.status(403).json({ error: 'Account is not approved', requestId: req.requestId });
     }
 
-    const [filterOptions, itemsResult] = await Promise.all([
-      loadMarketplaceFilterOptions(),
-      pool.query(
-        `${MARKETPLACE_BASE_CTE}
-         SELECT *
-         FROM marketplace_items
-         ORDER BY
-           (availability_status = 'available_now') DESC,
-           (listing_id IS NOT NULL) DESC,
-           unit_price_cents ASC NULLS LAST,
-           effective_kg DESC,
-           planned_harvest_date ASC`
-      ),
-    ]);
+    const filterOptions = await loadMarketplaceFilterOptions();
+    const itemsResult = await runQuery(
+      `${MARKETPLACE_BASE_CTE}
+       SELECT *
+       FROM marketplace_items
+       ORDER BY
+         (availability_status = 'available_now') DESC,
+         (listing_id IS NOT NULL) DESC,
+         unit_price_cents ASC NULLS LAST,
+         effective_kg DESC,
+         planned_harvest_date ASC`
+    );
 
     const mapped = itemsResult.rows.map(mapMarketplaceRow);
     const availableItems = mapped.filter((item) => item.availabilityStatus === 'available_now');
@@ -1161,7 +1178,10 @@ export async function searchMarketplace(req, res, next) {
       );
     }
     if (cropId) {
-      whereClauses.push(`crop_id = ${addParam(cropId)}::uuid`);
+      const p = addParam(cropId);
+      whereClauses.push(
+        `(crop_id = ${p}::uuid OR lower(regexp_replace(crop_name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = ${p}::uuid))`
+      );
     }
     if (gradeIds.length > 0) {
       whereClauses.push(`grade_id = ANY(${addParam(gradeIds)}::uuid[])`);
@@ -1201,17 +1221,15 @@ export async function searchMarketplace(req, res, next) {
       newest: 'created_at DESC, effective_kg DESC',
     };
 
-    const [filterOptions, result] = await Promise.all([
-      loadMarketplaceFilterOptions(),
-      pool.query(
-        `${MARKETPLACE_BASE_CTE}
-         SELECT *
-         FROM marketplace_items
-         WHERE ${whereClauses.join(' AND ')}
-         ORDER BY ${orderByMap[sort]}`,
-        params
-      ),
-    ]);
+    const filterOptions = await loadMarketplaceFilterOptions();
+    const result = await runQuery(
+      `${MARKETPLACE_BASE_CTE}
+       SELECT *
+       FROM marketplace_items
+       WHERE ${whereClauses.join(' AND ')}
+       ORDER BY ${orderByMap[sort]}`,
+      params
+    );
 
     let items = result.rows.map(mapMarketplaceRow);
     if (category) {
@@ -1316,20 +1334,18 @@ export async function getHarvestAvailability(req, res, next) {
 
     const { monthStart, monthEnd } = getMonthBounds(month);
 
-    const [filterOptions, result] = await Promise.all([
-      loadMarketplaceFilterOptions(),
-      pool.query(
-        `${MARKETPLACE_BASE_CTE}
-         SELECT *
-         FROM marketplace_items
-         WHERE ($1::uuid IS NULL OR crop_id = $1::uuid)
-           AND ($2::uuid IS NULL OR grade_id = $2::uuid)
-           AND ($3::text IS NULL OR lower(district) = lower($3::text))
-           AND ($4::text = 'all' OR availability_status = $4::text)
-         ORDER BY availability_date ASC, effective_kg DESC, farm_name ASC`,
-        [cropId, gradeId, district, status]
-      ),
-    ]);
+    const filterOptions = await loadMarketplaceFilterOptions();
+    const result = await runQuery(
+      `${MARKETPLACE_BASE_CTE}
+       SELECT *
+       FROM marketplace_items
+       WHERE ($1::uuid IS NULL OR crop_id = $1::uuid OR lower(regexp_replace(crop_name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = $1::uuid))
+         AND ($2::uuid IS NULL OR grade_id = $2::uuid)
+         AND ($3::text IS NULL OR lower(district) = lower($3::text))
+         AND ($4::text = 'all' OR availability_status = $4::text)
+       ORDER BY availability_date ASC, effective_kg DESC, farm_name ASC`,
+      [cropId, gradeId, district, status]
+    );
 
     const entries = result.rows.map((row) => {
       const mapped = mapMarketplaceRow(row);

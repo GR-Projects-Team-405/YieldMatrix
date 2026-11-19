@@ -171,14 +171,23 @@ export default function HarvestAvailabilityPage() {
     return () => controller.abort();
   }, [fetchAvailability]);
 
-  function applyQuery(overrides?: { month?: string; status?: 'all' | 'available_now' | 'planned' }) {
+  function applyQuery(overrides?: {
+    month?: string;
+    cropId?: string;
+    district?: string;
+    gradeId?: string;
+    status?: 'all' | 'available_now' | 'planned';
+  }) {
     const next = new URLSearchParams();
     const targetMonth = overrides?.month ?? month;
-    if (targetMonth) next.set('month', targetMonth);
-    if (cropId) next.set('cropId', cropId);
-    if (district) next.set('district', district);
-    if (gradeId) next.set('gradeId', gradeId);
+    const targetCrop = overrides?.cropId ?? cropId;
+    const targetDistrict = overrides?.district ?? district;
+    const targetGrade = overrides?.gradeId ?? gradeId;
     const targetStatus = overrides?.status ?? status;
+    if (targetMonth) next.set('month', targetMonth);
+    if (targetCrop) next.set('cropId', targetCrop);
+    if (targetDistrict) next.set('district', targetDistrict);
+    if (targetGrade) next.set('gradeId', targetGrade);
     if (targetStatus && targetStatus !== 'all') next.set('status', targetStatus);
     setSearchParams(next);
   }
@@ -273,7 +282,11 @@ export default function HarvestAvailabilityPage() {
               { value: '', label: 'All crops' },
               ...(data?.filters.crops || []).map((c) => ({ value: c.id, label: c.name })),
             ]}
-            onChange={(e) => setCropId(e.target.value)}
+            onChange={(e) => {
+              const nextVal = e.target.value;
+              setCropId(nextVal);
+              applyQuery({ cropId: nextVal });
+            }}
           />
           <SelectField
             label="District"
@@ -282,7 +295,11 @@ export default function HarvestAvailabilityPage() {
               { value: '', label: 'All districts' },
               ...(data?.filters.districts || []).map((d) => ({ value: d, label: d })),
             ]}
-            onChange={(e) => setDistrict(e.target.value)}
+            onChange={(e) => {
+              const nextVal = e.target.value;
+              setDistrict(nextVal);
+              applyQuery({ district: nextVal });
+            }}
           />
           <SelectField
             label="Grade"
@@ -291,13 +308,21 @@ export default function HarvestAvailabilityPage() {
               { value: '', label: 'All grades' },
               ...(data?.filters.grades || []).map((g) => ({ value: g.id, label: g.name })),
             ]}
-            onChange={(e) => setGradeId(e.target.value)}
+            onChange={(e) => {
+              const nextVal = e.target.value;
+              setGradeId(nextVal);
+              applyQuery({ gradeId: nextVal });
+            }}
           />
           <SelectField
             label="Month"
             value={month}
             options={monthOptions}
-            onChange={(e) => setMonth(e.target.value)}
+            onChange={(e) => {
+              const nextVal = e.target.value;
+              setMonth(nextVal);
+              applyQuery({ month: nextVal });
+            }}
           />
           <SelectField
             label="Availability status"
@@ -307,7 +332,11 @@ export default function HarvestAvailabilityPage() {
               { value: 'available_now', label: 'Available now' },
               { value: 'planned', label: 'Expected harvest' },
             ]}
-            onChange={(e) => setStatus(e.target.value as 'all' | 'available_now' | 'planned')}
+            onChange={(e) => {
+              const nextVal = e.target.value as 'all' | 'available_now' | 'planned';
+              setStatus(nextVal);
+              applyQuery({ status: nextVal });
+            }}
           />
           <Button type="submit" variant="primary">
             <Search size={15} aria-hidden="true" />
