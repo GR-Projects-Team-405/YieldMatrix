@@ -181,3 +181,365 @@
     justify-content: center;
   }
 }
+
+/* YM03 — Choose Account Role */
+
+.ym03-role-page {
+  background: #d9f7e4;
+  padding: 26px 24px 48px;
+  min-height: 100%;
+}
+
+.ym03-role-container {
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.ym03-role-heading {
+  text-align: center;
+  margin-bottom: 38px;
+}
+
+.ym03-step-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #e1e5e3;
+  color: #263a31;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.ym03-step-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #315a42;
+}
+
+.ym03-role-heading h1 {
+  font-size: 30px;
+  font-weight: 700;
+  color: #111;
+  line-height: 1.3;
+}
+
+.ym03-role-heading p {
+  margin-top: 8px;
+  font-size: 16px;
+  color: #66746a;
+}
+
+.ym03-role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+  align-items: stretch;
+}
+
+.ym03-role-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 0;
+  transition: border-color .2s, transform .2s, box-shadow .2s;
+}
+
+.ym03-role-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(20, 50, 30, .07);
+}
+
+.ym03-role-selected {
+  border-color: #315a42;
+  box-shadow: 0 4px 16px rgba(20, 50, 30, .08);
+}
+
+.ym03-role-select {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  position: relative;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+.ym03-role-icon {
+  color: #315a42;
+  margin-bottom: 16px;
+}
+
+.ym03-selection-indicator {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #e1f4e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ym03-selection-indicator.active {
+  background: #315a42;
+  color: white;
+}
+
+.ym03-role-category {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: #53675a;
+  margin-bottom: 5px;
+}
+
+.ym03-role-title {
+  font-size: 19px;
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+
+.ym03-role-description {
+  color: #6a786e;
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 63px;
+}
+
+.ym03-feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 22px 0 26px;
+  flex: 1;
+}
+
+.ym03-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 12px;
+  color: #425749;
+  line-height: 1.5;
+}
+
+.ym03-feature-check {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #d7efe0;
+  color: #315a42;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ym03-role-image {
+  height: 122px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  margin-bottom: 26px;
+  background: #d6eee0;
+}
+
+.ym03-role-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ym03-role-image::after {
+  content: "";
+  position: absolute;
+  inset: 40% 0 0;
+  background: linear-gradient(transparent, rgba(0,0,0,.65));
+}
+
+.ym03-role-image span {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.ym03-role-continue {
+  width: 100%;
+  min-height: 48px;
+  background: #e2f5ef;
+  color: #263a31;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.ym03-role-continue.active {
+  background: #315a42;
+  color: white;
+}
+
+.ym03-role-continue:hover {
+  filter: brightness(.94);
+}
+
+.ym03-role-support {
+  max-width: 960px;
+  margin: 36px auto 22px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-radius: 12px;
+  background: #dcf3e6;
+}
+
+.ym03-role-support-copy {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ym03-help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  background: #feb37e;
+  color: #895124;
+}
+
+.ym03-role-support-copy strong {
+  font-size: 13px;
+}
+
+.ym03-role-support-copy p {
+  font-size: 12px;
+  color: #66746a;
+  margin-top: 4px;
+}
+
+.ym03-role-support-actions {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.ym03-guide-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ym03-support-label {
+  padding: 7px 14px;
+  border-radius: 20px;
+  background: #e0e2e1;
+}
+
+.ym03-role-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  text-align: center;
+  margin: 24px auto;
+  max-width: 900px;
+}
+
+.ym03-role-stats > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.ym03-role-stats strong {
+  color: #315a42;
+  font-size: 28px;
+  font-weight: 650;
+}
+
+.ym03-role-stats span {
+  color: #315a42;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.ym03-role-select:focus-visible,
+.ym03-role-continue:focus-visible {
+  outline: 3px solid #e7a06c;
+  outline-offset: 3px;
+}
+
+@media (max-width: 900px) {
+  .ym03-role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .ym03-role-support {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .ym03-role-page {
+    padding: 24px 16px 36px;
+  }
+
+  .ym03-role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ym03-role-heading h1 {
+    font-size: 25px;
+  }
+
+  .ym03-role-card {
+    padding: 20px;
+  }
+
+  .ym03-role-description {
+    min-height: 0;
+  }
+
+  .ym03-role-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ym03-role-stats strong {
+    font-size: 24px;
+  }
+
+  .ym03-role-support-actions {
+    flex-wrap: wrap;
+  }
+}
