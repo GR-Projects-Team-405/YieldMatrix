@@ -3,14 +3,14 @@ import {
   ArrowRight,
   CalendarDays,
   Heart,
-  MapPin,
   Search,
+  Sprout,
   Store,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
-import { StatusBadge } from '../../components/StatusBadge';
+import { getProduceImage } from './produceImages';
 import type { MarketplaceItem } from './types';
-import { formatColomboShortDate, formatKg, formatLkrFromCents, getInitials } from './utils';
+import { formatColomboShortDate, formatKg, formatLkrFromCents } from './utils';
 
 export function MarketplaceSubnav() {
   return (
@@ -57,6 +57,7 @@ export function ProduceCard({
   const navigate = useNavigate();
   const isAvailableNow = item.availabilityStatus === 'available_now';
   const harvestMonth = item.harvestDate ? item.harvestDate.slice(0, 7) : '';
+  const imageSrc = getProduceImage(item.cropName, item.category);
 
   const availabilityHref = `/buyer/marketplace/harvest-availability${
     harvestMonth ? `?month=${encodeURIComponent(harvestMonth)}&cropId=${encodeURIComponent(item.cropId)}` : ''
@@ -64,15 +65,24 @@ export function ProduceCard({
 
   return (
     <article className="ym11-produce-card">
-      <div className={`ym11-produce-banner ym11-produce-banner--${item.category}`}>
-        <svg className="ym11-banner-art" viewBox="0 0 320 140" preserveAspectRatio="none" aria-hidden="true">
-          <circle cx="270" cy="24" r="56" fill="#ffffff" opacity="0.22" />
-          <circle cx="64" cy="128" r="68" fill="#ffffff" opacity="0.16" />
-          <path d="M0 110 Q100 68 200 100 T320 82 L320 140 L0 140 Z" fill="#ffffff" opacity="0.2" />
-        </svg>
+      <div className="ym11-produce-photo-wrap">
+        <img
+          src={imageSrc}
+          alt={`${item.cropName} from ${item.farmName}`}
+          className="ym11-produce-photo"
+          loading="lazy"
+        />
 
-        <div className="ym11-banner-overlay">
-          <StatusBadge status={isAvailableNow ? 'Active' : 'Pending'} />
+        <div className="ym11-photo-overlay">
+          <span
+            className={`ym11-photo-pill ${
+              isAvailableNow ? 'ym11-photo-pill--now' : 'ym11-photo-pill--planned'
+            }`}
+          >
+            <span className="ym11-photo-pill-dot" aria-hidden="true" />
+            {isAvailableNow ? 'Available now' : 'Expected harvest'}
+          </span>
+
           <button
             type="button"
             className={`ym11-fav-btn ${saved ? 'is-saved' : ''}`}
@@ -80,7 +90,7 @@ export function ProduceCard({
             aria-pressed={saved}
             onClick={() => onToggleSave(item.id)}
           >
-            <Heart size={16} fill={saved ? 'currentColor' : 'none'} aria-hidden="true" />
+            <Heart size={15} fill={saved ? 'currentColor' : 'none'} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -97,15 +107,12 @@ export function ProduceCard({
         </div>
 
         <div className="ym11-produce-farm">
-          <span className="ym11-avatar ym11-avatar--0" aria-hidden="true">
-            {getInitials(item.farmName)}
+          <span className="ym11-farm-badge" aria-hidden="true">
+            <Sprout size={14} />
           </span>
           <div className="ym11-grower-meta">
             <p className="ym11-grower-name">{item.farmName}</p>
-            <p className="ym11-grower-detail" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <MapPin size={11} aria-hidden="true" />
-              {item.district}
-            </p>
+            <p className="ym11-grower-detail">{item.district}</p>
           </div>
         </div>
 
@@ -138,7 +145,7 @@ export function ProduceCard({
           </Button>
           {showAvailabilityButton && (
             <Button variant="outline" onClick={() => navigate(availabilityHref)}>
-              Harvest availability
+              View harvest availability
             </Button>
           )}
         </div>

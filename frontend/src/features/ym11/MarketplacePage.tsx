@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Apple,
   ArrowRight,
   CalendarClock,
+  CalendarDays,
   Carrot,
+  ChevronDown,
   Grid2x2,
+  Info,
   Leaf,
   MapPin,
   Plus,
@@ -13,6 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   Sprout,
+  Store,
   Wheat,
 } from 'lucide-react';
 import api from '../../services/api';
@@ -20,9 +23,8 @@ import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ContentCard } from '../../components/ContentCard';
 import { EmptyState } from '../../components/EmptyState';
-import { SelectField } from '../../components/SelectField';
-import { StatusBadge } from '../../components/StatusBadge';
-import { MarketplaceSubnav, ProduceCard } from './ProduceCard';
+import { getProduceImage } from './produceImages';
+import { ProduceCard } from './ProduceCard';
 import type { CropCategoryKey, MarketplaceOverviewResponse } from './types';
 import { formatColomboShortDate, formatKg } from './utils';
 import './ym11.css';
@@ -32,7 +34,7 @@ function CategoryIcon({ category }: { category: CropCategoryKey }) {
     case 'vegetables':
       return <Sprout size={18} aria-hidden="true" />;
     case 'fruits':
-      return <Apple size={18} aria-hidden="true" />;
+      return <Store size={18} aria-hidden="true" />;
     case 'leafy_greens':
       return <Leaf size={18} aria-hidden="true" />;
     case 'root_crops':
@@ -131,19 +133,6 @@ export default function MarketplacePage() {
     );
   }
 
-  const cropOptions = [
-    { value: '', label: 'All crops' },
-    ...data.filters.crops.map((c) => ({ value: c.id, label: c.name })),
-  ];
-  const gradeOptions = [
-    { value: '', label: 'All grades' },
-    ...data.filters.grades.map((g) => ({ value: g.id, label: g.name })),
-  ];
-  const districtOptions = [
-    { value: '', label: 'All districts' },
-    ...data.filters.districts.map((d) => ({ value: d, label: d })),
-  ];
-
   return (
     <div className="ym11-overview">
       {/* Page Header */}
@@ -163,85 +152,119 @@ export default function MarketplacePage() {
         </div>
       </section>
 
-      <MarketplaceSubnav />
-
-      {/* Search & Quick Filters */}
-      <ContentCard>
+      {/* Search & Inline Pill Filter Card */}
+      <ContentCard className="ym11-mkt-search-card">
         <form onSubmit={handleSearchSubmit}>
           <div className="ym11-search-bar">
             <div className="ym11-search-input-wrap">
-              <Search size={18} className="ym11-search-icon" aria-hidden="true" />
+              <Search size={17} className="ym11-search-icon" aria-hidden="true" />
               <input
                 type="search"
-                className="ym11-search-input"
-                placeholder="Search produce, farms, or districts (e.g. Tomatoes, Nuwara Eliya)"
+                className="ym11-search-input ym11-search-input--soft"
+                placeholder="Tomatoes"
                 aria-label="Search marketplace produce"
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
               />
             </div>
-            <Button type="submit" variant="primary">
-              <Search size={16} aria-hidden="true" />
+            <Button type="submit" variant="primary" className="ym11-search-btn">
+              <Search size={15} aria-hidden="true" />
               Search
             </Button>
           </div>
 
-          <div className="ym11-quick-filters">
-            <span className="ym11-quick-filter-label">Filter by</span>
-            <SelectField
-              label="Crop"
-              className="ym11-quick-select"
-              value={cropId}
-              options={cropOptions}
-              onChange={(e) => setCropId(e.target.value)}
-            />
-            <SelectField
-              label="Grade"
-              className="ym11-quick-select"
-              value={gradeId}
-              options={gradeOptions}
-              onChange={(e) => setGradeId(e.target.value)}
-            />
-            <SelectField
-              label="District"
-              className="ym11-quick-select"
-              value={district}
-              options={districtOptions}
-              onChange={(e) => setDistrict(e.target.value)}
-            />
-            <SelectField
-              label="Price range"
-              className="ym11-quick-select"
-              value={pricePreset}
-              options={[
-                { value: '', label: 'Any price' },
-                { value: 'under_200', label: 'Under LKR 200/kg' },
-                { value: '200_400', label: 'LKR 200 – 400/kg' },
-                { value: 'over_400', label: 'Above LKR 400/kg' },
-              ]}
-              onChange={(e) => setPricePreset(e.target.value)}
-            />
-            <SelectField
-              label="Harvest availability"
-              className="ym11-quick-select"
-              value={availability}
-              options={[
-                { value: '', label: 'All availability' },
-                { value: 'available_now', label: 'Available now' },
-                { value: 'within_7_days', label: 'Within 7 days' },
-                { value: 'within_30_days', label: 'Within 30 days' },
-                { value: 'planned', label: 'Planned future harvests' },
-              ]}
-              onChange={(e) => setAvailability(e.target.value)}
-            />
-            <Button
-              variant="outline"
-              onClick={() => navigate('/buyer/marketplace/search')}
-              style={{ height: 40, padding: '0 14px', fontSize: 13 }}
-            >
-              <SlidersHorizontal size={14} aria-hidden="true" />
-              More filters
-            </Button>
+          <div className="ym11-pill-filter-bar">
+            <div className="ym11-pill-filters-left">
+              <span className="ym11-pill-filter-heading">FILTER BY</span>
+
+              <label className="ym11-pill-select">
+                <select
+                  aria-label="Filter by crop"
+                  value={cropId}
+                  onChange={(e) => setCropId(e.target.value)}
+                >
+                  <option value="">Crop</option>
+                  {data.filters.crops.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={13} className="ym11-pill-caret" aria-hidden="true" />
+              </label>
+
+              <label className="ym11-pill-select">
+                <select
+                  aria-label="Filter by grade"
+                  value={gradeId}
+                  onChange={(e) => setGradeId(e.target.value)}
+                >
+                  <option value="">Grade</option>
+                  {data.filters.grades.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={13} className="ym11-pill-caret" aria-hidden="true" />
+              </label>
+
+              <label className="ym11-pill-select">
+                <select
+                  aria-label="Filter by district"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                >
+                  <option value="">District</option>
+                  {data.filters.districts.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={13} className="ym11-pill-caret" aria-hidden="true" />
+              </label>
+
+              <label className="ym11-pill-select">
+                <select
+                  aria-label="Filter by price range"
+                  value={pricePreset}
+                  onChange={(e) => setPricePreset(e.target.value)}
+                >
+                  <option value="">Price range</option>
+                  <option value="under_200">Under LKR 200/kg</option>
+                  <option value="200_400">LKR 200 – 400/kg</option>
+                  <option value="over_400">Above LKR 400/kg</option>
+                </select>
+                <ChevronDown size={13} className="ym11-pill-caret" aria-hidden="true" />
+              </label>
+
+              <label className="ym11-pill-select">
+                <select
+                  aria-label="Filter by harvest availability"
+                  value={availability}
+                  onChange={(e) => setAvailability(e.target.value)}
+                >
+                  <option value="">Harvest availability</option>
+                  <option value="available_now">Available now</option>
+                  <option value="within_7_days">Within 7 days</option>
+                  <option value="within_30_days">Within 30 days</option>
+                  <option value="planned">Planned future harvests</option>
+                </select>
+                <ChevronDown size={13} className="ym11-pill-caret" aria-hidden="true" />
+              </label>
+            </div>
+
+            <div className="ym11-pill-filters-right">
+              <Link className="ym11-subtle-action" to="/buyer/marketplace/harvest-availability">
+                <CalendarDays size={14} aria-hidden="true" />
+                Harvest availability
+              </Link>
+              <Link className="ym11-subtle-action" to="/buyer/marketplace/search">
+                <SlidersHorizontal size={14} aria-hidden="true" />
+                More filters
+              </Link>
+            </div>
           </div>
         </form>
       </ContentCard>
@@ -260,20 +283,18 @@ export default function MarketplacePage() {
             <button
               type="button"
               key={cat.key}
-              className="ym11-category-card"
+              className={`ym11-category-card ym11-cat-card--${cat.key}`}
               onClick={() => navigate(`/buyer/marketplace/search?category=${encodeURIComponent(cat.key)}`)}
             >
-              <span className={`ym11-category-icon ym11-cat--${cat.key}`}>
-                <CategoryIcon category={cat.key} />
+              <span className={`ym11-category-ring ym11-cat-ring--${cat.key}`}>
+                <span className={`ym11-category-icon ym11-cat--${cat.key}`}>
+                  <CategoryIcon category={cat.key} />
+                </span>
               </span>
+
               <div className="ym11-category-foot">
-                <div>
-                  <p className="ym11-category-name">{cat.label}</p>
-                  <p className="ym11-category-count">
-                    {cat.count ?? 0} {(cat.count ?? 0) === 1 ? 'listing' : 'listings'}
-                  </p>
-                </div>
-                <ArrowRight size={14} aria-hidden="true" />
+                <span className="ym11-category-name">{cat.label}</span>
+                <ArrowRight size={14} className="ym11-category-arrow" aria-hidden="true" />
               </div>
             </button>
           ))}
@@ -285,11 +306,13 @@ export default function MarketplacePage() {
         <div className="ym11-section-head">
           <div>
             <h3 className="ym11-card-title">Fresh harvests available now</h3>
-            <p className="ym11-card-sub">
-              Explore active produce listings from approved farmers ({formatKg(data.summary.availableNowTotalKg)} total available).
-            </p>
+            <p className="ym11-card-sub">Explore active produce listings from approved farmers.</p>
           </div>
-          <Link className="ym11-inline-link" style={{ marginTop: 0 }} to="/buyer/marketplace/search?availability=available_now">
+          <Link
+            className="ym11-inline-link"
+            style={{ marginTop: 0 }}
+            to="/buyer/marketplace/search?availability=available_now"
+          >
             View all harvests
             <ArrowRight size={14} aria-hidden="true" />
           </Link>
@@ -320,14 +343,17 @@ export default function MarketplacePage() {
       </section>
 
       {/* Planned Supply / Coming Soon */}
-      <ContentCard>
+      <section className="ym11-planned-section" aria-label="Planned supply coming soon">
         <div className="ym11-card-top">
           <div>
             <p className="ym11-eyebrow">Planned supply</p>
             <h3 className="ym11-card-title">Coming soon</h3>
             <p className="ym11-card-sub">Explore planned harvests and future supply opportunities.</p>
           </div>
-          <StatusBadge status="Pending" />
+          <span className="ym11-planned-notice-pill">
+            <Info size={13} aria-hidden="true" />
+            Not ready-to-purchase inventory
+          </span>
         </div>
 
         {data.comingSoon.length === 0 ? (
@@ -343,70 +369,78 @@ export default function MarketplacePage() {
         ) : (
           <div className="ym11-coming-grid">
             {data.comingSoon.map((item) => (
-              <article className="ym11-coming-card" key={item.id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <span className="ym11-panel-tag">
-                    <CalendarClock size={12} aria-hidden="true" />
+              <article className="ym11-coming-split-card" key={item.id}>
+                <div className="ym11-coming-photo-col">
+                  <img
+                    src={getProduceImage(item.cropName, item.category)}
+                    alt={`${item.cropName} planned harvest`}
+                    className="ym11-coming-photo"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="ym11-coming-info-col">
+                  <span className="ym11-expected-tag">
+                    <CalendarClock size={11} aria-hidden="true" />
                     Expected harvest
                   </span>
-                  <StatusBadge status="Pending" />
-                </div>
-                <div>
-                  <h4 className="ym11-produce-name">
-                    {item.cropName}{' '}
-                    <span style={{ fontWeight: 500, fontSize: 12, color: 'var(--muted)' }}>
-                      · {item.gradeName}
+                  <div>
+                    <h4 className="ym11-coming-title">
+                      {item.cropName} <span>{item.gradeName}</span>
+                    </h4>
+                    <p className="ym11-grower-detail">{item.farmName}</p>
+                  </div>
+                  <div className="ym11-produce-metrics">
+                    <div>
+                      <p className="ym11-metric-label">Expected quantity</p>
+                      <p className="ym11-metric-val">Approx. {formatKg(item.availableKg)}</p>
+                    </div>
+                    <div>
+                      <p className="ym11-metric-label">Expected date</p>
+                      <p className="ym11-metric-val">{formatColomboShortDate(item.plannedHarvestDate)}</p>
+                    </div>
+                  </div>
+                  <div className="ym11-coming-foot">
+                    <span className="ym11-grower-detail" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <MapPin size={11} aria-hidden="true" />
+                      {item.district}
                     </span>
-                  </h4>
-                  <p className="ym11-grower-detail">{item.farmName}</p>
-                </div>
-                <div className="ym11-produce-metrics">
-                  <div>
-                    <p className="ym11-metric-label">Expected quantity</p>
-                    <p className="ym11-metric-val">Approx. {formatKg(item.availableKg)}</p>
+                    <Link
+                      className="ym11-inline-link"
+                      style={{ marginTop: 0, fontSize: 12 }}
+                      to={`/buyer/marketplace/harvest-availability?cropId=${encodeURIComponent(item.cropId)}`}
+                    >
+                      View availability
+                      <ArrowRight size={12} aria-hidden="true" />
+                    </Link>
                   </div>
-                  <div>
-                    <p className="ym11-metric-label">Expected date</p>
-                    <p className="ym11-metric-val">{formatColomboShortDate(item.plannedHarvestDate)}</p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                  <span className="ym11-grower-detail" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <MapPin size={12} aria-hidden="true" />
-                    {item.district}
-                  </span>
-                  <Link
-                    className="ym11-inline-link"
-                    style={{ marginTop: 0 }}
-                    to={`/buyer/marketplace/harvest-availability?cropId=${encodeURIComponent(item.cropId)}`}
-                  >
-                    View availability
-                    <ArrowRight size={13} aria-hidden="true" />
-                  </Link>
                 </div>
               </article>
             ))}
           </div>
         )}
-      </ContentCard>
+      </section>
 
-      {/* Bottom CTA */}
-      <section className="ym11-cta-banner" aria-label="Create custom demand">
-        <div className="ym11-cta-left">
-          <span className="ym11-cta-badge" aria-hidden="true">
-            <Sprout size={22} />
-          </span>
-          <div>
-            <h3 className="ym11-card-title">Can&apos;t find the quantity you need?</h3>
-            <p className="ym11-card-sub">
-              Create a demand request and let approved farmers respond with their offers.
-            </p>
+      {/* Bottom CTA Banner */}
+      <section className="ym11-cta-banner ym11-cta-banner--hero" aria-label="Create custom demand">
+        <div className="ym11-cta-circle-wrap" aria-hidden="true">
+          <div className="ym11-cta-circle">
+            <div className="ym11-cta-circle-inner">
+              <Sprout size={26} />
+            </div>
           </div>
         </div>
-        <Button variant="primary" onClick={() => navigate('/buyer/demands')}>
-          Create demand
-          <ArrowRight size={15} aria-hidden="true" />
-        </Button>
+        <div className="ym11-cta-copy">
+          <h3 className="ym11-card-title">Can&apos;t find the quantity you need?</h3>
+          <p className="ym11-card-sub">
+            Create a demand request and let farmers respond with their offers.
+          </p>
+        </div>
+        <div className="ym11-cta-action">
+          <Button variant="primary" onClick={() => navigate('/buyer/demands')}>
+            Create demand
+            <ArrowRight size={15} aria-hidden="true" />
+          </Button>
+        </div>
       </section>
     </div>
   );
