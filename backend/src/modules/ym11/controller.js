@@ -2,9 +2,72 @@ import pool from '../../config/db.js';
 
 // YM11 · Meranga Akash · Buyer marketplace
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+const KG_REGEX = /^\d+(?:\.\d{1,3})?$/;
 const ACTIVITY_RANGES = { '7d': 7, '30d': 30 };
 const DEFAULT_RECENT_ORDERS_LIMIT = 5;
 const MAX_RECENT_ORDERS_LIMIT = 20;
+const DEFAULT_SEARCH_PAGE_SIZE = 12;
+const MAX_SEARCH_PAGE_SIZE = 50;
+
+const CROP_CATEGORIES = [
+  { key: 'vegetables', label: 'Vegetables' },
+  { key: 'fruits', label: 'Fruits' },
+  { key: 'leafy_greens', label: 'Leafy greens' },
+  { key: 'root_crops', label: 'Root crops' },
+  { key: 'grains', label: 'Grains' },
+  { key: 'other', label: 'Other produce' },
+];
+const CATEGORY_KEYS = new Set(CROP_CATEGORIES.map((c) => c.key));
+const SEARCH_AVAILABILITY_MODES = new Set(['all', 'available_now', 'within_7_days', 'within_30_days', 'planned']);
+const AVAILABILITY_STATUS_MODES = new Set(['all', 'available_now', 'planned']);
+const SEARCH_SORT_MODES = new Set(['price_asc', 'price_desc', 'quantity_desc', 'harvest_asc', 'newest']);
+
+function classifyCropCategory(cropName) {
+  const name = String(cropName || '').trim().toLowerCase();
+  if (!name) return 'other';
+  if (/(spinach|leafy|lettuce|kale|gotukola|kankun|mukunuwenna|greens)/.test(name)) return 'leafy_greens';
+  if (/(carrot|potato|beetroot|radish|yam|manioc|cassava|ginger|turmeric|onion|garlic)/.test(name)) return 'root_crops';
+  if (/(rice|paddy|maize|corn|millet|kurakkan|grain|lentil|gram|cowpea|oat|wheat)/.test(name)) return 'grains';
+  if (/(banana|mango|papaya|pineapple|watermelon|avocado|guava|passion|orange|lime|apple|grape|berry|fruit)/.test(name)) return 'fruits';
+  if (/(tomato|cabbage|bean|brinjal|eggplant|okra|pumpkin|chili|chilli|capsicum|cucumber|gourd|leek|broccoli|cauliflower|pepper|squash)/.test(name)) return 'vegetables';
+  return 'other';
+}
+
+function formatDateOnly(value) {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const match = /^\d{4}-\d{2}-\d{2}/.exec(value);
+    if (match) return match[0];
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Colombo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function getCurrentColomboMonth() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Colombo',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(new Date());
+}
+
+function getMonthBounds(monthStr) {
+  const [yearStr, monthNumStr] = monthStr.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthNumStr);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    monthStart: `${yearStr}-${monthNumStr}-01`,
+    monthEnd: `${yearStr}-${monthNumStr}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
 
 function toKg(value) {
   if (value === null || value === undefined) return 0;
@@ -779,6 +842,560 @@ export async function getBuyingInsights(req, res, next) {
 
     return res.json({
       insights,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function loadMarketplaceFilterOptions() {
+  const [cropsRes, gradesRes, districtsRes] = await Promise.all([
+    pool.query('SELECT id, name FROM crops WHERE active = true ORDER BY name ASC'),
+    pool.query('SELECT id, name FROM grades WHERE active = true ORDER BY name ASC'),
+    pool.query(
+      `SELECT DISTINCT district
+       FROM farms
+       WHERE status = 'active' AND district IS NOT NULL AND length(trim(district)) > 0
+       ORDER BY district ASC`
+    ),
+  ]);
+  return {
+    crops: cropsRes.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      category: classifyCropCategory(row.name),
+    })),
+    grades: gradesRes.rows,
+    districts: districtsRes.rows.map((row) => row.district),
+  };
+}
+
+function mapMarketplaceRow(row) {
+  const isAvailableNow = row.availability_status === 'available_now';
+  const effectiveDate = formatDateOnly(
+    isAvailableNow ? (row.actual_harvest_date || row.planned_harvest_date) : row.planned_harvest_date
+  );
+  return {
+    id: row.listing_id || row.batch_id,
+    listingId: row.listing_id || null,
+    batchId: row.batch_id,
+    farmId: row.farm_id,
+    farmName: row.farm_name,
+    district: row.district,
+    cropId: row.crop_id,
+    cropName: row.crop_name,
+    category: classifyCropCategory(row.crop_name),
+    gradeId: row.grade_id,
+    gradeName: row.grade_name,
+    availableKg: toKg(row.effective_kg),
+    unitPriceCents: toOptionalCents(row.unit_price_cents),
+    isListed: Boolean(row.listing_id),
+    batchStatus: row.batch_status,
+    availabilityStatus: row.availability_status,
+    readyToPurchase: isAvailableNow,
+    harvestDate: effectiveDate,
+    plannedHarvestDate: formatDateOnly(row.planned_harvest_date),
+    actualHarvestDate: formatDateOnly(row.actual_harvest_date),
+    validUntil: row.valid_until || null,
+    publicTraceToken: row.public_trace_token,
+    createdAt: row.created_at,
+  };
+}
+
+const MARKETPLACE_BASE_CTE = `
+  WITH marketplace_items AS (
+    SELECT
+      l.id AS listing_id,
+      b.id AS batch_id,
+      f.id AS farm_id,
+      f.name AS farm_name,
+      f.district,
+      c.id AS crop_id,
+      c.name AS crop_name,
+      g.id AS grade_id,
+      g.name AS grade_name,
+      b.status AS batch_status,
+      CASE
+        WHEN b.status IN ('ready', 'harvested') AND ba.available_kg > 0 THEN 'available_now'
+        ELSE 'planned'
+      END AS availability_status,
+      CASE
+        WHEN b.status IN ('ready', 'harvested') AND ba.available_kg > 0 THEN
+          CASE
+            WHEN l.id IS NOT NULL THEN LEAST(l.offered_kg, ba.available_kg)
+            ELSE ba.available_kg
+          END
+        ELSE b.planned_kg
+      END::NUMERIC(12,3) AS effective_kg,
+      l.unit_price_cents,
+      b.planned_harvest_date,
+      b.actual_harvest_date,
+      COALESCE(
+        CASE WHEN b.status IN ('ready', 'harvested') THEN b.actual_harvest_date ELSE NULL END,
+        b.planned_harvest_date
+      ) AS availability_date,
+      l.valid_until,
+      b.public_trace_token,
+      COALESCE(l.created_at, b.created_at) AS created_at
+    FROM harvest_batches b
+    JOIN batch_availability ba ON ba.batch_id = b.id
+    JOIN farms f ON f.id = b.farm_id AND f.status = 'active'
+    JOIN users u ON u.id = b.farmer_id AND u.role = 'farmer' AND u.approval_status = 'approved'
+    JOIN crops c ON c.id = b.crop_id AND c.active = true
+    JOIN grades g ON g.id = b.grade_id AND g.active = true
+    LEFT JOIN listings l
+      ON l.batch_id = b.id
+     AND l.status = 'active'
+     AND l.valid_from <= now()
+     AND l.valid_until > now()
+    WHERE (
+      (b.status IN ('ready', 'harvested') AND ba.available_kg > 0)
+      OR (b.status = 'planned' AND b.planned_kg > 0)
+    )
+  )
+`;
+
+export async function getMarketplaceOverview(req, res, next) {
+  try {
+    const buyer = await getApprovedBuyerWithWallet(req.user.id, req.user.role);
+    if (!buyer) {
+      return res.status(403).json({ error: 'Account is not approved', requestId: req.requestId });
+    }
+
+    const [filterOptions, itemsResult] = await Promise.all([
+      loadMarketplaceFilterOptions(),
+      pool.query(
+        `${MARKETPLACE_BASE_CTE}
+         SELECT *
+         FROM marketplace_items
+         ORDER BY
+           (availability_status = 'available_now') DESC,
+           (listing_id IS NOT NULL) DESC,
+           unit_price_cents ASC NULLS LAST,
+           effective_kg DESC,
+           planned_harvest_date ASC`
+      ),
+    ]);
+
+    const mapped = itemsResult.rows.map(mapMarketplaceRow);
+    const availableItems = mapped.filter((item) => item.availabilityStatus === 'available_now');
+    const plannedItems = mapped.filter((item) => item.availabilityStatus === 'planned');
+
+    const categoryCounts = new Map(CROP_CATEGORIES.map((c) => [c.key, 0]));
+    for (const item of availableItems) {
+      categoryCounts.set(item.category, (categoryCounts.get(item.category) || 0) + 1);
+    }
+
+    const categories = CROP_CATEGORIES.map((c) => ({
+      key: c.key,
+      label: c.label,
+      count: categoryCounts.get(c.key) || 0,
+    }));
+
+    const availableNowTotalKg = Number(
+      availableItems.reduce((sum, item) => sum + item.availableKg, 0).toFixed(3)
+    );
+    const comingSoonTotalKg = Number(
+      plannedItems.reduce((sum, item) => sum + item.availableKg, 0).toFixed(3)
+    );
+    const activeSuppliersCount = new Set(mapped.map((item) => item.farmId)).size;
+
+    return res.json({
+      summary: {
+        availableNowCount: availableItems.length,
+        availableNowTotalKg,
+        comingSoonCount: plannedItems.length,
+        comingSoonTotalKg,
+        activeSuppliersCount,
+      },
+      categories,
+      availableNow: availableItems.slice(0, 12),
+      comingSoon: plannedItems.slice(0, 6),
+      filters: filterOptions,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function searchMarketplace(req, res, next) {
+  try {
+    const fields = {};
+
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (q.length > 100) {
+      fields.q = 'Search term must be 100 characters or fewer';
+    }
+
+    let cropId = null;
+    if (req.query.cropId !== undefined && req.query.cropId !== '') {
+      if (typeof req.query.cropId !== 'string' || !UUID_REGEX.test(req.query.cropId.trim())) {
+        fields.cropId = 'Must be a valid UUID';
+      } else {
+        cropId = req.query.cropId.trim();
+      }
+    }
+
+    let category = null;
+    if (req.query.category !== undefined && req.query.category !== '') {
+      if (typeof req.query.category !== 'string' || !CATEGORY_KEYS.has(req.query.category.trim())) {
+        fields.category = 'Unsupported category';
+      } else {
+        category = req.query.category.trim();
+      }
+    }
+
+    let gradeIds = [];
+    const rawGrades = req.query.gradeIds ?? req.query.gradeId;
+    if (rawGrades !== undefined && rawGrades !== '') {
+      const parts = Array.isArray(rawGrades)
+        ? rawGrades.flatMap((v) => String(v).split(','))
+        : String(rawGrades).split(',');
+      const cleaned = parts.map((v) => v.trim()).filter(Boolean);
+      if (cleaned.some((id) => !UUID_REGEX.test(id))) {
+        fields.gradeIds = 'All grade IDs must be valid UUIDs';
+      } else {
+        gradeIds = [...new Set(cleaned)];
+      }
+    }
+
+    let district = null;
+    if (req.query.district !== undefined && req.query.district !== '') {
+      if (typeof req.query.district !== 'string' || req.query.district.trim().length > 100) {
+        fields.district = 'Must be a valid district name up to 100 characters';
+      } else {
+        district = req.query.district.trim();
+      }
+    }
+
+    let minPriceCents = null;
+    if (req.query.minPriceCents !== undefined && req.query.minPriceCents !== '') {
+      const parsed = Number(req.query.minPriceCents);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        fields.minPriceCents = 'Must be a non-negative integer in LKR cents';
+      } else {
+        minPriceCents = parsed;
+      }
+    }
+
+    let maxPriceCents = null;
+    if (req.query.maxPriceCents !== undefined && req.query.maxPriceCents !== '') {
+      const parsed = Number(req.query.maxPriceCents);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        fields.maxPriceCents = 'Must be a non-negative integer in LKR cents';
+      } else {
+        maxPriceCents = parsed;
+      }
+    }
+
+    if (minPriceCents !== null && maxPriceCents !== null && minPriceCents > maxPriceCents) {
+      fields.maxPriceCents = 'Must be greater than or equal to minPriceCents';
+    }
+
+    let minKg = null;
+    if (req.query.minKg !== undefined && req.query.minKg !== '') {
+      const raw = String(req.query.minKg).trim();
+      if (!KG_REGEX.test(raw) || Number(raw) >= 1000000000) {
+        fields.minKg = 'Must be a non-negative kg value with at most 3 decimal places';
+      } else {
+        minKg = Number(raw);
+      }
+    }
+
+    const availability =
+      req.query.availability === undefined || req.query.availability === ''
+        ? 'all'
+        : String(req.query.availability).trim();
+    if (!SEARCH_AVAILABILITY_MODES.has(availability)) {
+      fields.availability = 'Use all, available_now, within_7_days, within_30_days, or planned';
+    }
+
+    const sort =
+      req.query.sort === undefined || req.query.sort === ''
+        ? 'price_asc'
+        : String(req.query.sort).trim();
+    if (!SEARCH_SORT_MODES.has(sort)) {
+      fields.sort = 'Use price_asc, price_desc, quantity_desc, harvest_asc, or newest';
+    }
+
+    const page =
+      req.query.page === undefined || req.query.page === '' ? 1 : Number(req.query.page);
+    if (!Number.isInteger(page) || page < 1) {
+      fields.page = 'Must be a positive integer';
+    }
+
+    const pageSize =
+      req.query.pageSize === undefined || req.query.pageSize === ''
+        ? DEFAULT_SEARCH_PAGE_SIZE
+        : Number(req.query.pageSize);
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_SEARCH_PAGE_SIZE) {
+      fields.pageSize = `Must be an integer between 1 and ${MAX_SEARCH_PAGE_SIZE}`;
+    }
+
+    if (Object.keys(fields).length > 0) {
+      return res.status(422).json({
+        error: 'Invalid search parameters',
+        fields,
+        requestId: req.requestId,
+      });
+    }
+
+    const buyer = await getApprovedBuyerWithWallet(req.user.id, req.user.role);
+    if (!buyer) {
+      return res.status(403).json({ error: 'Account is not approved', requestId: req.requestId });
+    }
+
+    const whereClauses = ['1=1'];
+    const params = [];
+    const addParam = (val) => {
+      params.push(val);
+      return `$${params.length}`;
+    };
+
+    if (q) {
+      const p = addParam(`%${q}%`);
+      whereClauses.push(
+        `(crop_name ILIKE ${p} OR farm_name ILIKE ${p} OR district ILIKE ${p} OR grade_name ILIKE ${p})`
+      );
+    }
+    if (cropId) {
+      whereClauses.push(`crop_id = ${addParam(cropId)}::uuid`);
+    }
+    if (gradeIds.length > 0) {
+      whereClauses.push(`grade_id = ANY(${addParam(gradeIds)}::uuid[])`);
+    }
+    if (district) {
+      whereClauses.push(`lower(district) = lower(${addParam(district)})`);
+    }
+    if (minPriceCents !== null) {
+      whereClauses.push(`unit_price_cents IS NOT NULL AND unit_price_cents >= ${addParam(minPriceCents)}::bigint`);
+    }
+    if (maxPriceCents !== null) {
+      whereClauses.push(`unit_price_cents IS NOT NULL AND unit_price_cents <= ${addParam(maxPriceCents)}::bigint`);
+    }
+    if (minKg !== null) {
+      whereClauses.push(`effective_kg >= ${addParam(minKg)}::numeric`);
+    }
+
+    if (availability === 'available_now') {
+      whereClauses.push(`availability_status = 'available_now'`);
+    } else if (availability === 'planned') {
+      whereClauses.push(`availability_status = 'planned'`);
+    } else if (availability === 'within_7_days') {
+      whereClauses.push(
+        `(availability_status = 'available_now' OR (availability_status = 'planned' AND planned_harvest_date <= ((now() AT TIME ZONE 'Asia/Colombo')::DATE + 7)))`
+      );
+    } else if (availability === 'within_30_days') {
+      whereClauses.push(
+        `(availability_status = 'available_now' OR (availability_status = 'planned' AND planned_harvest_date <= ((now() AT TIME ZONE 'Asia/Colombo')::DATE + 30)))`
+      );
+    }
+
+    const orderByMap = {
+      price_asc: 'unit_price_cents ASC NULLS LAST, effective_kg DESC, farm_name ASC',
+      price_desc: 'unit_price_cents DESC NULLS LAST, effective_kg DESC, farm_name ASC',
+      quantity_desc: 'effective_kg DESC, unit_price_cents ASC NULLS LAST, farm_name ASC',
+      harvest_asc: 'availability_date ASC, effective_kg DESC, farm_name ASC',
+      newest: 'created_at DESC, effective_kg DESC',
+    };
+
+    const [filterOptions, result] = await Promise.all([
+      loadMarketplaceFilterOptions(),
+      pool.query(
+        `${MARKETPLACE_BASE_CTE}
+         SELECT *
+         FROM marketplace_items
+         WHERE ${whereClauses.join(' AND ')}
+         ORDER BY ${orderByMap[sort]}`,
+        params
+      ),
+    ]);
+
+    let items = result.rows.map(mapMarketplaceRow);
+    if (category) {
+      items = items.filter((item) => item.category === category);
+    }
+
+    const totalItems = items.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const offset = (page - 1) * pageSize;
+    const pagedItems = items.slice(offset, offset + pageSize);
+
+    return res.json({
+      items: pagedItems,
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+      },
+      appliedFilters: {
+        q,
+        cropId,
+        category,
+        gradeIds,
+        district,
+        minPriceCents,
+        maxPriceCents,
+        minKg,
+        availability,
+        sort,
+      },
+      filters: {
+        ...filterOptions,
+        categories: CROP_CATEGORIES,
+      },
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getHarvestAvailability(req, res, next) {
+  try {
+    const fields = {};
+
+    const month =
+      req.query.month === undefined || req.query.month === ''
+        ? getCurrentColomboMonth()
+        : String(req.query.month).trim();
+    if (!MONTH_REGEX.test(month)) {
+      fields.month = 'Use YYYY-MM format';
+    }
+
+    let cropId = null;
+    if (req.query.cropId !== undefined && req.query.cropId !== '') {
+      if (typeof req.query.cropId !== 'string' || !UUID_REGEX.test(req.query.cropId.trim())) {
+        fields.cropId = 'Must be a valid UUID';
+      } else {
+        cropId = req.query.cropId.trim();
+      }
+    }
+
+    let gradeId = null;
+    if (req.query.gradeId !== undefined && req.query.gradeId !== '') {
+      if (typeof req.query.gradeId !== 'string' || !UUID_REGEX.test(req.query.gradeId.trim())) {
+        fields.gradeId = 'Must be a valid UUID';
+      } else {
+        gradeId = req.query.gradeId.trim();
+      }
+    }
+
+    let district = null;
+    if (req.query.district !== undefined && req.query.district !== '') {
+      if (typeof req.query.district !== 'string' || req.query.district.trim().length > 100) {
+        fields.district = 'Must be a valid district name up to 100 characters';
+      } else {
+        district = req.query.district.trim();
+      }
+    }
+
+    const status =
+      req.query.status === undefined || req.query.status === ''
+        ? 'all'
+        : String(req.query.status).trim();
+    if (!AVAILABILITY_STATUS_MODES.has(status)) {
+      fields.status = 'Use all, available_now, or planned';
+    }
+
+    if (Object.keys(fields).length > 0) {
+      return res.status(422).json({
+        error: 'Invalid query parameters',
+        fields,
+        requestId: req.requestId,
+      });
+    }
+
+    const buyer = await getApprovedBuyerWithWallet(req.user.id, req.user.role);
+    if (!buyer) {
+      return res.status(403).json({ error: 'Account is not approved', requestId: req.requestId });
+    }
+
+    const { monthStart, monthEnd } = getMonthBounds(month);
+
+    const [filterOptions, result] = await Promise.all([
+      loadMarketplaceFilterOptions(),
+      pool.query(
+        `${MARKETPLACE_BASE_CTE}
+         SELECT *
+         FROM marketplace_items
+         WHERE ($1::uuid IS NULL OR crop_id = $1::uuid)
+           AND ($2::uuid IS NULL OR grade_id = $2::uuid)
+           AND ($3::text IS NULL OR lower(district) = lower($3::text))
+           AND ($4::text = 'all' OR availability_status = $4::text)
+         ORDER BY availability_date ASC, effective_kg DESC, farm_name ASC`,
+        [cropId, gradeId, district, status]
+      ),
+    ]);
+
+    const entries = result.rows.map((row) => {
+      const mapped = mapMarketplaceRow(row);
+      return {
+        ...mapped,
+        quantityKg: mapped.availableKg,
+        availabilityDate: formatDateOnly(row.availability_date),
+      };
+    });
+
+    const todayColombo = formatDateOnly(new Date());
+    const in30Days = formatDateOnly(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+
+    const availableNowKg = Number(
+      entries
+        .filter((e) => e.availabilityStatus === 'available_now')
+        .reduce((sum, e) => sum + e.quantityKg, 0)
+        .toFixed(3)
+    );
+    const upcoming30DaysKg = Number(
+      entries
+        .filter(
+          (e) =>
+            e.availabilityStatus === 'planned' &&
+            e.availabilityDate &&
+            todayColombo &&
+            in30Days &&
+            e.availabilityDate >= todayColombo &&
+            e.availabilityDate <= in30Days
+        )
+        .reduce((sum, e) => sum + e.quantityKg, 0)
+        .toFixed(3)
+    );
+    const activeSuppliersCount = new Set(entries.map((e) => e.farmId)).size;
+
+    const calendarDays = {};
+    for (const entry of entries) {
+      if (entry.availabilityDate && entry.availabilityDate >= monthStart && entry.availabilityDate <= monthEnd) {
+        if (!calendarDays[entry.availabilityDate]) {
+          calendarDays[entry.availabilityDate] = [];
+        }
+        calendarDays[entry.availabilityDate].push(entry);
+      }
+    }
+
+    return res.json({
+      month,
+      monthStart,
+      monthEnd,
+      timezone: 'Asia/Colombo',
+      summary: {
+        availableNowKg,
+        upcoming30DaysKg,
+        activeSuppliersCount,
+        totalEntries: entries.length,
+      },
+      entries,
+      calendarDays,
+      filters: filterOptions,
+      appliedFilters: {
+        month,
+        cropId,
+        gradeId,
+        district,
+        status,
+      },
       requestId: req.requestId,
     });
   } catch (error) {
