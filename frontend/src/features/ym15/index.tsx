@@ -1,6 +1,12 @@
 import { useState } from 'react';
+import api from '../../services/api';
 import { BulkMatchingRequestPage } from './BulkMatchingRequestPage';
-import type { BulkMatchRequestInput, ValidatedBulkMatchRequest } from './types';
+import { CompleteMatchResultsPage } from './CompleteMatchResultsPage';
+import type {
+  BulkMatchRequestInput,
+  BulkMatchResponseData,
+  ValidatedBulkMatchRequest,
+} from './types';
 
 export default function YM15() {
   const [formValues, setFormValues] = useState<BulkMatchRequestInput>({
@@ -16,23 +22,44 @@ export default function YM15() {
   const [submitting, setSubmitting] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [feedbackType, setFeedbackType] = useState<'success' | 'warning' | 'error' | 'info'>('info');
+  const [matchResult, setMatchResult] = useState<BulkMatchResponseData | null>(null);
 
   const handleSubmitRequest = async (payload: ValidatedBulkMatchRequest) => {
     setSubmitting(true);
     setFeedbackMessage('');
 
     try {
-      setFeedbackType('success');
-      setFeedbackMessage(
-        `Bulk matching request validated: ${payload.requiredKg} kg of ${payload.crop} (${payload.grade}) to ${payload.destination}.`
-      );
-    } catch {
+      const { data } = await api.post<BulkMatchResponseData>('/ym15/match', payload);
+      setMatchResult(data);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        'Could not run bulk matching against the backend API.';
       setFeedbackType('error');
-      setFeedbackMessage('Could not validate the bulk matching request. Please check your inputs.');
+      setFeedbackMessage(message);
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (matchResult) {
+    return (
+      <CompleteMatchResultsPage
+        data={matchResult}
+        onBackToRequest={() => {
+          setMatchResult(null);
+          setFeedbackMessage('');
+        }}
+        onViewAllocationBreakdown={() => {
+          setMatchResult(null);
+          setFeedbackType('info');
+          setFeedbackMessage(
+            'Grower allocation breakdown screen will be added when its UI design is provided.'
+          );
+        }}
+      />
+    );
+  }
 
   return (
     <BulkMatchingRequestPage
