@@ -1,36 +1,14 @@
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Alert } from '../../components/Alert';
-import { Button } from '../../components/Button';
 import { ContentCard } from '../../components/ContentCard';
 import BuyerOverviewPage from './BuyerOverviewPage';
+import HarvestAvailabilityPage from './HarvestAvailabilityPage';
+import MarketplacePage from './MarketplacePage';
+import MarketplaceSearchPage from './MarketplaceSearchPage';
 
 // YM11 · Meranga Akash · Buyer marketplace
-// Handles both /buyer/overview/* and /buyer/marketplace/* as distinct views.
-function MarketplacePlaceholder() {
-  const navigate = useNavigate();
-  const marketplacePages = ['Marketplace', 'Search and filtered results', 'Harvest availability'];
-
-  return (
-    <ContentCard title="YM11 · Buyer Marketplace" subtitle="Owner: Meranga Akash">
-      <p className="module-note">
-        The Buyer Overview dashboard is live on <strong>/buyer/overview</strong>. Marketplace discovery, search results, and harvest availability pages will be added here next.
-      </p>
-      <h3 className="module-heading">Upcoming Marketplace pages</h3>
-      <ul className="assigned-pages">
-        {marketplacePages.map((page) => (
-          <li key={page}>{page}</li>
-        ))}
-      </ul>
-      <div style={{ marginTop: 20 }}>
-        <Button variant="primary" onClick={() => navigate('/buyer/overview')}>
-          Go to Buyer Overview
-        </Button>
-      </div>
-    </ContentCard>
-  );
-}
-
+// Handles both /buyer/overview/* and /buyer/marketplace/* as distinct route trees.
 export default function YM11() {
   const { user } = useAuth();
   const { pathname } = useLocation();
@@ -43,13 +21,13 @@ export default function YM11() {
     );
   }
 
-  const isMarketplaceRoute = pathname.startsWith('/buyer/marketplace');
-
-  if (isMarketplaceRoute) {
+  if (pathname.startsWith('/buyer/marketplace')) {
     return (
       <Routes>
-        <Route index element={<MarketplacePlaceholder />} />
-        <Route path="*" element={<MarketplacePlaceholder />} />
+        <Route index element={<MarketplacePage />} />
+        <Route path="search" element={<MarketplaceSearchPage />} />
+        <Route path="harvest-availability" element={<HarvestAvailabilityPage />} />
+        <Route path="*" element={<Navigate to="/buyer/marketplace" replace />} />
       </Routes>
     );
   }
@@ -57,7 +35,7 @@ export default function YM11() {
   return (
     <Routes>
       <Route index element={<BuyerOverviewPage />} />
-      <Route path="*" element={<BuyerOverviewPage />} />
+      <Route path="*" element={<Navigate to="/buyer/overview" replace />} />
     </Routes>
   );
 }
