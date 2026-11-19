@@ -1,12 +1,15 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { BuyerOrder, OrderDisplayStatus } from './types';
 
 interface OrdersTableProps {
   orders: BuyerOrder[];
-  onViewDetails: (order: BuyerOrder) => void;
+  onViewDetails?: (order: BuyerOrder) => void;
 }
 
 export const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onViewDetails }) => {
+  const navigate = useNavigate();
+
   // Official YieldMatrix status badge palette
   const getStatusBadgeStyle = (status: OrderDisplayStatus) => {
     switch (status) {
@@ -29,6 +32,11 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onViewDetails 
   const formatTableDate = (dateStr: string) => {
     if (!dateStr) return '';
     return dateStr.split(' - ')[0] || dateStr;
+  };
+
+  const handleRowClick = (order: BuyerOrder) => {
+    if (onViewDetails) onViewDetails(order);
+    navigate(`/buyer/orders/${order.id}`);
   };
 
   return (
@@ -117,7 +125,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onViewDetails 
                 <td className="py-3.5 px-4 whitespace-nowrap text-right">
                   <button
                     type="button"
-                    onClick={() => onViewDetails(order)}
+                    onClick={() => handleRowClick(order)}
                     className="h-[36px] px-3 bg-[#315A42] hover:bg-[#264834] text-white text-[13px] font-semibold rounded-[8px] transition-all duration-150 shadow-xs cursor-pointer inline-flex items-center justify-center"
                   >
                     View Details

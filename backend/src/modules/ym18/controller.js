@@ -249,12 +249,13 @@ export async function getOrders(req, res, next) {
 
 /**
  * GET /api/ym18/orders/:id
- * Retrieves full details for a single order owned by the buyer
+ * Retrieves full details for a single order owned by the buyer, including farmer allocations,
+ * payment summary, delivery details, and linked produce items.
  */
 export async function getOrderDetails(req, res, next) {
   try {
     const buyerId = req.user.id;
-    const orderId = req.params.id;
+    const orderIdentifier = req.params.id;
 
     const orderQuery = `
       SELECT 
@@ -274,10 +275,13 @@ export async function getOrderDetails(req, res, next) {
           json_agg(
             json_build_object(
               'id', a.id,
-              'crop_name', c.name,
-              'grade_name', g.name,
+              'farmer_id', a.farmer_id,
+              'farmer_name', u.name,
               'farm_name', f.name,
               'farm_district', f.district,
+              'pickup_address', f.pickup_address,
+              'crop_name', c.name,
+              'grade_name', g.name,
               'agreed_kg', a.agreed_kg,
               'agreed_unit_price_cents', a.agreed_unit_price_cents,
               'agreed_value_cents', a.agreed_value_cents,
@@ -285,37 +289,96 @@ export async function getOrderDetails(req, res, next) {
               'picked_up_kg', a.picked_up_kg,
               'handed_over_kg', a.handed_over_kg,
               'accepted_kg', a.accepted_kg,
+              'funded_cents', a.funded_cents,
+              'settled_cents', a.settled_cents,
+              'refunded_cents', a.refunded_cents,
+              'held_cents', a.held_cents,
               'status', a.status
             )
           ) FILTER (WHERE a.id IS NOT NULL), '[]'
-        ) as items
+        ) as allocations,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'trip_id', t.id,
+              'driver_name', d.name,
+              'driver_phone', d.email,
+              'vehicle_reg', v.registration,
+              'vehicle_type', v.vehicle_type,
+              'trip_status', t.status,
+              'scheduled_start', t.scheduled_start,
+              'scheduled_end', t.scheduled_end
+            )
+          ) FILTER (WHERE t.id IS NOT NULL), '[]'
+        ) as trips
       FROM orders o
       LEFT JOIN allocations a ON a.order_id = o.id
+      LEFT JOIN users u ON u.id = a.farmer_id
       LEFT JOIN harvest_batches hb ON hb.id = a.batch_id
       LEFT JOIN crops c ON c.id = hb.crop_id
       LEFT JOIN grades g ON g.id = hb.grade_id
       LEFT JOIN farms f ON f.id = hb.farm_id
-      WHERE o.id = $1 AND o.buyer_id = $2
+      LEFT JOIN trips t ON t.order_id = o.id
+      LEFT JOIN users d ON d.id = t.driver_id
+      LEFT JOIN vehicles v ON v.id = t.vehicle_id
+      WHERE (o.id::text = $1 OR o.operation_key ILIKE '%' || $1 || '%') AND o.buyer_id = $2
       GROUP BY o.id
     `;
 
-    const { rows } = await pool.query(orderQuery, [orderId, buyerId]);
+    const { rows } = await pool.query(orderQuery, [orderIdentifier, buyerId]);
     if (!rows[0]) {
       return res.status(404).json({ error: 'Order not found', requestId: req.requestId });
     }
 
     const row = rows[0];
-    const items = Array.isArray(row.items) ? row.items : [];
+    const rawAllocations = Array.isArray(row.allocations) ? row.allocations : [];
+    const rawTrips = Array.isArray(row.trips) ? row.trips : [];
     const totalAmountLkr = Number(row.agreed_total_cents) / 100;
-    const totalKg = items.reduce((acc, it) => acc + (Number(it.agreed_kg) || 0), 0);
+    const totalKg = rawAllocations.reduce((acc, it) => acc + (Number(it.agreed_kg) || 0), 0);
+
+    // Format individual farmer allocations
+    const formattedAllocations = rawAllocations.map((alloc) => {
+      const agreedKg = Number(alloc.agreed_kg) || 0;
+      const unitPriceLkr = (Number(alloc.agreed_unit_price_cents) || 0) / 100;
+      const agreedValueLkr = alloc.agreed_value_cents ? Number(alloc.agreed_value_cents) / 100 : agreedKg * unitPriceLkr;
+
+      return {
+        id: alloc.id,
+        farmerId: alloc.farmer_id,
+        farmerName: alloc.farmer_name || 'Assigned Farmer Partner',
+        farmName: alloc.farm_name || 'YieldMatrix Cooperative Farm',
+        location: alloc.farm_district || alloc.pickup_address || 'Regional Agro Zone',
+        pickupAddress: alloc.pickup_address || 'Direct Farm Pickup Point',
+        cropName: alloc.crop_name || 'Agricultural Produce',
+        gradeName: alloc.grade_name || 'Standard Grade',
+        allocatedKg: agreedKg,
+        unitPriceLkr,
+        agreedValueLkr,
+        formattedUnitPrice: `LKR ${unitPriceLkr.toFixed(2)}/Kg`,
+        formattedAgreedValue: `LKR ${agreedValueLkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        status: alloc.status || 'allocated',
+        fundedLkr: (Number(alloc.funded_cents) || 0) / 100,
+        settledLkr: (Number(alloc.settled_cents) || 0) / 100,
+        heldLkr: (Number(alloc.held_cents) || 0) / 100,
+        refundedLkr: (Number(alloc.refunded_cents) || 0) / 100,
+      };
+    });
+
+    // Payment summary
+    const totalFundedLkr = formattedAllocations.reduce((acc, a) => acc + a.fundedLkr, 0);
+    const totalHeldLkr = formattedAllocations.reduce((acc, a) => acc + a.heldLkr, 0);
+    const totalSettledLkr = formattedAllocations.reduce((acc, a) => acc + a.settledLkr, 0);
+    const totalRefundedLkr = formattedAllocations.reduce((acc, a) => acc + a.refundedLkr, 0);
+
+    const primaryCropName = formattedAllocations[0]?.cropName || 'Agricultural Produce';
 
     return res.json({
       order: {
         id: row.id,
         orderCode: formatOrderCode(row.operation_key, row.id),
         operationKey: row.operation_key,
-        productName: items[0]?.crop_name || 'Agricultural Produce',
-        products: items,
+        productName: primaryCropName,
+        productsSummary: formattedAllocations.map(a => `${a.cropName} (${a.allocatedKg} Kg)`).join(', ') || primaryCropName,
         quantityKg: totalKg,
         totalPriceLkr: totalAmountLkr,
         formattedTotalPrice: `LKR ${totalAmountLkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -323,10 +386,37 @@ export async function getOrderDetails(req, res, next) {
         displayStatus: mapOrderStatus(row.status),
         orderDate: formatOrderDate(row.created_at),
         createdAt: row.created_at,
-        deliveryDate: row.delivery_date,
-        destination: row.destination,
-        destinationDistrict: row.destination_district,
-        cancellationReason: row.cancellation_reason
+        deliveryDate: row.delivery_date ? new Date(row.delivery_date).toISOString().split('T')[0] : 'Scheduled upon confirmation',
+        formattedDeliveryDate: row.delivery_date ? formatOrderDate(row.delivery_date).split(' - ')[0] : 'Scheduled upon confirmation',
+        destination: row.destination || 'Designated Fulfillment Warehouse',
+        destinationDistrict: row.destination_district || 'Western Province',
+        destinationCoordinates: {
+          latitude: row.destination_latitude ? Number(row.destination_latitude) : null,
+          longitude: row.destination_longitude ? Number(row.destination_longitude) : null,
+        },
+        cancellationReason: row.cancellation_reason,
+        allocations: formattedAllocations,
+        paymentSummary: {
+          currency: 'LKR',
+          totalAmountLkr,
+          formattedTotalAmount: `LKR ${totalAmountLkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          fundedLkr: totalFundedLkr || totalAmountLkr,
+          heldLkr: totalHeldLkr,
+          settledLkr: totalSettledLkr,
+          refundedLkr: totalRefundedLkr,
+          escrowStatus: row.status === 'delivered' ? 'Settled to Farmers' : row.status === 'cancelled' ? 'Refunded to Buyer' : 'Protected in Escrow'
+        },
+        deliveryInfo: {
+          destination: row.destination,
+          district: row.destination_district,
+          scheduledDeliveryDate: row.delivery_date ? formatOrderDate(row.delivery_date).split(' - ')[0] : 'To be confirmed',
+          trip: rawTrips[0] ? {
+            driverName: rawTrips[0].driver_name,
+            vehicleNumber: rawTrips[0].vehicle_reg,
+            vehicleType: rawTrips[0].vehicle_type,
+            status: rawTrips[0].trip_status,
+          } : null
+        }
       },
       requestId: req.requestId
     });
