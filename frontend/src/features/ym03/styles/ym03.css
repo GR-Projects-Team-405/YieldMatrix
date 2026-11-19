@@ -1,0 +1,183 @@
+
+/* YM-03 public authentication pages only */
+
+.ym03-public-layout {
+  --ym03-primary: #315a42;
+  --ym03-background: #d9f7e4;
+  --ym03-text: #263a31;
+
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: Inter, sans-serif;
+  color: var(--ym03-text);
+  background: var(--ym03-background);
+}
+
+/* Header */
+
+.ym03-header {
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 32px 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: #ffffff;
+}
+
+.ym03-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #111111;
+}
+
+.ym03-brand-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.ym03-brand-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.ym03-brand-details strong {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.ym03-brand-details span {
+  font-size: 8px;
+  line-height: 12px;
+  letter-spacing: 0.2px;
+}
+
+.ym03-header-nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.ym03-nav-link {
+  color: #161616;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.ym03-nav-link:hover {
+  color: var(--ym03-primary);
+}
+
+.ym03-user-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #004d2d;
+  color: white;
+  border-radius: 50%;
+}
+
+/* Main content */
+
+.ym03-main {
+  flex: 1;
+  width: 100%;
+}
+
+/* Footer */
+
+.ym03-footer {
+  min-height: 44px;
+  width: 100%;
+  padding: 12px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #ffffff;
+  color: #263a31;
+}
+
+.ym03-footer p,
+.ym03-footer a {
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.ym03-footer-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.ym03-footer-links a:hover {
+  color: var(--ym03-primary);
+  text-decoration: underline;
+}
+
+/* Temporary checkpoint content */
+
+.ym03-checkpoint {
+  min-height: 500px;
+  padding: 64px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.ym03-checkpoint h1 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.ym03-checkpoint p {
+  font-size: 14px;
+  color: #596c60;
+}
+
+/* Responsive */
+
+@media (max-width: 600px) {
+  .ym03-header {
+    padding: 8px 16px;
+  }
+
+  .ym03-header-nav {
+    gap: 12px;
+  }
+
+  .ym03-nav-link {
+    font-size: 11px;
+  }
+
+  .ym03-brand-details strong {
+    font-size: 14px;
+  }
+
+  .ym03-brand-logo {
+    width: 34px;
+    height: 34px;
+  }
+
+  .ym03-footer {
+    flex-direction: column;
+    text-align: center;
+    padding: 16px;
+  }
+
+  .ym03-footer-links {
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
