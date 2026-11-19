@@ -1,11 +1,47 @@
-import { ContentCard } from '../../components/ContentCard';
-// YM15 · Nadisha Buddhini · Bulk matching
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["Bulk matching request", "Complete match results", "Grower allocation breakdown", "Partial match and shortage results"];
+import { useState } from 'react';
+import { BulkMatchingRequestPage } from './BulkMatchingRequestPage';
+import type { BulkMatchRequestInput, ValidatedBulkMatchRequest } from './types';
+
 export default function YM15() {
-  return <ContentCard title="YM15 · Bulk matching" subtitle="Owner: Nadisha Buddhini">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  const [formValues, setFormValues] = useState<BulkMatchRequestInput>({
+    crop: 'Tomato',
+    grade: 'Grade A',
+    requiredKg: '1000',
+    destination: 'Colombo',
+    deliveryWindow: '12 Nov 2026 - 08:00 - 12:00',
+    maxBudgetLkr: '',
+    allowPartial: 'yes',
+  });
+
+  const [submitting, setSubmitting] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackType, setFeedbackType] = useState<'success' | 'warning' | 'error' | 'info'>('info');
+
+  const handleSubmitRequest = async (payload: ValidatedBulkMatchRequest) => {
+    setSubmitting(true);
+    setFeedbackMessage('');
+
+    try {
+      setFeedbackType('success');
+      setFeedbackMessage(
+        `Bulk matching request validated: ${payload.requiredKg} kg of ${payload.crop} (${payload.grade}) to ${payload.destination}.`
+      );
+    } catch {
+      setFeedbackType('error');
+      setFeedbackMessage('Could not validate the bulk matching request. Please check your inputs.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <BulkMatchingRequestPage
+      values={formValues}
+      onChange={setFormValues}
+      onSubmitRequest={handleSubmitRequest}
+      submitting={submitting}
+      feedbackMessage={feedbackMessage}
+      feedbackType={feedbackType}
+    />
+  );
 }
