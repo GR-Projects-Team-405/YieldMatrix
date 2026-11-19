@@ -1466,3 +1466,585 @@
     flex-wrap: wrap;
   }
 }
+
+/* ===== YM03 Driver Signup & Login ===== */
+
+.ym03-driver-page {
+  background: #d9f7e4;
+  padding: 24px 32px;
+}
+
+.ym03-driver-shell {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 48% minmax(0, 52%);
+  align-items: stretch;
+  gap: 24px;
+}
+
+.ym03-driver-hero {
+  position: relative;
+  isolation: isolate;
+  min-height: 710px;
+  padding: 36px;
+  background: #315a42;
+  border-radius: 12px;
+  color: #fff;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+.ym03-driver-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: .14;
+  background:
+    radial-gradient(
+      circle at 75% 25%,
+      transparent 0 120px,
+      #e7fff1 121px 122px,
+      transparent 123px
+    ),
+    repeating-linear-gradient(
+      145deg,
+      transparent 0 110px,
+      rgba(255,255,255,.2) 111px 112px,
+      transparent 113px 180px
+    );
+}
+
+.ym03-driver-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 30px;
+  background: rgba(255,255,255,.15);
+  color: #ffdcc5;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.ym03-driver-hero h1 {
+  font-size: 32px;
+  line-height: 1.25;
+  letter-spacing: -.5px;
+  font-weight: 700;
+  margin: 24px 0 12px;
+}
+
+.ym03-driver-hero h1 span {
+  display: block;
+}
+
+.ym03-driver-hero-top > p {
+  color: #d0e5d5;
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 430px;
+}
+
+.ym03-driver-route-panel {
+  padding: 20px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.12);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ym03-driver-route-heading,
+.ym03-driver-route-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ym03-driver-route-heading strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #ffdcc5;
+}
+
+.ym03-driver-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ffb783;
+  box-shadow: 0 0 0 5px rgba(255,183,131,.12);
+}
+
+.ym03-driver-route-heading > span {
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(255,255,255,.12);
+  font-size: 10px;
+  color: #d0e5d5;
+}
+
+.ym03-driver-route-map {
+  height: 128px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.07);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  padding: 18px 20px;
+  gap: 8px;
+}
+
+.ym03-driver-route-map > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.ym03-driver-route-stop {
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.ym03-driver-route-stop > span {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #895124;
+  background: #ffdcc5;
+}
+
+.ym03-driver-route-stop:last-child > span {
+  background: #feb37e;
+}
+
+.ym03-driver-route-stop small {
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+}
+
+.ym03-driver-route-speed {
+  position: relative;
+  z-index: 1;
+  background: rgba(255,255,255,.18);
+  padding: 6px 8px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #ffdcc5;
+  font-size: 11px;
+}
+
+.ym03-driver-route-stats {
+  color: #dff6e9;
+  font-size: 11px;
+}
+
+.ym03-driver-route-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ym03-driver-route-stats svg {
+  color: #ffb783;
+}
+
+.ym03-driver-testimonial {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ym03-driver-testimonial img {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #a4d1b2;
+}
+
+.ym03-driver-testimonial strong {
+  display: block;
+  font-size: 14px;
+}
+
+.ym03-driver-testimonial p {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #d0e5d5;
+}
+
+.ym03-driver-auth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.ym03-driver-form-container {
+  width: 100%;
+  max-width: 500px;
+  padding: 28px 32px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(20,50,30,.04);
+}
+
+.ym03-driver-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 5px;
+  border-radius: 9px;
+  background: #e2f9ec;
+  margin-bottom: 26px;
+}
+
+.ym03-driver-tabs button {
+  flex: 1;
+  padding: 9px 6px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #52675a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ym03-driver-tabs button.active {
+  background: #315a42;
+  color: white;
+}
+
+.ym03-driver-progress {
+  margin-bottom: 22px;
+}
+
+.ym03-driver-step-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ym03-driver-step-labels button,
+.ym03-driver-step-labels span {
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: #718579;
+}
+
+.ym03-driver-step-labels button {
+  cursor: pointer;
+}
+
+.ym03-driver-step-labels .active {
+  color: #315a42;
+}
+
+.ym03-driver-progress-track {
+  height: 6px;
+  border-radius: 99px;
+  background: #dcf3e6;
+  overflow: hidden;
+}
+
+.ym03-driver-progress-track > div {
+  height: 100%;
+  background: #315a42;
+  border-radius: inherit;
+  transition: width .25s ease;
+}
+
+.ym03-driver-auth h2 {
+  color: #263a31;
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.ym03-driver-subtitle {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #62746a;
+  margin: 5px 0 22px;
+}
+
+.ym03-driver-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ym03-driver-form label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #263a31;
+}
+
+.ym03-driver-field,
+.ym03-driver-password {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  height: 48px;
+  background: #e2f9ec;
+  border-radius: 8px;
+}
+
+.ym03-driver-field > svg,
+.ym03-driver-password > svg {
+  position: absolute;
+  left: 13px;
+  color: #718579;
+  pointer-events: none;
+}
+
+.ym03-driver-field input,
+.ym03-driver-field select,
+.ym03-driver-password input,
+.ym03-driver-two-cols input {
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  padding: 0 14px;
+  color: #263a31;
+  background: #e2f9ec;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  outline: 0;
+  font: inherit;
+  font-size: 13px;
+}
+
+.ym03-driver-field input,
+.ym03-driver-field select,
+.ym03-driver-password input {
+  padding-left: 44px;
+}
+
+.ym03-driver-field input:focus,
+.ym03-driver-field select:focus,
+.ym03-driver-password input:focus,
+.ym03-driver-two-cols input:focus {
+  border-color: #315a42;
+}
+
+.ym03-driver-field input::placeholder,
+.ym03-driver-password input::placeholder,
+.ym03-driver-two-cols input::placeholder {
+  color: #91a69a;
+}
+
+.ym03-driver-password input {
+  padding-right: 42px;
+}
+
+.ym03-driver-password button {
+  position: absolute;
+  right: 11px;
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  color: #718579;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.ym03-driver-two-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ym03-driver-two-cols > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 9px;
+}
+
+.ym03-driver-hint {
+  font-size: 11px;
+  color: #62746a;
+}
+
+.ym03-driver-error {
+  font-size: 11px;
+  color: #ba1a1a;
+}
+
+.ym03-driver-agreement {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.ym03-driver-agreement input {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  accent-color: #315a42;
+}
+
+.ym03-driver-agreement span {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #52675a;
+  font-weight: 400;
+}
+
+.ym03-driver-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 8px;
+  background: #315a42;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ym03-driver-submit:hover {
+  background: #19422c;
+}
+
+.ym03-driver-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  padding: 10px;
+  background: transparent;
+  color: #315a42;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ym03-driver-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ym03-driver-label-row a {
+  color: #315a42;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.ym03-driver-dispatch-label {
+  text-align: center;
+  color: #718579;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+.ym03-driver-login-switch {
+  text-align: center;
+  font-size: 12px;
+  color: #62746a;
+}
+
+.ym03-driver-login-switch button {
+  border: 0;
+  background: transparent;
+  color: #315a42;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ym03-driver-feedback {
+  padding: 12px;
+  margin-top: 18px;
+  background: #e2f9ec;
+  color: #315a42;
+  border: 1px solid #a4d1b2;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .ym03-driver-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ym03-driver-hero {
+    min-height: 420px;
+  }
+
+  .ym03-driver-form-container {
+    max-width: none;
+  }
+}
+
+@media (max-width: 550px) {
+  .ym03-driver-page {
+    padding: 16px;
+  }
+
+  .ym03-driver-hero {
+    padding: 24px;
+  }
+
+  .ym03-driver-hero h1 {
+    font-size: 26px;
+  }
+
+  .ym03-driver-form-container {
+    padding: 24px 18px;
+  }
+
+  .ym03-driver-two-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .ym03-driver-route-heading,
+  .ym03-driver-route-stats {
+    align-items: flex-start;
+  }
+
+  .ym03-driver-step-labels span,
+  .ym03-driver-step-labels button {
+    font-size: 10px;
+  }
+}

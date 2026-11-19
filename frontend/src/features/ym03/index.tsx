@@ -2,9 +2,11 @@
 import { Route, Routes } from 'react-router-dom';
 
 import PublicLayout from './components/PublicLayout';
+
 import RoleSelectionPage from './pages/RoleSelectionPage';
 import FarmerAuthPage from './pages/FarmerAuthPage';
 import BuyerAuthPage from './pages/BuyerAuthPage';
+import DriverAuthPage from './pages/DriverAuthPage';
 
 import './styles/ym03.css';
 
@@ -25,11 +27,18 @@ export default function YM03() {
         />
 
         <Route
+          path="driver"
+          element={<DriverAuthPage />}
+        />
+
+        <Route
           path="*"
           element={
             <div className="ym03-checkpoint">
               <h1>Page under development</h1>
-              <p>Other YM-03 pages will be added next.</p>
+              <p>
+                The remaining YM-03 page will be added next.
+              </p>
             </div>
           }
         />
