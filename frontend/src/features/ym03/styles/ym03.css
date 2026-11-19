@@ -543,3 +543,458 @@
     flex-wrap: wrap;
   }
 }
+
+/* ===== YM03 Farmer Authentication ===== */
+
+.ym03-farmer-page {
+  padding: 24px 32px;
+  background: #d9f7e4;
+}
+
+.ym03-farmer-shell {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  min-height: 575px;
+  display: grid;
+  grid-template-columns: 42% 58%;
+  background: #fff;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.ym03-farmer-hero {
+  position: relative;
+  background: #315a42;
+  color: #fff;
+  padding: 28px 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 28px;
+  overflow: hidden;
+}
+
+.ym03-farmer-hero::before {
+  content: "";
+  position: absolute;
+  width: 140%;
+  height: 65%;
+  left: -20%;
+  top: 25%;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 50%;
+  transform: rotate(14deg);
+  pointer-events: none;
+}
+
+.ym03-farmer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255,255,255,.12);
+  border-radius: 50px;
+  padding: 6px 11px;
+  color: #bfe9cd;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .4px;
+}
+
+.ym03-farmer-hero h1 {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 22px 0 10px;
+  letter-spacing: -.6px;
+}
+
+.ym03-farmer-hero > div > p {
+  color: #c5dfce;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ym03-farmer-showcase {
+  position: relative;
+  border-radius: 9px;
+  overflow: hidden;
+  min-height: 160px;
+  background: #214b36;
+  z-index: 1;
+}
+
+.ym03-farmer-showcase img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  display: block;
+}
+
+.ym03-farmer-image-caption {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 12px 10px;
+  color: #fff;
+  font-size: 10px;
+  background: linear-gradient(
+    transparent,
+    rgba(20,60,40,.85)
+  );
+}
+
+.ym03-farmer-image-caption span:last-child {
+  background: rgba(200,255,220,.25);
+  border-radius: 20px;
+  padding: 3px 8px;
+}
+
+.ym03-farmer-hero-bottom {
+  position: relative;
+  z-index: 1;
+}
+
+.ym03-farmer-volume {
+  padding: 13px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.13);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ym03-farmer-truck {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #feb37e;
+  color: #895124;
+  flex-shrink: 0;
+}
+
+.ym03-farmer-volume > div:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.ym03-farmer-volume small {
+  font-size: 9px;
+  color: #d3e8da;
+}
+
+.ym03-farmer-volume strong {
+  font-size: 12px;
+  color: #fff;
+}
+
+.ym03-farmer-growth {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: #b5f0ca;
+}
+
+.ym03-farmer-hero-bottom > p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  margin-top: 13px;
+  color: #d0e8d6;
+}
+
+.ym03-farmer-auth {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 30px 40px;
+  min-width: 0;
+}
+
+.ym03-farmer-form-container {
+  width: 100%;
+  max-width: 460px;
+}
+
+.ym03-farmer-tabs {
+  display: flex;
+  padding: 5px;
+  gap: 5px;
+  border-radius: 9px;
+  background: #d9f7e4;
+  margin-bottom: 18px;
+}
+
+.ym03-farmer-tabs button {
+  flex: 1;
+  min-height: 38px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #263a31;
+}
+
+.ym03-farmer-tabs button.active {
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+
+.ym03-farmer-auth h2 {
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #111;
+}
+
+.ym03-farmer-subtitle {
+  font-size: 13px;
+  color: #53635b;
+  margin: 3px 0 17px;
+}
+
+.ym03-farmer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ym03-farmer-form label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #151f18;
+}
+
+.ym03-farmer-form input:not([type="checkbox"]),
+.ym03-farmer-form select {
+  width: 100%;
+  height: 48px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #d9f7e4;
+  color: #263a31;
+  font: inherit;
+  font-size: 13px;
+  padding: 0 13px;
+  outline: none;
+}
+
+.ym03-farmer-form input:focus,
+.ym03-farmer-form select:focus {
+  border-color: #315a42;
+}
+
+.ym03-farmer-form input::placeholder {
+  color: #8fa79a;
+}
+
+.ym03-farmer-input-icon {
+  position: relative;
+}
+
+.ym03-farmer-input-icon > svg {
+  position: absolute;
+  left: 12px;
+  top: 15px;
+  color: #9ab3a5;
+}
+
+.ym03-farmer-input-icon input {
+  padding-left: 42px !important;
+}
+
+.ym03-farmer-phone {
+  display: flex;
+  border-radius: 8px;
+  background: #d9f7e4;
+  overflow: hidden;
+}
+
+.ym03-farmer-phone > span {
+  background: #c6e7d2;
+  padding: 0 15px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ym03-farmer-phone input {
+  flex: 1;
+}
+
+.ym03-farmer-two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.ym03-farmer-two-cols > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ym03-farmer-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ym03-farmer-label-row small,
+.ym03-farmer-label-row a {
+  font-size: 11px;
+  color: #607468;
+}
+
+.ym03-farmer-password {
+  position: relative;
+}
+
+.ym03-farmer-password input {
+  padding-right: 45px !important;
+}
+
+.ym03-farmer-password button {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #839e8d;
+  cursor: pointer;
+}
+
+.ym03-farmer-valid {
+  color: #315a42;
+  font-size: 11px;
+}
+
+.ym03-farmer-invalid {
+  color: #ba1a1a;
+  font-size: 11px;
+}
+
+.ym03-farmer-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 4px 0;
+  font-weight: 400 !important;
+}
+
+.ym03-farmer-check-row input {
+  width: 15px;
+  height: 15px;
+  accent-color: #315a42;
+  flex-shrink: 0;
+}
+
+.ym03-farmer-check-row span {
+  font-size: 12px;
+  color: #53635b;
+  font-weight: 400;
+}
+
+.ym03-farmer-submit {
+  min-height: 48px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: #315a42;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.ym03-farmer-submit:hover {
+  background: #19422c;
+}
+
+.ym03-farmer-switch {
+  text-align: center;
+  color: #6b776f;
+  font-size: 11px;
+  margin: 5px 0;
+}
+
+.ym03-farmer-switch button {
+  font-weight: 600;
+  color: #315a42;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.ym03-farmer-note,
+.ym03-farmer-message {
+  padding: 12px;
+  border-radius: 8px;
+  background: #e2f9ec;
+  color: #315a42;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.ym03-farmer-message {
+  border: 1px solid #a4d1b2;
+}
+
+@media (max-width: 850px) {
+  .ym03-farmer-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ym03-farmer-hero {
+    min-height: 330px;
+  }
+
+  .ym03-farmer-auth {
+    padding: 32px 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ym03-farmer-page {
+    padding: 16px;
+  }
+
+  .ym03-farmer-hero {
+    padding: 24px;
+  }
+
+  .ym03-farmer-auth {
+    padding: 24px 18px;
+  }
+
+  .ym03-farmer-two-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .ym03-farmer-hero h1 {
+    font-size: 24px;
+  }
+}
