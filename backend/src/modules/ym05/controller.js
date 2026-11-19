@@ -8,3 +8,22 @@ export async function getStatus(req, res, next) {
     return res.json({ module: 'YM05', owner: 'Chamidu Pethum', status: 'scaffold', user: rows[0], requestId: req.requestId });
   } catch (error) { next(error); }
 }
+
+export async function getNotifications(req, res, next) {
+  try {
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 50);
+    const { rows } = await pool.query(
+      `SELECT id, title, message, category, target_path, status, read_at, created_at
+       FROM notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [req.user.id, limit],
+    );
+    return res.json({
+      notifications: rows,
+      unreadCount: rows.filter((notification) => notification.status !== 'read').length,
+      requestId: req.requestId,
+    });
+  } catch (error) { next(error); }
+}
