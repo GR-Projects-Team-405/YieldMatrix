@@ -29,6 +29,7 @@ import {
   formatColomboDayMonth,
   formatColomboHeadingDate,
   formatColomboShortDate,
+  formatColomboTime,
   formatKg,
   formatLkrFromCents,
   formatLkrNumberFromCents,
@@ -222,6 +223,7 @@ export default function BuyerOverviewPage() {
 
   const [dashboard, setDashboard] = useState<BuyerDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
   const [activityRange, setActivityRange] = useState<'7d' | '30d'>('7d');
@@ -232,31 +234,65 @@ export default function BuyerOverviewPage() {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [sectionError, setSectionError] = useState('');
 
-  const fetchDashboard = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError('');
-    setSectionError('');
-    try {
-      const { data } = await api.get<BuyerDashboardResponse>('/ym11/dashboard', {
-        params: { range: '7d' },
-        signal,
-      });
-      setDashboard(data);
-      setActivityRange(data.procurementActivity.range);
-      setSelectedCropId(data.insights.filters.selected.cropId || '');
-      setSelectedDistrict(data.insights.filters.selected.district || '');
-    } catch (err) {
-      if ((err as { name?: string })?.name === 'CanceledError') return;
-      setError('Could not load your Buyer Overview dashboard. Please check your connection and try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchDashboard = useCallback(
+    async (options?: {
+      signal?: AbortSignal;
+      silent?: boolean;
+      range?: '7d' | '30d';
+      cropId?: string;
+      district?: string;
+    }) => {
+      const silent = Boolean(options?.silent);
+      if (silent) setRefreshing(true);
+      else setLoading(true);
+      if (!silent) setError('');
+      setSectionError('');
+      try {
+        const params: Record<string, string> = {
+          range: options?.range ?? activityRange,
+        };
+        const crop = options?.cropId !== undefined ? options.cropId : selectedCropId;
+        const dist = options?.district !== undefined ? options.district : selectedDistrict;
+        if (crop) params.cropId = crop;
+        if (dist) params.district = dist;
+
+        const { data } = await api.get<BuyerDashboardResponse>('/ym11/dashboard', {
+          params,
+          signal: options?.signal,
+        });
+        setDashboard(data);
+        setActivityRange(data.procurementActivity.range);
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'CanceledError') return;
+        if (silent) {
+          setSectionError('Live refresh failed — showing last loaded data.');
+        } else {
+          setError('Could not load your Buyer Overview dashboard. Please check your connection and try again.');
+        }
+      } finally {
+        if (silent) setRefreshing(false);
+        else setLoading(false);
+      }
+    },
+    [activityRange, selectedCropId, selectedDistrict]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchDashboard(controller.signal);
+    void fetchDashboard({ signal: controller.signal, range: '7d', cropId: '', district: '' });
     return () => controller.abort();
+    // Initial load only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Real-time background refresh every 30s when tab is visible
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void fetchDashboard({ silent: true });
+      }
+    }, 30000);
+    return () => window.clearInterval(intervalId);
   }, [fetchDashboard]);
 
   async function handleRangeChange(nextRange: '7d' | '30d') {
@@ -348,6 +384,18 @@ export default function BuyerOverviewPage() {
           <p className="ym11-subtitle">Trusted farms. Better sourcing. One connected workspace.</p>
         </div>
         <div className="ym11-header-actions">
+          <span className="ym11-planned-notice-pill" title="Auto-refreshes from Neon PostgreSQL every 30 seconds">
+            <span className="ym11-dot ym11-seg-0" aria-hidden="true" />
+            Live · Updated {formatColomboTime(dashboard.generatedAt)}
+          </span>
+          <Button
+            variant="outline"
+            disabled={refreshing}
+            onClick={() => void fetchDashboard({ silent: true })}
+          >
+            <RefreshCw size={15} aria-hidden="true" />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
           <Button variant="primary" onClick={() => navigate('/buyer/demands')}>
             <Plus size={16} aria-hidden="true" />
             Create demand
@@ -689,7 +737,12 @@ export default function BuyerOverviewPage() {
             </div>
 
             {insights.demandForecast.available && insights.demandForecast.series.length > 0 ? (
-              <ForecastSparkline series={insights.demandForecast.series} />
+              <>
+                <ForecastSparkline series={insights.demandForecast.series} />
+                <div className="ym11-note-box">
+                  {insights.demandForecast.explanation}
+                </div>
+              </>
             ) : (
               <div className="ym11-note-box">
                 <strong style={{ color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>

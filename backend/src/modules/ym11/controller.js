@@ -192,79 +192,70 @@ async function getApprovedBuyerWithWallet(userId, role) {
 }
 
 async function loadDashboardStats(buyerId, buyerAccount) {
-  const [orderStatsResult, supplyStatsResult] = await Promise.all([
-    pool.query(
-      `SELECT
-         COUNT(*) FILTER (
-           WHERE status IN ('draft', 'awaiting_suppliers', 'ready_to_confirm', 'confirmed', 'in_fulfilment')
-         )::int AS active_orders_count,
-         COUNT(*) FILTER (
-           WHERE status = 'awaiting_suppliers'
-         )::int AS awaiting_supplier_count,
-         COUNT(*) FILTER (
-           WHERE status IN ('delivered', 'closed')
-         )::int AS completed_orders_count,
-         COUNT(*) FILTER (
-           WHERE status IN ('delivered', 'closed')
-             AND updated_at >= now() - INTERVAL '30 days'
-         )::int AS completed_last_30_days_count
-       FROM orders
-       WHERE buyer_id = $1`,
-      [buyerId]
-    ),
-    pool.query(
-      `WITH active_listings AS (
-         SELECT
-           l.id AS listing_id,
-           b.farm_id,
-           LEAST(l.offered_kg, GREATEST(ba.available_kg, 0)) AS effective_kg
-         FROM listings l
-         JOIN harvest_batches b ON b.id = l.batch_id
-         JOIN batch_availability ba ON ba.batch_id = b.id
-         JOIN farms f ON f.id = b.farm_id AND f.status = 'active'
-         JOIN users u ON u.id = b.farmer_id AND u.role = 'farmer' AND u.approval_status = 'approved'
-         WHERE l.status = 'active'
-           AND l.valid_from <= now()
-           AND l.valid_until > now()
-           AND b.status IN ('ready', 'harvested')
-           AND ba.available_kg > 0
-       ),
-       available_batches AS (
-         SELECT
-           b.id AS batch_id,
-           b.farm_id,
-           ba.available_kg
-         FROM harvest_batches b
-         JOIN batch_availability ba ON ba.batch_id = b.id
-         JOIN farms f ON f.id = b.farm_id AND f.status = 'active'
-         JOIN users u ON u.id = b.farmer_id AND u.role = 'farmer' AND u.approval_status = 'approved'
-         WHERE b.status IN ('ready', 'harvested')
-           AND ba.available_kg > 0
-       )
+  const orderStatsResult = await runQuery(
+    `SELECT
+       COUNT(*) FILTER (
+         WHERE status IN ('draft', 'awaiting_suppliers', 'ready_to_confirm', 'confirmed', 'in_fulfilment')
+       )::int AS active_orders_count,
+       COUNT(*) FILTER (
+         WHERE status = 'awaiting_suppliers'
+       )::int AS awaiting_supplier_count,
+       COUNT(*) FILTER (
+         WHERE status IN ('delivered', 'closed')
+       )::int AS completed_orders_count,
+       COUNT(*) FILTER (
+         WHERE status IN ('delivered', 'closed')
+           AND updated_at >= now() - INTERVAL '30 days'
+       )::int AS completed_last_30_days_count
+     FROM orders
+     WHERE buyer_id = $1`,
+    [buyerId]
+  );
+
+  const supplyStatsResult = await runQuery(
+    `WITH combined_supply AS (
        SELECT
-         COALESCE((SELECT SUM(effective_kg) FROM active_listings), 0)::NUMERIC(12,3) AS listed_supply_kg,
-         (SELECT COUNT(DISTINCT farm_id)::int FROM active_listings) AS listed_growers_count,
-         COALESCE((SELECT SUM(available_kg) FROM available_batches), 0)::NUMERIC(12,3) AS batch_supply_kg,
-         (SELECT COUNT(DISTINCT farm_id)::int FROM available_batches) AS batch_growers_count`
-    ),
-  ]);
+         b.id AS batch_id,
+         b.farm_id,
+         l.id AS listing_id,
+         CASE
+           WHEN l.id IS NOT NULL THEN LEAST(l.offered_kg, GREATEST(ba.available_kg, 0))
+           ELSE GREATEST(ba.available_kg, 0)
+         END::NUMERIC(12,3) AS effective_kg
+       FROM harvest_batches b
+       JOIN batch_availability ba ON ba.batch_id = b.id
+       JOIN farms f ON f.id = b.farm_id AND f.status = 'active'
+       JOIN users u ON u.id = b.farmer_id AND u.role = 'farmer' AND u.approval_status = 'approved'
+       LEFT JOIN listings l
+         ON l.batch_id = b.id
+        AND l.status = 'active'
+        AND l.valid_from <= now()
+        AND l.valid_until > now()
+       WHERE b.status IN ('ready', 'harvested')
+         AND ba.available_kg > 0
+     )
+     SELECT
+       COALESCE(SUM(effective_kg), 0)::NUMERIC(12,3) AS total_supply_kg,
+       COALESCE(SUM(effective_kg) FILTER (WHERE listing_id IS NOT NULL), 0)::NUMERIC(12,3) AS listed_supply_kg,
+       COALESCE(SUM(effective_kg) FILTER (WHERE listing_id IS NULL), 0)::NUMERIC(12,3) AS batch_supply_kg,
+       COUNT(DISTINCT farm_id)::int AS active_growers_count
+     FROM combined_supply`
+  );
 
   const orderRow = orderStatsResult.rows[0] || {};
   const supplyRow = supplyStatsResult.rows[0] || {};
+  const totalSupplyKg = toKg(supplyRow.total_supply_kg);
   const listedSupplyKg = toKg(supplyRow.listed_supply_kg);
   const batchSupplyKg = toKg(supplyRow.batch_supply_kg);
-  const hasListings = listedSupplyKg > 0;
 
   return {
     activeOrdersCount: orderRow.active_orders_count || 0,
     awaitingSupplierCount: orderRow.awaiting_supplier_count || 0,
-    availableSupplyKg: hasListings ? listedSupplyKg : batchSupplyKg,
+    availableSupplyKg: totalSupplyKg,
     listedSupplyKg,
     batchSupplyKg,
-    supplySource: hasListings ? 'active_listings' : batchSupplyKg > 0 ? 'harvest_batches' : 'none',
-    activeGrowersCount: hasListings
-      ? (supplyRow.listed_growers_count || 0)
-      : (supplyRow.batch_growers_count || 0),
+    supplySource: listedSupplyKg > 0 ? 'active_listings' : batchSupplyKg > 0 ? 'harvest_batches' : 'none',
+    activeGrowersCount: supplyRow.active_growers_count || 0,
     completedOrdersCount: orderRow.completed_orders_count || 0,
     completedLast30DaysCount: orderRow.completed_last_30_days_count || 0,
     heldFundsCents: toCents(buyerAccount.held_cents),
@@ -275,7 +266,7 @@ async function loadDashboardStats(buyerId, buyerAccount) {
 }
 
 async function loadProcurementActivity(buyerId, range, days) {
-  const { rows } = await pool.query(
+  const { rows } = await runQuery(
     `WITH bounds AS (
        SELECT ((now() AT TIME ZONE 'Asia/Colombo')::DATE - ($2::int - 1)) AS start_day,
               (now() AT TIME ZONE 'Asia/Colombo')::DATE AS end_day
@@ -334,7 +325,7 @@ async function loadProcurementActivity(buyerId, range, days) {
 }
 
 async function loadLatestBulkMatch(buyerId) {
-  const { rows: orderRows } = await pool.query(
+  const { rows: orderRows } = await runQuery(
     `SELECT o.id,
             o.operation_key,
             o.status,
@@ -356,7 +347,7 @@ async function loadLatestBulkMatch(buyerId) {
   if (!orderRows[0]) return null;
   const order = orderRows[0];
 
-  const { rows: allocationRows } = await pool.query(
+  const { rows: allocationRows } = await runQuery(
     `SELECT a.id AS allocation_id,
             a.batch_id,
             f.id AS farm_id,
@@ -416,7 +407,7 @@ async function loadLatestBulkMatch(buyerId) {
 }
 
 async function loadSuggestedHarvestMatches({ cropId = null, gradeId = null, district = null, limit = 5 }) {
-  const listingResult = await pool.query(
+  const result = await runQuery(
     `SELECT l.id AS listing_id,
             b.id AS batch_id,
             f.id AS farm_id,
@@ -426,72 +417,11 @@ async function loadSuggestedHarvestMatches({ cropId = null, gradeId = null, dist
             c.name AS crop_name,
             g.id AS grade_id,
             g.name AS grade_name,
-            LEAST(l.offered_kg, GREATEST(ba.available_kg, 0))::NUMERIC(12,3) AS available_kg,
+            CASE
+              WHEN l.id IS NOT NULL THEN LEAST(l.offered_kg, GREATEST(ba.available_kg, 0))
+              ELSE GREATEST(ba.available_kg, 0)
+            END::NUMERIC(12,3) AS available_kg,
             l.unit_price_cents,
-            b.status AS batch_status,
-            b.planned_harvest_date
-     FROM listings l
-     JOIN harvest_batches b ON b.id = l.batch_id
-     JOIN batch_availability ba ON ba.batch_id = b.id
-     JOIN farms f ON f.id = b.farm_id AND f.status = 'active'
-     JOIN users u ON u.id = b.farmer_id AND u.role = 'farmer' AND u.approval_status = 'approved'
-     JOIN crops c ON c.id = b.crop_id
-     JOIN grades g ON g.id = b.grade_id
-     WHERE l.status = 'active'
-       AND l.valid_from <= now()
-       AND l.valid_until > now()
-       AND b.status IN ('ready', 'harvested')
-       AND ba.available_kg > 0
-       AND ($1::uuid IS NULL OR b.crop_id = $1::uuid)
-       AND ($2::uuid IS NULL OR b.grade_id = $2::uuid)
-       AND ($3::text IS NULL OR lower(f.district) = lower($3::text))
-     ORDER BY l.unit_price_cents ASC, available_kg DESC, f.name ASC
-     LIMIT $4`,
-    [cropId, gradeId, district, limit]
-  );
-
-  if (listingResult.rows.length > 0) {
-    const matches = listingResult.rows.map((row) => ({
-      listingId: row.listing_id,
-      batchId: row.batch_id,
-      farmId: row.farm_id,
-      farmName: row.farm_name,
-      district: row.district,
-      cropId: row.crop_id,
-      cropName: row.crop_name,
-      gradeId: row.grade_id,
-      gradeName: row.grade_name,
-      availableKg: toKg(row.available_kg),
-      unitPriceCents: toCents(row.unit_price_cents),
-      batchStatus: row.batch_status,
-      plannedHarvestDate: row.planned_harvest_date,
-    }));
-
-    const totalAvailableKg = Number(matches.reduce((sum, item) => sum + item.availableKg, 0).toFixed(3));
-    const estimatedTotalCents = matches.reduce(
-      (sum, item) => sum + Math.round(item.availableKg * item.unitPriceCents),
-      0
-    );
-
-    return {
-      source: 'active_listings',
-      totalAvailableKg,
-      estimatedTotalCents,
-      growerCount: new Set(matches.map((item) => item.farmId)).size,
-      matches,
-    };
-  }
-
-  const batchResult = await pool.query(
-    `SELECT b.id AS batch_id,
-            f.id AS farm_id,
-            f.name AS farm_name,
-            f.district,
-            c.id AS crop_id,
-            c.name AS crop_name,
-            g.id AS grade_id,
-            g.name AS grade_name,
-            ba.available_kg,
             b.status AS batch_status,
             b.planned_harvest_date
      FROM harvest_batches b
@@ -500,18 +430,23 @@ async function loadSuggestedHarvestMatches({ cropId = null, gradeId = null, dist
      JOIN users u ON u.id = b.farmer_id AND u.role = 'farmer' AND u.approval_status = 'approved'
      JOIN crops c ON c.id = b.crop_id
      JOIN grades g ON g.id = b.grade_id
+     LEFT JOIN listings l
+       ON l.batch_id = b.id
+      AND l.status = 'active'
+      AND l.valid_from <= now()
+      AND l.valid_until > now()
      WHERE b.status IN ('ready', 'harvested')
        AND ba.available_kg > 0
-       AND ($1::uuid IS NULL OR b.crop_id = $1::uuid)
+       AND ($1::uuid IS NULL OR b.crop_id = $1::uuid OR lower(regexp_replace(c.name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = $1::uuid))
        AND ($2::uuid IS NULL OR b.grade_id = $2::uuid)
        AND ($3::text IS NULL OR lower(f.district) = lower($3::text))
-     ORDER BY ba.available_kg DESC, b.planned_harvest_date ASC, f.name ASC
+     ORDER BY (l.id IS NOT NULL) DESC, l.unit_price_cents ASC NULLS LAST, available_kg DESC, f.name ASC
      LIMIT $4`,
     [cropId, gradeId, district, limit]
   );
 
-  const matches = batchResult.rows.map((row) => ({
-    listingId: null,
+  const matches = result.rows.map((row) => ({
+    listingId: row.listing_id || null,
     batchId: row.batch_id,
     farmId: row.farm_id,
     farmName: row.farm_name,
@@ -521,85 +456,92 @@ async function loadSuggestedHarvestMatches({ cropId = null, gradeId = null, dist
     gradeId: row.grade_id,
     gradeName: row.grade_name,
     availableKg: toKg(row.available_kg),
-    unitPriceCents: null,
+    unitPriceCents: toOptionalCents(row.unit_price_cents),
     batchStatus: row.batch_status,
     plannedHarvestDate: row.planned_harvest_date,
   }));
 
   const totalAvailableKg = Number(matches.reduce((sum, item) => sum + item.availableKg, 0).toFixed(3));
+  const pricedMatches = matches.filter((item) => item.unitPriceCents !== null);
+  const estimatedTotalCents =
+    pricedMatches.length > 0
+      ? pricedMatches.reduce((sum, item) => sum + Math.round(item.availableKg * item.unitPriceCents), 0)
+      : null;
 
   return {
-    source: matches.length > 0 ? 'harvest_batches' : 'none',
+    source: pricedMatches.length > 0 ? 'active_listings' : matches.length > 0 ? 'harvest_batches' : 'none',
     totalAvailableKg,
-    estimatedTotalCents: null,
+    estimatedTotalCents,
     growerCount: new Set(matches.map((item) => item.farmId)).size,
     matches,
   };
 }
 
 async function loadBuyingInsights({ cropId = null, gradeId = null, district = null }) {
-  const [cropsRes, gradesRes, districtsRes] = await Promise.all([
-    pool.query('SELECT id, name FROM crops WHERE active = true ORDER BY name ASC'),
-    pool.query('SELECT id, name FROM grades WHERE active = true ORDER BY name ASC'),
-    pool.query(
-      `SELECT DISTINCT district
-       FROM (
+  const filterMetaRes = await runQuery(
+    `SELECT
+       COALESCE((SELECT json_agg(json_build_object('id', c.id, 'name', c.name) ORDER BY c.name ASC) FROM crops c WHERE c.active = true), '[]'::json) AS crops,
+       COALESCE((SELECT json_agg(json_build_object('id', g.id, 'name', g.name) ORDER BY g.name ASC) FROM grades g WHERE g.active = true), '[]'::json) AS grades,
+       COALESCE((SELECT json_agg(d.district ORDER BY d.district ASC) FROM (
          SELECT district FROM farms WHERE status = 'active'
          UNION
          SELECT district FROM market_observations WHERE is_current = true
          UNION
          SELECT district FROM forecast_runs
-       ) d
-       WHERE district IS NOT NULL AND length(trim(district)) > 0
-       ORDER BY district ASC`
-    ),
-  ]);
+       ) d WHERE d.district IS NOT NULL AND length(trim(d.district)) > 0), '[]'::json) AS districts`
+  );
 
-  const [forecastRes, priceRes, suggestedHarvestMatches] = await Promise.all([
-    pool.query(
-      `SELECT fr.id,
-              fr.crop_id,
-              c.name AS crop_name,
-              fr.district,
-              fr.method,
-              fr.model_version,
-              fr.input_from,
-              fr.input_until,
-              fr.horizon_days,
-              fr.series,
-              fr.model_mae_kg,
-              fr.baseline_mae_kg,
-              fr.explanation,
-              fr.status,
-              fr.sample_data,
-              fr.generated_at
-       FROM forecast_runs fr
-       JOIN crops c ON c.id = fr.crop_id
-       WHERE ($1::uuid IS NULL OR fr.crop_id = $1::uuid)
-         AND ($2::text IS NULL OR lower(fr.district) = lower($2::text))
-       ORDER BY (fr.status = 'available') DESC, fr.generated_at DESC
-       LIMIT 1`,
-      [cropId, district]
-    ),
-    pool.query(
-      `SELECT
-         COUNT(*)::int AS observation_count,
-         MIN(mo.price_per_kg_cents) AS min_price_cents,
-         MAX(mo.price_per_kg_cents) AS max_price_cents,
-         ROUND(AVG(mo.price_per_kg_cents))::BIGINT AS avg_price_cents,
-         MIN(mo.observation_date) AS date_from,
-         MAX(mo.observation_date) AS date_until,
-         MAX(mo.imported_at) AS last_updated,
-         COALESCE(BOOL_OR(mo.sample_data), false) AS sample_data
-       FROM market_observations mo
-       WHERE mo.is_current = true
-         AND ($1::uuid IS NULL OR mo.crop_id = $1::uuid)
-         AND ($2::uuid IS NULL OR mo.grade_id = $2::uuid)
-         AND ($3::text IS NULL OR lower(mo.district) = lower($3::text))`,
-      [cropId, gradeId, district]
-    ),
-    loadSuggestedHarvestMatches({ cropId, gradeId, district, limit: 5 }),
-  ]);
+  const metaRow = filterMetaRes.rows[0] || {};
+  const cropsList = Array.isArray(metaRow.crops) ? metaRow.crops : [];
+  const gradesList = Array.isArray(metaRow.grades) ? metaRow.grades : [];
+  const districtsList = Array.isArray(metaRow.districts) ? metaRow.districts : [];
+
+  const forecastRes = await runQuery(
+    `SELECT fr.id,
+            fr.crop_id,
+            c.name AS crop_name,
+            fr.district,
+            fr.method,
+            fr.model_version,
+            fr.input_from,
+            fr.input_until,
+            fr.horizon_days,
+            fr.series,
+            fr.model_mae_kg,
+            fr.baseline_mae_kg,
+            fr.explanation,
+            fr.status,
+            fr.sample_data,
+            fr.generated_at
+     FROM forecast_runs fr
+     JOIN crops c ON c.id = fr.crop_id
+     WHERE ($1::uuid IS NULL OR fr.crop_id = $1::uuid OR lower(regexp_replace(c.name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = $1::uuid))
+       AND ($2::text IS NULL OR lower(fr.district) = lower($2::text))
+     ORDER BY (fr.status = 'available') DESC, fr.generated_at DESC
+     LIMIT 1`,
+    [cropId, district]
+  );
+
+  const priceRes = await runQuery(
+    `SELECT
+       COUNT(*)::int AS observation_count,
+       MIN(mo.price_per_kg_cents) AS min_price_cents,
+       MAX(mo.price_per_kg_cents) AS max_price_cents,
+       ROUND(AVG(mo.price_per_kg_cents))::BIGINT AS avg_price_cents,
+       MIN(mo.observation_date) AS date_from,
+       MAX(mo.observation_date) AS date_until,
+       MAX(mo.imported_at) AS last_updated,
+       COALESCE(BOOL_OR(mo.sample_data), false) AS sample_data
+     FROM market_observations mo
+     JOIN crops c ON c.id = mo.crop_id
+     WHERE mo.is_current = true
+       AND ($1::uuid IS NULL OR mo.crop_id = $1::uuid OR lower(regexp_replace(c.name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = $1::uuid))
+       AND ($2::uuid IS NULL OR mo.grade_id = $2::uuid)
+       AND ($3::text IS NULL OR lower(mo.district) = lower($3::text))`,
+    [cropId, gradeId, district]
+  );
+
+  const suggestedHarvestMatches = await loadSuggestedHarvestMatches({ cropId, gradeId, district, limit: 5 });
 
   const forecastRow = forecastRes.rows[0] || null;
   let demandForecast;
@@ -639,7 +581,7 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
       available: false,
       status: 'insufficient_data',
       cropId,
-      cropName: cropsRes.rows.find((c) => c.id === cropId)?.name || null,
+      cropName: cropsList.find((c) => c.id === cropId)?.name || null,
       district,
       method: null,
       modelVersion: null,
@@ -676,9 +618,9 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
     advisoryNotice: 'Insights are advisory only. All orders require buyer confirmation.',
     filters: {
       selected: { cropId, gradeId, district },
-      crops: cropsRes.rows,
-      grades: gradesRes.rows,
-      districts: districtsRes.rows.map((r) => r.district),
+      crops: cropsList,
+      grades: gradesList,
+      districts: districtsList,
     },
     demandForecast,
     marketPriceInsights,
@@ -687,7 +629,7 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
 }
 
 async function loadRecentOrders(buyerId, limit) {
-  const { rows } = await pool.query(
+  const { rows } = await runQuery(
     `SELECT o.id,
             o.operation_key,
             o.status,
@@ -779,14 +721,14 @@ export async function getDashboard(req, res, next) {
     }
 
     const stats = await loadDashboardStats(buyer.id, buyer);
-    const [procurementActivity, latestBulkMatch] = await Promise.all([
-      loadProcurementActivity(buyer.id, activityCheck.range, activityCheck.days),
-      loadLatestBulkMatch(buyer.id),
-    ]);
-    const [insights, recentOrders] = await Promise.all([
-      loadBuyingInsights(filterCheck),
-      loadRecentOrders(buyer.id, limitCheck.limit),
-    ]);
+    const procurementActivity = await loadProcurementActivity(
+      buyer.id,
+      activityCheck.range,
+      activityCheck.days
+    );
+    const latestBulkMatch = await loadLatestBulkMatch(buyer.id);
+    const insights = await loadBuyingInsights(filterCheck);
+    const recentOrders = await loadRecentOrders(buyer.id, limitCheck.limit);
 
     return res.json({
       buyer: {
