@@ -297,3 +297,21 @@
   }
 }
 
+/* Error and retry layout */
+.ym32-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+@media (max-width: 640px) {
+  .ym32-error-actions {
+    flex-direction: column;
+  }
+  .ym32-error-actions .ym-button {
+    width: 100%;
+  }
+}
+
+
