@@ -111,3 +111,44 @@ export interface OrderDetailsApiResponse {
   order: BuyerOrder;
   requestId: string;
 }
+
+export type TimelineStageKey = 'order_placed' | 'farmer_confirmation' | 'stock_reservation' | 'dispatch' | 'out_for_delivery' | 'delivered';
+export type TimelineStageStatus = 'completed' | 'current' | 'pending' | 'cancelled';
+
+export interface TimelineStage {
+  id: string;
+  stageName: string;
+  stageKey: TimelineStageKey;
+  status: TimelineStageStatus;
+  timestamp: string | null;
+  formattedTimestamp: string | null;
+  description: string;
+  actor?: string | null;
+  location?: string | null;
+  isSampleData?: boolean;
+}
+
+export interface OrderTimelineResponse {
+  order: {
+    id: string;
+    orderCode: string;
+    operationKey: string;
+    productName: string;
+    quantityKg: number;
+    totalPriceLkr: number;
+    formattedTotalPrice: string;
+    displayStatus: OrderDisplayStatus;
+    rawStatus: string;
+    orderDate: string;
+    createdAt: string;
+    deliveryDate: string;
+    destination: string;
+    destinationDistrict: string;
+    cancellationReason?: string | null;
+  };
+  stages: TimelineStage[];
+  currentStageIndex: number;
+  progressPercentage: number;
+  deliveryInfo: DeliveryInfo;
+  requestId: string;
+}

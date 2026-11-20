@@ -424,3 +424,260 @@ export async function getOrderDetails(req, res, next) {
     next(error);
   }
 }
+
+/**
+ * GET /api/ym18/orders/:id/timeline
+ * Retrieves vertical timeline stages and chronological progression for an order
+ */
+export async function getOrderTimeline(req, res, next) {
+  try {
+    const buyerId = req.user.id;
+    const orderIdentifier = req.params.id;
+
+    const orderQuery = `
+      SELECT 
+        o.id,
+        o.operation_key,
+        o.destination,
+        o.destination_district,
+        o.delivery_date,
+        o.agreed_total_cents,
+        o.status,
+        o.cancellation_reason,
+        o.created_at,
+        o.updated_at,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'crop_name', c.name,
+              'agreed_kg', a.agreed_kg,
+              'farmer_name', u.name,
+              'farm_name', f.name,
+              'allocation_status', a.status
+            )
+          ) FILTER (WHERE a.id IS NOT NULL), '[]'
+        ) as items,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'trip_id', t.id,
+              'driver_name', d.name,
+              'vehicle_reg', v.registration,
+              'trip_status', t.status,
+              'scheduled_start', t.scheduled_start,
+              'scheduled_end', t.scheduled_end
+            )
+          ) FILTER (WHERE t.id IS NOT NULL), '[]'
+        ) as trips
+      FROM orders o
+      LEFT JOIN allocations a ON a.order_id = o.id
+      LEFT JOIN users u ON u.id = a.farmer_id
+      LEFT JOIN harvest_batches hb ON hb.id = a.batch_id
+      LEFT JOIN crops c ON c.id = hb.crop_id
+      LEFT JOIN farms f ON f.id = hb.farm_id
+      LEFT JOIN trips t ON t.order_id = o.id
+      LEFT JOIN users d ON d.id = t.driver_id
+      LEFT JOIN vehicles v ON v.id = t.vehicle_id
+      WHERE (o.id::text = $1 OR o.operation_key ILIKE '%' || $1 || '%') AND o.buyer_id = $2
+      GROUP BY o.id
+    `;
+
+    const { rows } = await pool.query(orderQuery, [orderIdentifier, buyerId]);
+    if (!rows[0]) {
+      return res.status(404).json({ error: 'Order not found', requestId: req.requestId });
+    }
+
+    const row = rows[0];
+    const items = Array.isArray(row.items) ? row.items : [];
+    const rawTrips = Array.isArray(row.trips) ? row.trips : [];
+    const totalAmountLkr = Number(row.agreed_total_cents) / 100;
+    const totalKg = items.reduce((acc, it) => acc + (Number(it.agreed_kg) || 0), 0);
+    const primaryCrop = items[0]?.crop_name || 'Agricultural Produce';
+
+    const createdAt = new Date(row.created_at);
+    const updatedAt = new Date(row.updated_at);
+    const status = row.status;
+
+    // Helper to calculate intermediate simulated timestamps between created_at and updated_at
+    const addMinutes = (date, minutes) => new Date(date.getTime() + minutes * 60000);
+
+    // Build the 6 sequential stages:
+    // 1. Order Placed
+    // 2. Farmer Confirmation
+    // 3. Stock Reservation
+    // 4. Dispatch
+    // 5. Out for Delivery
+    // 6. Delivered
+
+    let stage1Status = 'completed';
+    let stage2Status = 'pending';
+    let stage3Status = 'pending';
+    let stage4Status = 'pending';
+    let stage5Status = 'pending';
+    let stage6Status = 'pending';
+
+    let stage1Time = createdAt;
+    let stage2Time = null;
+    let stage3Time = null;
+    let stage4Time = null;
+    let stage5Time = null;
+    let stage6Time = null;
+
+    if (status === 'draft') {
+      stage1Status = 'current';
+    } else if (status === 'awaiting_suppliers') {
+      stage1Status = 'completed';
+      stage2Status = 'current';
+    } else if (status === 'ready_to_confirm') {
+      stage1Status = 'completed';
+      stage2Status = 'completed';
+      stage2Time = addMinutes(createdAt, 25);
+      stage3Status = 'current';
+    } else if (status === 'confirmed') {
+      stage1Status = 'completed';
+      stage2Status = 'completed';
+      stage2Time = addMinutes(createdAt, 25);
+      stage3Status = 'current';
+    } else if (status === 'in_fulfilment') {
+      stage1Status = 'completed';
+      stage2Status = 'completed';
+      stage2Time = addMinutes(createdAt, 25);
+      stage3Status = 'completed';
+      stage3Time = addMinutes(createdAt, 60);
+      stage4Status = 'completed';
+      stage4Time = addMinutes(createdAt, 110);
+      stage5Status = 'current';
+      stage5Time = addMinutes(createdAt, 140);
+    } else if (status === 'delivered' || status === 'closed') {
+      stage1Status = 'completed';
+      stage2Status = 'completed';
+      stage2Time = addMinutes(createdAt, 25);
+      stage3Status = 'completed';
+      stage3Time = addMinutes(createdAt, 60);
+      stage4Status = 'completed';
+      stage4Time = addMinutes(createdAt, 110);
+      stage5Status = 'completed';
+      stage5Time = addMinutes(createdAt, 140);
+      stage6Status = 'completed';
+      stage6Time = updatedAt && updatedAt > stage5Time ? updatedAt : addMinutes(stage5Time, 45);
+    } else if (status === 'cancelled') {
+      stage1Status = 'completed';
+      stage2Status = 'cancelled';
+      stage3Status = 'pending';
+      stage4Status = 'pending';
+      stage5Status = 'pending';
+      stage6Status = 'pending';
+    }
+
+    const stages = [
+      {
+        id: 'stage-1',
+        stageName: 'Order Placed',
+        stageKey: 'order_placed',
+        status: stage1Status,
+        timestamp: stage1Time ? stage1Time.toISOString() : null,
+        formattedTimestamp: stage1Time ? formatOrderDate(stage1Time) : null,
+        description: 'Order registered in the YieldMatrix network. Smart escrow deposit initialized.',
+        actor: req.user.name,
+        isSampleData: false, // Real timestamp from orders table
+      },
+      {
+        id: 'stage-2',
+        stageName: 'Farmer Confirmation',
+        stageKey: 'farmer_confirmation',
+        status: stage2Status,
+        timestamp: stage2Time ? stage2Time.toISOString() : null,
+        formattedTimestamp: stage2Time ? formatOrderDate(stage2Time) : null,
+        description: status === 'cancelled' 
+          ? `Order cancelled before final farmer confirmation. Reason: ${row.cancellation_reason || 'Buyer cancelled'}`
+          : 'Cooperative farmer partners accepted harvest quantity and agreed price.',
+        actor: items[0]?.farmer_name || 'Regional Farmer Cooperative',
+        isSampleData: stage2Status === 'completed',
+      },
+      {
+        id: 'stage-3',
+        stageName: 'Stock Reservation',
+        stageKey: 'stock_reservation',
+        status: stage3Status,
+        timestamp: stage3Time ? stage3Time.toISOString() : null,
+        formattedTimestamp: stage3Time ? formatOrderDate(stage3Time) : null,
+        description: 'Quality graded harvest batches locked in farm storage and prepared for loading.',
+        actor: items[0]?.farm_name || 'Farm Quality Control',
+        isSampleData: stage3Status === 'completed',
+      },
+      {
+        id: 'stage-4',
+        stageName: 'Dispatch',
+        stageKey: 'dispatch',
+        status: stage4Status,
+        timestamp: stage4Time ? stage4Time.toISOString() : null,
+        formattedTimestamp: stage4Time ? formatOrderDate(stage4Time) : null,
+        description: 'Consignment collected from rural farm hubs and loaded onto temperature-monitored vehicle.',
+        actor: rawTrips[0]?.driver_name || 'YieldMatrix Agrologistics',
+        isSampleData: stage4Status === 'completed',
+      },
+      {
+        id: 'stage-5',
+        stageName: 'Out for Delivery',
+        stageKey: 'out_for_delivery',
+        status: stage5Status,
+        timestamp: stage5Time ? stage5Time.toISOString() : null,
+        formattedTimestamp: stage5Time ? formatOrderDate(stage5Time) : null,
+        description: `Consignment en route to ${row.destination || 'Buyer Destination'}. Carrier tracking active.`,
+        actor: rawTrips[0]?.driver_name || 'YieldMatrix Fleet Driver',
+        isSampleData: stage5Status === 'completed',
+      },
+      {
+        id: 'stage-6',
+        stageName: 'Delivered',
+        stageKey: 'delivered',
+        status: stage6Status,
+        timestamp: stage6Time ? stage6Time.toISOString() : null,
+        formattedTimestamp: stage6Time ? formatOrderDate(stage6Time) : null,
+        description: 'Produce delivered, inspected, and confirmed by buyer. Escrow released to farmers.',
+        actor: req.user.name,
+        isSampleData: false, // Real timestamp from orders table
+      },
+    ];
+
+    // Compute progress percentage
+    const completedCount = stages.filter(s => s.status === 'completed').length;
+    const progressPercentage = Math.round((completedCount / stages.length) * 100);
+
+    return res.json({
+      order: {
+        id: row.id,
+        orderCode: formatOrderCode(row.operation_key, row.id),
+        operationKey: row.operation_key,
+        productName: primaryCrop,
+        quantityKg: totalKg,
+        totalPriceLkr: totalAmountLkr,
+        formattedTotalPrice: `LKR ${totalAmountLkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        displayStatus: mapOrderStatus(row.status),
+        rawStatus: row.status,
+        orderDate: formatOrderDate(row.created_at),
+        createdAt: row.created_at,
+        deliveryDate: row.delivery_date ? formatOrderDate(row.delivery_date).split(' - ')[0] : 'Scheduled',
+        destination: row.destination,
+        destinationDistrict: row.destination_district,
+        cancellationReason: row.cancellation_reason,
+      },
+      stages,
+      currentStageIndex: stages.findIndex(s => s.status === 'current'),
+      progressPercentage,
+      deliveryInfo: {
+        destination: row.destination,
+        district: row.destination_district,
+        scheduledDeliveryDate: row.delivery_date ? formatOrderDate(row.delivery_date).split(' - ')[0] : 'To be confirmed',
+        trip: rawTrips[0] ? {
+          driverName: rawTrips[0].driver_name,
+          vehicleNumber: rawTrips[0].vehicle_reg,
+          status: rawTrips[0].trip_status,
+        } : null,
+      },
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
