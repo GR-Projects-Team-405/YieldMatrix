@@ -14,3 +14,26 @@ export interface TraceStats {
   verifiedRate: string;
   scanCount: string;
 }
+
+export interface BatchSummaryInfo {
+  batchId: string;
+  cropGrade: string;
+  farmOrigin: string;
+  harvestDate: string;
+  quantityAgreedPrice: string;
+  allocationId: string;
+  orderId: string;
+  tripId: string;
+  buyerAcceptance: string;
+  status: TraceStatus;
+}
+
+export interface BatchTimelineEvent {
+  id: string;
+  timestamp: string;
+  actor: string;
+  location: string;
+  quantity: string;
+  outcome: string;
+  tone: 'success' | 'info' | 'warning' | 'neutral';
+}

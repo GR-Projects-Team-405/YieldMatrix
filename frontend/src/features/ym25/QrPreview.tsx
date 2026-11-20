@@ -5,7 +5,7 @@ export default function QRPreview() {
   const { batchId } = useParams<{ batchId: string }>();
   return (
     <div className="space-y-4">
-      <Link to=".." relative="path" className="inline-flex items-center gap-2 text-sm text-[#315A42] hover:underline">
+      <Link to="../.." relative="path" className="inline-flex items-center gap-2 text-sm text-[#315A42] hover:underline">
         <ArrowLeft size={16} /> Back to trace records
       </Link>
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[12px] p-6">
