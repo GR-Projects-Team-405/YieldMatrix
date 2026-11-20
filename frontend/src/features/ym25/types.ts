@@ -5,6 +5,7 @@ export interface TraceRecord {
   produce: string;
   farm: string;
   harvestDate: string;
+  quantity: string;
   status: TraceStatus;
 }
 

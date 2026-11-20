@@ -29,12 +29,12 @@ const INITIAL_STATS: TraceStats = {
   scanCount: '1.2K',
 };
 
-const INITIAL_RECORDS: TraceRecord[] = [
-  { id: 'YM25-B001', produce: 'Tomatoes', farm: 'Green Valley Farm', harvestDate: '28 Oct 2026', status: 'Delivered' },
-  { id: 'YM25-B002', produce: 'Carrots', farm: 'Highland Harvest', harvestDate: '27 Oct 2026', status: 'In Transit' },
-  { id: 'YM25-B003', produce: 'Lettuce', farm: 'Sunrise Organics', harvestDate: '26 Oct 2026', status: 'Verified' },
-  { id: 'YM25-B004', produce: 'Spinach', farm: 'Green Valley Farm', harvestDate: '25 Oct 2026', status: 'Processing' },
-  { id: 'YM25-B005', produce: 'Cabbage', farm: 'Highland Harvest', harvestDate: '24 Oct 2026', status: 'Delivered' },
+export const INITIAL_RECORDS: TraceRecord[] = [
+  { id: 'YM25-B001', produce: 'Tomatoes', farm: 'Green Valley Farm', harvestDate: '28 Oct 2026', quantity: '500 kg', status: 'Delivered' },
+  { id: 'YM25-B002', produce: 'Carrots', farm: 'Highland Harvest', harvestDate: '27 Oct 2026', quantity: '350 kg', status: 'In Transit' },
+  { id: 'YM25-B003', produce: 'Lettuce', farm: 'Sunrise Organics', harvestDate: '26 Oct 2026', quantity: '200 kg', status: 'Verified' },
+  { id: 'YM25-B004', produce: 'Spinach', farm: 'Green Valley Farm', harvestDate: '25 Oct 2026', quantity: '150 kg', status: 'Processing' },
+  { id: 'YM25-B005', produce: 'Cabbage', farm: 'Highland Harvest', harvestDate: '24 Oct 2026', quantity: '500 kg', status: 'Delivered' },
 ];
 
 const getStatusToneClass = (status: TraceRecord['status']) => {
