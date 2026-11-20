@@ -1,29 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { Table, TableRow } from '../../../components/Table';
-import { MOCK_PAYOUTS, formatLKR, type PayoutRecord, type PayoutStatus } from '../mockData';
+import { formatLKR, type PayoutRecord, type PayoutStatus } from '../mockData';
 import { usePayoutState } from '../payoutState';
 
 const PAGE_SIZE = 4;
 
-function todayIso(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${now.getFullYear()}-${month}-${day}`;
-}
-
 function formatDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
-
-const mockDates = MOCK_PAYOUTS.map((payout) => payout.date).sort();
-const defaultFrom = mockDates[0] ?? '';
-const defaultTo = [mockDates[mockDates.length - 1] ?? '', todayIso()].sort().at(-1) ?? '';
 
 function WalletTabs() {
   const tabs = [
@@ -44,15 +33,13 @@ function WalletTabs() {
 }
 
 export default function PayoutHistory() {
-  const { localPayouts } = usePayoutState();
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(defaultTo);
+  const { payouts: payoutData, payoutsLoading, payoutsError, refreshPayouts } = usePayoutState();
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [status, setStatus] = useState<'all' | PayoutStatus>('all');
   const [page, setPage] = useState(1);
 
-  const combined = useMemo(() => {
-    return [...localPayouts, ...MOCK_PAYOUTS].sort((a, b) => b.date.localeCompare(a.date) || b.reference.localeCompare(a.reference));
-  }, [localPayouts]);
+  const combined = useMemo(() => payoutData?.payouts ?? [], [payoutData]);
 
   const paidOut = combined.filter((payout) => payout.status === 'confirmed').reduce((sum, payout) => sum + payout.amount, 0);
   const inProgress = combined.filter((payout) => payout.status === 'pending').reduce((sum, payout) => sum + payout.amount, 0);
@@ -72,9 +59,16 @@ export default function PayoutHistory() {
   const start = filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE;
   const visible = filtered.slice(start, start + PAGE_SIZE);
 
+  useEffect(() => {
+    void refreshPayouts();
+    const refreshOnFocus = () => { void refreshPayouts(); };
+    window.addEventListener('focus', refreshOnFocus);
+    return () => window.removeEventListener('focus', refreshOnFocus);
+  }, [refreshPayouts]);
+
   function resetFilters() {
-    setFrom(defaultFrom);
-    setTo(defaultTo);
+    setFrom('');
+    setTo('');
     setStatus('all');
     setPage(1);
   }
@@ -97,23 +91,25 @@ export default function PayoutHistory() {
       </div>
 
       <Alert type="info">
-        New pending requests are visible for this session only.
+        Pending requests stay in temporary server memory for this browser session. They may expire after inactivity or be cleared when the server restarts.
       </Alert>
+      {payoutsLoading && <p role="status">Loading payout history…</p>}
+      {payoutsError && <Alert type="error">{payoutsError}</Alert>}
 
       <div className="ym27-balance-grid ym27-balance-grid--3 ym27-section-gap">
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">Total paid out</span>
-          <span className="ym27-balance-value">{formatLKR(paidOut)}</span>
-          <span className="ym27-balance-sub">{confirmedCount} confirmed simulated {confirmedCount === 1 ? 'request' : 'requests'}</span>
+          <span className="ym27-balance-value">{payoutData ? formatLKR(paidOut) : '—'}</span>
+          <span className="ym27-balance-sub">{payoutData ? confirmedCount : '—'} confirmed simulated {confirmedCount === 1 ? 'request' : 'requests'}</span>
         </div>
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">In progress</span>
-          <span className="ym27-balance-value">{formatLKR(inProgress)}</span>
-          <span className="ym27-balance-sub">{pendingCount === 0 ? 'No pending simulated requests' : `${pendingCount} pending simulated ${pendingCount === 1 ? 'request' : 'requests'}`}</span>
+          <span className="ym27-balance-value">{payoutData ? formatLKR(inProgress) : '—'}</span>
+          <span className="ym27-balance-sub">{!payoutData ? '—' : pendingCount === 0 ? 'No pending simulated requests' : `${pendingCount} pending simulated ${pendingCount === 1 ? 'request' : 'requests'}`}</span>
         </div>
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">Latest destination</span>
-          <span className="ym27-balance-value ym27-balance-value--small">{latest ? latest.bankLabel : '—'}</span>
+          <span className="ym27-balance-value ym27-balance-value--small">{payoutData ? latest?.bankLabel ?? '—' : '—'}</span>
           <span className="ym27-balance-sub">Masked simulated label. No full account number is stored.</span>
         </div>
       </div>
@@ -144,13 +140,13 @@ export default function PayoutHistory() {
         </label>
       </div>
 
-      {visible.length === 0 ? (
+      {payoutData && visible.length === 0 ? (
         <EmptyState
           title="No payout requests match these filters"
-          description="Clear the filters to see the simulated history again. New pending requests only exist until you reload or leave the wallet."
+          description="Clear the filters to see the simulated history again. Pending requests are temporary and may expire after inactivity or a server restart."
           action={<Button variant="outline" onClick={resetFilters}>Clear filters</Button>}
         />
-      ) : (
+      ) : payoutData && (
         <>
           <Table headers={['Request date', 'Reference', 'Amount (LKR)', 'Destination', 'Status']}>
             {visible.map((payout: PayoutRecord) => (

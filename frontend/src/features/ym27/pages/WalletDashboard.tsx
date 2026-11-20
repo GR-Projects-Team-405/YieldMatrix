@@ -3,26 +3,8 @@ import { Alert } from '../../../components/Alert';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { Table, TableRow } from '../../../components/Table';
 import { Button } from '../../../components/Button';
-import {
-  MOCK_WALLET_SUMMARY,
-  MOCK_TRANSACTIONS,
-  MOCK_SETTLEMENTS,
-  MOCK_PAYOUTS,
-  formatLKR,
-} from '../mockData';
-
-// ── Derived values (computed from existing mock data, nothing invented) ────────
-
-/** Total paid out = sum of all confirmed payout amounts */
-const totalPaidOut = MOCK_PAYOUTS
-  .filter((p) => p.status === 'confirmed')
-  .reduce((sum, p) => sum + p.amount, 0);
-
-/** Recent transactions — first 3 */
-const recentTransactions = MOCK_TRANSACTIONS.slice(0, 3);
-
-/** Next expected settlement — first pending settlement */
-const nextSettlement = MOCK_SETTLEMENTS.find((s) => s.status === 'pending');
+import { formatLKR } from '../mockData';
+import { usePayoutState } from '../payoutState';
 
 // ── SVG icons (inline to avoid new dependencies) ─────────────────────────────
 
@@ -81,6 +63,27 @@ function formatDate(iso: string): string {
 // ── Dashboard component ──────────────────────────────────────────────────────
 
 export default function WalletDashboard() {
+  const {
+    wallet,
+    walletLoading,
+    walletError,
+    transactions,
+    transactionsLoading,
+    transactionsError,
+    settlements,
+    settlementsLoading,
+    settlementsError,
+    payouts,
+    payoutsLoading,
+    payoutsError,
+  } = usePayoutState();
+  const summary = wallet?.summary;
+  const recentTransactions = (transactions ?? []).slice(0, 3);
+  const nextSettlement = settlements?.find((settlement) => settlement.status === 'pending');
+  const totalPaidOut = (payouts?.payouts ?? [])
+    .filter((payout) => payout.status === 'confirmed')
+    .reduce((sum, payout) => sum + payout.amount, 0);
+
   return (
     <div>
       {/* ── Demo banner ──────────────────────────────────────────────── */}
@@ -110,6 +113,15 @@ export default function WalletDashboard() {
         </Link>
       </div>
 
+      {walletLoading && <p role="status">Loading wallet…</p>}
+      {walletError && <Alert type="error">{walletError}</Alert>}
+      {transactionsLoading && <p role="status">Loading recent transactions…</p>}
+      {transactionsError && <Alert type="error">{transactionsError}</Alert>}
+      {settlementsLoading && <p role="status">Loading settlements…</p>}
+      {settlementsError && <Alert type="error">{settlementsError}</Alert>}
+      {payoutsLoading && <p role="status">Loading payout totals…</p>}
+      {payoutsError && <Alert type="error">{payoutsError}</Alert>}
+
       {/* ── Balance summary cards ────────────────────────────────────── */}
       <div className="ym27-balance-grid">
         {/* Available balance — dark green card */}
@@ -118,7 +130,7 @@ export default function WalletDashboard() {
             <span className="ym27-balance-icon"><WalletIcon /></span>
             Available balance
           </span>
-          <span className="ym27-balance-value">{formatLKR(MOCK_WALLET_SUMMARY.availableBalance)}</span>
+          <span className="ym27-balance-value">{summary ? formatLKR(summary.availableBalance) : '—'}</span>
           <span className="ym27-balance-sub">Ready for simulated payouts</span>
         </div>
 
@@ -128,9 +140,9 @@ export default function WalletDashboard() {
             <span className="ym27-balance-icon"><ClockIcon /></span>
             Pending settlements
           </span>
-          <span className="ym27-balance-value">{formatLKR(MOCK_WALLET_SUMMARY.pendingSettlements)}</span>
+          <span className="ym27-balance-value">{summary ? formatLKR(summary.pendingSettlements) : '—'}</span>
           <span className="ym27-balance-sub">
-            {MOCK_SETTLEMENTS.filter((s) => s.status === 'pending').length} pending settlement{MOCK_SETTLEMENTS.filter((s) => s.status === 'pending').length !== 1 ? 's' : ''}
+            {settlements ? settlements.filter((s) => s.status === 'pending').length : '—'} pending settlement{settlements?.filter((s) => s.status === 'pending').length !== 1 ? 's' : ''}
           </span>
         </div>
 
@@ -140,9 +152,9 @@ export default function WalletDashboard() {
             <span className="ym27-balance-icon"><ArrowUpIcon /></span>
             Total received
           </span>
-          <span className="ym27-balance-value">{formatLKR(MOCK_WALLET_SUMMARY.totalEarned)}</span>
+          <span className="ym27-balance-value">{summary ? formatLKR(summary.totalEarned) : '—'}</span>
           <span className="ym27-balance-sub">
-            {MOCK_SETTLEMENTS.filter((s) => s.status === 'confirmed').length} confirmed settlements · All time
+            {settlements ? settlements.filter((s) => s.status === 'confirmed').length : '—'} confirmed settlements · All time
           </span>
         </div>
 
@@ -152,9 +164,9 @@ export default function WalletDashboard() {
             <span className="ym27-balance-icon"><ArrowOutIcon /></span>
             Total paid out
           </span>
-          <span className="ym27-balance-value">{formatLKR(totalPaidOut)}</span>
+          <span className="ym27-balance-value">{payouts ? formatLKR(totalPaidOut) : '—'}</span>
           <span className="ym27-balance-sub">
-            {MOCK_PAYOUTS.filter((p) => p.status === 'confirmed').length} completed payouts
+            {payouts ? payouts.payouts.filter((p) => p.status === 'confirmed').length : '—'} completed payouts
           </span>
         </div>
       </div>
@@ -171,39 +183,35 @@ export default function WalletDashboard() {
           </Link>
         </div>
 
-        <Table headers={['Date', 'Transaction', 'Reference', 'Type', 'Amount (LKR)', 'Status']}>
-          {recentTransactions.map((txn) => (
-            <TableRow
-              key={txn.id}
-              className={txn.settlementId ? 'ym27-clickable-row' : ''}
-              onClick={undefined}
-            >
-              <td>{formatDate(txn.date)}</td>
-              <td>
-                {txn.settlementId ? (
-                  <Link
-                    to={`/farmer/wallet/settlement/${txn.settlementId}`}
-                    style={{ color: 'var(--accent-text)', fontWeight: 500 }}
-                  >
-                    {txn.description}
-                  </Link>
-                ) : (
-                  txn.description
-                )}
-              </td>
-              <td style={{ fontSize: '13px', color: 'var(--muted)' }}>
-                {txn.settlementId?.toUpperCase() || '—'}
-              </td>
-              <td style={{ textTransform: 'capitalize' }}>{txn.type}</td>
-              <td>
-                <span className={txn.type === 'credit' ? 'ym27-amount--credit' : 'ym27-amount--debit'}>
-                  {txn.type === 'credit' ? '+' : '−'}{formatLKR(txn.amount)}
-                </span>
-              </td>
-              <td><StatusBadge status={txn.status} /></td>
-            </TableRow>
-          ))}
-        </Table>
+        {transactions && transactions.length > 0 ? (
+          <Table headers={['Date', 'Transaction', 'Reference', 'Type', 'Amount (LKR)', 'Status']}>
+            {recentTransactions.map((txn) => (
+              <TableRow key={txn.id}>
+                <td>{formatDate(txn.date)}</td>
+                <td>
+                  {txn.settlementId ? (
+                    <Link
+                      to={`/farmer/wallet/settlement/${txn.settlementId}`}
+                      style={{ color: 'var(--accent-text)', fontWeight: 500 }}
+                    >
+                      {txn.description}
+                    </Link>
+                  ) : txn.description}
+                </td>
+                <td style={{ fontSize: '13px', color: 'var(--muted)' }}>
+                  {txn.settlementId?.toUpperCase() || '—'}
+                </td>
+                <td style={{ textTransform: 'capitalize' }}>{txn.type}</td>
+                <td>
+                  <span className={txn.type === 'credit' ? 'ym27-amount--credit' : 'ym27-amount--debit'}>
+                    {txn.type === 'credit' ? '+' : '−'}{formatLKR(txn.amount)}
+                  </span>
+                </td>
+                <td><StatusBadge status={txn.status} /></td>
+              </TableRow>
+            ))}
+          </Table>
+        ) : transactions && <p>No transactions are available.</p>}
 
       </section>
 
@@ -232,7 +240,7 @@ export default function WalletDashboard() {
                 <span className="ym27-settlement-amount">{formatLKR(nextSettlement.grossAmount)}</span>
               </div>
             </div>
-          ) : (
+          ) : settlements && (
             <p className="ym27-info-note">No pending settlements at this time.</p>
           )}
         </div>

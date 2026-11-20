@@ -1,78 +1,171 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { MOCK_BANK_ACCOUNTS, MOCK_WALLET_SUMMARY, type PayoutRecord } from './mockData';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createPayout,
+  fetchPayoutOptions,
+  fetchPayouts,
+  fetchSettlements,
+  fetchTransactions,
+  fetchWallet,
+  getYm27ErrorMessage,
+  type PayoutsResponse,
+  type WalletResponse,
+} from './api';
+import type { BankAccount, PayoutRecord, Settlement, Transaction } from './mockData';
 
-// In-memory simulated payout requests. Reloading, or leaving the wallet routes, clears them.
-// Nothing here calls a bank, a payment API, or the database.
+interface Resource<T> {
+  data: T | null;
+  loading: boolean;
+  error: string | null;
+}
 
-export type PayoutResult = { ok: true } | { ok: false; error: string };
+function initialResource<T>(): Resource<T> {
+  return { data: null, loading: true, error: null };
+}
 
 interface PayoutStateValue {
-  localPayouts: PayoutRecord[];
-  /** Original available balance minus pending local requests, in LKR cents. */
-  remainingRequestable: number;
-  addPayout: (amountCents: number, bankValue: string) => PayoutResult;
+  wallet: WalletResponse | null;
+  walletLoading: boolean;
+  walletError: string | null;
+  transactions: Transaction[] | null;
+  transactionsLoading: boolean;
+  transactionsError: string | null;
+  settlements: Settlement[] | null;
+  settlementsLoading: boolean;
+  settlementsError: string | null;
+  payoutOptions: BankAccount[] | null;
+  payoutOptionsLoading: boolean;
+  payoutOptionsError: string | null;
+  payouts: PayoutsResponse | null;
+  payoutsLoading: boolean;
+  payoutsError: string | null;
+  refreshWallet: () => Promise<void>;
+  refreshTransactions: () => Promise<void>;
+  refreshSettlements: () => Promise<void>;
+  refreshPayoutOptions: () => Promise<void>;
+  refreshPayouts: () => Promise<void>;
+  submitPayout: (amountCents: number, bankValue: string, idempotencyKey: string) => Promise<PayoutRecord>;
 }
 
 const PayoutStateContext = createContext<PayoutStateValue | undefined>(undefined);
 
-function todayIso(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${now.getFullYear()}-${month}-${day}`;
-}
-
 export function PayoutStateProvider({ children }: { children: ReactNode }) {
-  const [localPayouts, setLocalPayouts] = useState<PayoutRecord[]>([]);
+  const [wallet, setWallet] = useState<Resource<WalletResponse>>(initialResource);
+  const [transactions, setTransactions] = useState<Resource<Transaction[]>>(initialResource);
+  const [settlements, setSettlements] = useState<Resource<Settlement[]>>(initialResource);
+  const [payoutOptions, setPayoutOptions] = useState<Resource<BankAccount[]>>(initialResource);
+  const [payouts, setPayouts] = useState<Resource<PayoutsResponse>>(initialResource);
+  const walletRequestVersion = useRef(0);
+  const payoutsRequestVersion = useRef(0);
 
-  const remainingRequestable = useMemo(() => {
-    const reserved = localPayouts
-      .filter((payout) => payout.status === 'pending')
-      .reduce((sum, payout) => sum + payout.amount, 0);
-    return MOCK_WALLET_SUMMARY.availableBalance - reserved;
-  }, [localPayouts]);
-
-  const addPayout = useCallback((amountCents: number, bankValue: string): PayoutResult => {
-    const bank = MOCK_BANK_ACCOUNTS.find((account) => account.value === bankValue);
-    if (!bank) return { ok: false, error: 'Choose one of the simulated destinations.' };
-    if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
-      return { ok: false, error: 'Enter a simulated amount greater than zero.' };
+  const refreshWallet = useCallback(async () => {
+    const requestVersion = ++walletRequestVersion.current;
+    setWallet((current) => ({ ...current, loading: true, error: null }));
+    try {
+      const data = await fetchWallet();
+      if (requestVersion === walletRequestVersion.current) setWallet({ data, loading: false, error: null });
+    } catch (error) {
+      if (requestVersion === walletRequestVersion.current) {
+        setWallet({ data: null, loading: false, error: getYm27ErrorMessage(error) });
+      }
     }
-
-    const reserved = localPayouts
-      .filter((payout) => payout.status === 'pending')
-      .reduce((sum, payout) => sum + payout.amount, 0);
-    const remaining = MOCK_WALLET_SUMMARY.availableBalance - reserved;
-    if (amountCents > remaining) {
-      return { ok: false, error: 'That amount is above the remaining simulated balance.' };
+  }, []);
+  const refreshTransactions = useCallback(async () => {
+    setTransactions((current) => ({ ...current, loading: true, error: null }));
+    try {
+      setTransactions({ data: await fetchTransactions(), loading: false, error: null });
+    } catch (error) {
+      setTransactions({ data: null, loading: false, error: getYm27ErrorMessage(error) });
     }
+  }, []);
+  const refreshSettlements = useCallback(async () => {
+    setSettlements((current) => ({ ...current, loading: true, error: null }));
+    try {
+      setSettlements({ data: await fetchSettlements(), loading: false, error: null });
+    } catch (error) {
+      setSettlements({ data: null, loading: false, error: getYm27ErrorMessage(error) });
+    }
+  }, []);
+  const refreshPayoutOptions = useCallback(async () => {
+    setPayoutOptions((current) => ({ ...current, loading: true, error: null }));
+    try {
+      setPayoutOptions({ data: await fetchPayoutOptions(), loading: false, error: null });
+    } catch (error) {
+      setPayoutOptions({ data: null, loading: false, error: getYm27ErrorMessage(error) });
+    }
+  }, []);
+  const refreshPayouts = useCallback(async () => {
+    const requestVersion = ++payoutsRequestVersion.current;
+    setPayouts((current) => ({ ...current, loading: true, error: null }));
+    try {
+      const data = await fetchPayouts();
+      if (requestVersion === payoutsRequestVersion.current) {
+        setPayouts({ data, loading: false, error: null });
+        setWallet((current) => current.data
+          ? { ...current, data: { ...current.data, remainingRequestable: data.remainingRequestable } }
+          : current);
+      }
+    } catch (error) {
+      if (requestVersion === payoutsRequestVersion.current) {
+        setPayouts({ data: null, loading: false, error: getYm27ErrorMessage(error) });
+      }
+    }
+  }, []);
 
-    const date = todayIso();
-    const record: PayoutRecord = {
-      id: `local-${crypto.randomUUID()}`,
-      date,
-      amount: amountCents,
-      bankLabel: bank.label,
-      status: 'pending',
-      reference: `SIM-LOCAL-${date.replaceAll('-', '')}-${String(localPayouts.length + 1).padStart(3, '0')}`,
-    };
+  useEffect(() => {
+    void Promise.all([
+      refreshWallet(),
+      refreshTransactions(),
+      refreshSettlements(),
+      refreshPayoutOptions(),
+      refreshPayouts(),
+    ]);
+  }, [refreshWallet, refreshTransactions, refreshSettlements, refreshPayoutOptions, refreshPayouts]);
 
-    setLocalPayouts((current) => {
-      if (current.some((item) => item.id === record.id)) return current;
-      const reservedNow = current
-        .filter((payout) => payout.status === 'pending')
-        .reduce((sum, payout) => sum + payout.amount, 0);
-      if (amountCents > MOCK_WALLET_SUMMARY.availableBalance - reservedNow) return current;
-      return [record, ...current];
+  const submitPayout = useCallback(async (
+    amountCents: number,
+    bankValue: string,
+    idempotencyKey: string,
+  ): Promise<PayoutRecord> => {
+    const response = await createPayout(amountCents, bankValue, idempotencyKey);
+    payoutsRequestVersion.current += 1;
+    walletRequestVersion.current += 1;
+    setPayouts({
+      data: { payouts: response.payouts, remainingRequestable: response.remainingRequestable },
+      loading: false,
+      error: null,
     });
+    setWallet((current) => current.data
+      ? { ...current, data: { ...current.data, remainingRequestable: response.remainingRequestable } }
+      : current);
+    return response.payout;
+  }, []);
 
-    return { ok: true };
-  }, [localPayouts]);
-
-  const value = useMemo(
-    () => ({ localPayouts, remainingRequestable, addPayout }),
-    [localPayouts, remainingRequestable, addPayout],
-  );
+  const value = useMemo(() => ({
+    wallet: wallet.data,
+    walletLoading: wallet.loading,
+    walletError: wallet.error,
+    transactions: transactions.data,
+    transactionsLoading: transactions.loading,
+    transactionsError: transactions.error,
+    settlements: settlements.data,
+    settlementsLoading: settlements.loading,
+    settlementsError: settlements.error,
+    payoutOptions: payoutOptions.data,
+    payoutOptionsLoading: payoutOptions.loading,
+    payoutOptionsError: payoutOptions.error,
+    payouts: payouts.data,
+    payoutsLoading: payouts.loading,
+    payoutsError: payouts.error,
+    refreshWallet,
+    refreshTransactions,
+    refreshSettlements,
+    refreshPayoutOptions,
+    refreshPayouts,
+    submitPayout,
+  }), [
+    wallet, transactions, settlements, payoutOptions, payouts,
+    refreshWallet, refreshTransactions, refreshSettlements, refreshPayoutOptions, refreshPayouts, submitPayout,
+  ]);
 
   return <PayoutStateContext.Provider value={value}>{children}</PayoutStateContext.Provider>;
 }

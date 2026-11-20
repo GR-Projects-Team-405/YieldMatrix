@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
@@ -6,8 +6,9 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { InputField } from '../../../components/InputField';
 import { SelectField } from '../../../components/SelectField';
 import { Toast } from '../../../components/Toast';
-import { MOCK_BANK_ACCOUNTS, MOCK_WALLET_SUMMARY, formatLKR } from '../mockData';
+import { formatLKR } from '../mockData';
 import { usePayoutState } from '../payoutState';
+import { getYm27ErrorMessage } from '../api';
 
 function parseLkrToCents(value: string): { cents: number } | { error: string } {
   const trimmed = value.trim();
@@ -45,24 +46,55 @@ function WalletTabs() {
 }
 
 export default function PayoutRequest() {
-  const { remainingRequestable, addPayout } = usePayoutState();
+  const {
+    wallet,
+    walletLoading,
+    walletError,
+    payoutOptions,
+    payoutOptionsLoading,
+    payoutOptionsError,
+    submitPayout,
+    refreshWallet,
+    refreshPayoutOptions,
+  } = usePayoutState();
   const [amount, setAmount] = useState('');
-  const [bankValue, setBankValue] = useState(MOCK_BANK_ACCOUNTS[0]?.value ?? '');
+  const [bankValue, setBankValue] = useState('');
   const [fieldError, setFieldError] = useState('');
   const [formError, setFormError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingCents, setPendingCents] = useState<number | null>(null);
   const [toastOpen, setToastOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const idempotencyRef = useRef<{ key: string; amountCents: number; bankValue: string } | null>(null);
 
+  const remainingRequestable = wallet?.remainingRequestable ?? 0;
+  const bankOptions = payoutOptions ?? [];
+  const bank = bankOptions.find((account) => account.value === bankValue);
   const parsed = parseLkrToCents(amount);
   const previewCents = 'cents' in parsed ? parsed.cents : null;
-  const bank = MOCK_BANK_ACCOUNTS.find((account) => account.value === bankValue);
   const withinBalance = previewCents !== null && previewCents <= remainingRequestable;
   const remainingAfter = previewCents !== null && withinBalance ? remainingRequestable - previewCents : null;
+
+  useEffect(() => {
+    if (!bankValue && bankOptions.length > 0) setBankValue(bankOptions[0].value);
+  }, [bankOptions, bankValue]);
+
+  useEffect(() => {
+    void refreshWallet();
+    void refreshPayoutOptions();
+    const refreshOnFocus = () => {
+      void refreshWallet();
+      void refreshPayoutOptions();
+    };
+    window.addEventListener('focus', refreshOnFocus);
+    return () => window.removeEventListener('focus', refreshOnFocus);
+  }, [refreshWallet, refreshPayoutOptions]);
 
   function validate(): { cents: number } | { error: string } {
     const result = parseLkrToCents(amount);
     if ('error' in result) return result;
+    if (!wallet) return { error: 'The simulated wallet balance is not available yet.' };
     if (!bank) return { error: 'Choose one of the simulated destinations.' };
     if (result.cents > remainingRequestable) {
       return { error: `The most you can request in this session is ${formatLKR(remainingRequestable)}.` };
@@ -84,18 +116,31 @@ export default function PayoutRequest() {
     setConfirmOpen(true);
   }
 
-  function confirmRequest() {
-    if (pendingCents === null) return;
-    const result = addPayout(pendingCents, bankValue);
+  async function confirmRequest() {
+    if (pendingCents === null || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     setConfirmOpen(false);
-    if (!result.ok) {
-      setFormError(result.error);
-      return;
+    const previousRequest = idempotencyRef.current;
+    const idempotencyKey = previousRequest
+      && previousRequest.amountCents === pendingCents
+      && previousRequest.bankValue === bankValue
+      ? previousRequest.key
+      : crypto.randomUUID();
+    idempotencyRef.current = { key: idempotencyKey, amountCents: pendingCents, bankValue };
+    try {
+      await submitPayout(pendingCents, bankValue, idempotencyKey);
+      setAmount('');
+      setPendingCents(null);
+      setFormError('');
+      idempotencyRef.current = null;
+      setToastOpen(true);
+    } catch (error) {
+      setFormError(getYm27ErrorMessage(error));
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
-    setAmount('');
-    setPendingCents(null);
-    setFormError('');
-    setToastOpen(true);
   }
 
   return (
@@ -116,13 +161,17 @@ export default function PayoutRequest() {
       </div>
 
       <Alert type="info">
-        Pending requests stay in this session only; the displayed wallet balance remains unchanged.
+        Pending requests stay in temporary server memory for this browser session. They may expire after inactivity or be cleared when the server restarts; the displayed wallet balance remains unchanged.
       </Alert>
+      {walletLoading && <p role="status">Loading wallet balance…</p>}
+      {payoutOptionsLoading && <p role="status">Loading simulated destinations…</p>}
+      {walletError && <Alert type="error">{walletError}</Alert>}
+      {payoutOptionsError && <Alert type="error">{payoutOptionsError}</Alert>}
 
       <div className="ym27-split ym27-section-gap">
         <form className="ym27-info-card" onSubmit={(event) => { event.preventDefault(); requestConfirmation(); }}>
           <h2>Payout amount</h2>
-          <p className="ym27-cell-meta">Available to request now: {formatLKR(remainingRequestable)}</p>
+          <p className="ym27-cell-meta">Available to request now: {wallet ? formatLKR(remainingRequestable) : '—'}</p>
           <div className="ym27-amount-row">
             <InputField
               label="Amount"
@@ -150,16 +199,20 @@ export default function PayoutRequest() {
             <SelectField
               label="Simulated account"
               value={bankValue}
-              options={MOCK_BANK_ACCOUNTS.map((account) => ({ value: account.value, label: account.label }))}
+              options={bankOptions.map((account) => ({ value: account.value, label: account.label }))}
               onChange={(event) => setBankValue(event.target.value)}
             />
             <p className="ym27-cell-meta">Masked demo labels only. No account number is collected or stored.</p>
           </div>
 
+          {payoutOptions?.length === 0 && <p role="status">No simulated payout destinations are available.</p>}
+
           {formError && <div className="ym27-section-gap"><Alert type="error">{formError}</Alert></div>}
 
           <div className="ym27-form-actions">
-            <Button type="submit" disabled={remainingRequestable <= 0}>Submit simulated payout</Button>
+            <Button type="submit" disabled={!wallet || !payoutOptions?.length || payoutOptionsLoading || remainingRequestable <= 0 || submitting}>
+              {submitting ? 'Recording simulated request…' : 'Submit simulated payout'}
+            </Button>
             <Link to="/farmer/wallet/payout/history" className="ym27-inline-link">View payout history</Link>
           </div>
         </form>
@@ -169,7 +222,7 @@ export default function PayoutRequest() {
           <p className="ym27-review-amount">{previewCents !== null && withinBalance ? formatLKR(previewCents) : '—'}</p>
           <dl className="ym27-kv">
             <dt>Original available balance</dt>
-            <dd>{formatLKR(MOCK_WALLET_SUMMARY.availableBalance)}</dd>
+            <dd>{wallet ? formatLKR(wallet.summary.availableBalance) : '—'}</dd>
             <dt>Remaining before this request</dt>
             <dd>{formatLKR(remainingRequestable)}</dd>
             <dt>Remaining if recorded</dt>
@@ -186,10 +239,10 @@ export default function PayoutRequest() {
         open={confirmOpen}
         title="Record this simulated payout request?"
         description={pendingCents === null ? 'No amount is selected.' : `Record ${formatLKR(pendingCents)} to ${bank?.label ?? 'the selected demo destination'} as pending. No bank is contacted and no funds move.`}
-        simulationNote="The overview balance stays unchanged. This pending request disappears when you reload or leave the wallet."
+        simulationNote="The displayed balance stays unchanged. This temporary request may expire after inactivity or a server restart."
         confirmLabel="Record simulated request"
         onCancel={() => setConfirmOpen(false)}
-        onConfirm={confirmRequest}
+        onConfirm={() => { void confirmRequest(); }}
       />
       <Toast open={toastOpen} message="Simulated payout request recorded as pending. No funds were transferred." onClose={() => setToastOpen(false)} />
     </div>
