@@ -20,7 +20,7 @@ const suppliers = [
 ];
 
 const samples = [
-  { id: 'a12b0000-0000-4000-8000-000000000248', displayId: 'YM-0248', cropName: 'Fresh tomatoes', pricePerKgCents: '28000', availableKg: '2400.000', grade: 'Grade A', supplier: suppliers[0], imageUrl: cropIllustration('#ef654e', '#b82e26', 'tomatoes'), description: 'Firm, vine-ripened tomatoes · Sorted for bulk supply' },
+  { id: 'a12b0000-0000-4000-8000-000000000248', displayId: 'YM-0248', cropName: 'Fresh tomatoes', pricePerKgCents: '28000', availableKg: '2400.000', grade: 'Grade A', supplier: suppliers[0], imageUrl: cropIllustration('#ef654e', '#b82e26', 'tomatoes'), description: 'Firm, vine-ripened tomatoes · Sorted for bulk supply', harvestStart: '2026-11-08T00:00:00.000Z', harvestEnd: '2026-11-15T00:00:00.000Z' },
   { id: 'a12b0000-0000-4000-8000-000000000249', displayId: 'YM-0249', cropName: 'Fresh tomatoes', pricePerKgCents: '25000', availableKg: '3200.000', grade: 'Grade B', supplier: suppliers[1], imageUrl: cropIllustration('#f07b35', '#c64b27', 'tomatoes'), description: 'Fresh tomatoes · Sorted for bulk supply' },
   { id: 'a12b0000-0000-4000-8000-000000000250', displayId: 'YM-0250', cropName: 'Fresh tomatoes', pricePerKgCents: '29500', availableKg: '1800.000', grade: 'Grade A', supplier: suppliers[2], imageUrl: null, description: 'Fresh tomatoes · Available for bulk supply' },
 ].map((item, index) => ({
@@ -34,8 +34,8 @@ const samples = [
   pricePerKgCents: item.pricePerKgCents,
   pricePerKgLkr: `${BigInt(item.pricePerKgCents) / 100n}.${String(BigInt(item.pricePerKgCents) % 100n).padStart(2, '0')}`,
   availableKg: item.availableKg,
-  harvestStart: dayOffset(index + 1),
-  harvestEnd: dayOffset(index + 8),
+  harvestStart: item.harvestStart || dayOffset(index + 1),
+  harvestEnd: item.harvestEnd || dayOffset(index + 8),
   district: item.supplier.district,
   imageUrl: item.imageUrl,
   updatedAt: new Date().toISOString(),
@@ -44,4 +44,107 @@ const samples = [
 
 export function getSampleListing(id) {
   return samples.find((item) => item.id.toLowerCase() === id.toLowerCase()) || null;
+}
+
+export function getSampleSupplierProfile(id) {
+  if (id.toLowerCase() === 'b1111111-1111-4111-8111-111111111111') {
+    const listingTomato = samples[0];
+    return {
+      supplier: {
+        id: suppliers[0].id,
+        name: suppliers[0].name,
+        businessType: null,
+        district: suppliers[0].district,
+        country: 'Sri Lanka',
+        tagline: null,
+        description: null,
+        verified: true,
+        operatingSinceYear: null,
+        memberSince: null,
+        rating: 4.8,
+        ratingCount: 84,
+      },
+      performanceSummary: {
+        completedOrders: 126,
+        fulfilmentRatePercent: 96,
+        fulfilmentLabel: '126 / 131 confirmed orders',
+        insufficientHistory: false,
+      },
+      cropsSupplied: ['Fresh tomatoes', 'Fresh carrots', 'Fresh cabbages'],
+      activeListings: [
+        {
+          listingId: listingTomato.id,
+          displayId: listingTomato.displayId,
+          cropName: listingTomato.cropName,
+          grade: 'Grade A',
+          availableKg: '2400.000',
+          district: 'Matale',
+          harvestStart: '2026-11-08T00:00:00.000Z',
+          harvestEnd: '2026-11-15T00:00:00.000Z',
+          pricePerKgCents: '28000',
+          pricePerKgLkr: '280.00',
+          imageUrl: listingTomato.imageUrl,
+        },
+        {
+          listingId: 'a12b0000-0000-4000-8000-000000000251',
+          displayId: 'YM-0251',
+          cropName: 'Fresh carrots',
+          grade: 'Grade A',
+          availableKg: '1200.000',
+          district: 'Matale',
+          harvestStart: '2026-11-09T00:00:00.000Z',
+          harvestEnd: '2026-11-16T00:00:00.000Z',
+          pricePerKgCents: '32000',
+          pricePerKgLkr: '320.00',
+          imageUrl: null,
+        },
+        {
+          listingId: 'a12b0000-0000-4000-8000-000000000252',
+          displayId: 'YM-0252',
+          cropName: 'Fresh cabbages',
+          grade: 'Grade B',
+          availableKg: '1800.000',
+          district: 'Matale',
+          harvestStart: '2026-11-10T00:00:00.000Z',
+          harvestEnd: '2026-11-18T00:00:00.000Z',
+          pricePerKgCents: '18000',
+          pricePerKgLkr: '180.00',
+          imageUrl: null,
+        },
+      ],
+      activeListingCount: 3,
+      dataSource: 'sample',
+      requestId: '',
+    };
+  }
+  if (id.toLowerCase() === 'b4444444-4444-4444-8444-444444444444') {
+    return {
+      supplier: {
+        id: 'b4444444-4444-4444-8444-444444444444',
+        name: 'New Growers Cooperative',
+        businessType: null,
+        district: 'Anuradhapura',
+        country: 'Sri Lanka',
+        tagline: null,
+        description: null,
+        verified: true,
+        operatingSinceYear: null,
+        memberSince: null,
+        rating: null,
+        ratingCount: null,
+      },
+      performanceSummary: {
+        completedOrders: null,
+        fulfilmentRatePercent: null,
+        fulfilmentLabel: null,
+        insufficientHistory: true,
+      },
+      cropsSupplied: [],
+      activeListings: [],
+      activeListingCount: 0,
+      dataSource: 'sample',
+      requestId: '',
+    };
+  }
+  return null;
 }

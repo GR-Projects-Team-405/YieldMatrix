@@ -1,5 +1,7 @@
 import pool from '../../config/db.js';
-import { DEMO_BUYER_ID, getSampleListing } from './mockData.js';
+import { DEMO_BUYER_ID, getSampleListing, getSampleSupplierProfile } from './mockData.js';
+import { findApprovedSupplier, findSupplierListings, findSupplierPerformance } from './supplierQueries.js';
+import { calculatePerformanceMetrics } from './performanceMetrics.js';
 // YM12 · MHD Muhthas · Produce & suppliers
 export async function getStatus(req, res, next) {
   try {
@@ -35,6 +37,10 @@ function centsToLkr(centsValue) {
   const whole = cents / 100n;
   const fraction = cents % 100n;
   return `${whole}.${String(fraction).padStart(2, '0')}`;
+}
+
+function centsToLkrLabel(centsValue) {
+  return centsToLkr(centsValue);
 }
 
 function categoryFor(cropName) {
@@ -150,6 +156,104 @@ export async function getProduceDetails(req, res, next) {
     return res.json({ listing, supplier, dataSource: 'database', requestId: req.requestId });
   } catch (error) {
     if (isDevelopment() && isConnectionUnavailable(error)) return sendSampleListing(req, res);
+    return next(error);
+  }
+}
+
+export async function getSupplierProfile(req, res, next) {
+  if (!UUID_PATTERN.test(req.params.supplierId)) {
+    return res.status(400).json({ error: 'Invalid supplier ID.', requestId: req.requestId });
+  }
+
+  if (!process.env.DATABASE_URL && isDevelopment()) {
+    if (req.user.id !== DEMO_BUYER_ID) {
+      return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
+    }
+    const found = getSampleSupplierProfile(req.params.supplierId);
+    if (!found) {
+      return res.status(404).json({ error: 'Supplier profile not found or supplier is not approved.', requestId: req.requestId });
+    }
+    found.requestId = req.requestId;
+    return res.json(found);
+  }
+
+  try {
+    const account = await pool.query(
+      'SELECT approval_status FROM users WHERE id = $1 AND role = $2',
+      [req.user.id, 'buyer'],
+    );
+    if (account.rows[0]?.approval_status !== 'approved') {
+      return res.status(403).json({ error: 'Buyer account is not approved for trading.', requestId: req.requestId });
+    }
+
+    const supplier = await findApprovedSupplier(req.params.supplierId);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier profile not found or supplier is not approved.', requestId: req.requestId });
+    }
+
+    const [listingRows, performanceRow] = await Promise.all([
+      findSupplierListings(req.params.supplierId),
+      findSupplierPerformance(req.params.supplierId),
+    ]);
+
+    const activeListings = listingRows.map((row) => {
+      const listingId = String(row.listing_id);
+      const pricePerKgCents = String(row.price_per_kg_cents);
+      return {
+        listingId,
+        displayId: `YM-${listingId.replaceAll('-', '').slice(-4).toUpperCase()}`,
+        cropName: `Fresh ${String(row.crop_name).trim().toLowerCase()}`,
+        grade: row.grade_name,
+        availableKg: String(row.available_kg),
+        district: row.district,
+        harvestStart: row.harvest_start,
+        harvestEnd: row.harvest_end,
+        pricePerKgCents,
+        pricePerKgLkr: centsToLkr(pricePerKgCents),
+        imageUrl: null,
+      };
+    });
+
+    const cropsSupplied = [...new Set(activeListings.map((listing) => listing.cropName))];
+    const performance = calculatePerformanceMetrics(
+      performanceRow.completed_orders,
+      performanceRow.confirmed_orders,
+    );
+
+    return res.json({
+      supplier: {
+        id: supplier.supplier_id,
+        name: supplier.supplier_name,
+        businessType: null,
+        district: supplier.district,
+        country: 'Sri Lanka',
+        tagline: null,
+        description: null,
+        verified: false,
+        operatingSinceYear: null,
+        memberSince: supplier.member_since ? new Date(supplier.member_since).toISOString() : null,
+        rating: null,
+        ratingCount: null,
+      },
+      performanceSummary: performance,
+      cropsSupplied,
+      activeListings,
+      activeListingCount: activeListings.length,
+      dataSource: 'database',
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    if (isDevelopment() && isConnectionUnavailable(error)) {
+      if (req.user.id !== DEMO_BUYER_ID) {
+        return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
+      }
+      const found = getSampleSupplierProfile(req.params.supplierId);
+      if (!found) {
+        return res.status(404).json({ error: 'Supplier profile not found or supplier is not approved.', requestId: req.requestId });
+      }
+      found.requestId = req.requestId;
+      return res.json(found);
+    }
     return next(error);
   }
 }

@@ -40,7 +40,7 @@ export function ProduceDetailsPage({ listingId }: { listingId: string }) {
     <nav className="ym12-breadcrumb" aria-label="Breadcrumb"><ol>
       <li><span>Browse produce</span></li><li aria-hidden="true">/</li><li><span>{listing.category}</span></li><li aria-hidden="true">/</li><li aria-current="page">{listing.cropName}</li>
     </ol></nav>
-    <header className="ym12-heading-row"><div><h2>Produce details</h2><p>Know your harvest. Source with confidence.</p></div>
+    <header className="ym12-heading-row"><div><h1>Produce details</h1><p>Know your harvest. Source with confidence.</p></div>
       <p className="ym12-listing-meta">Listing {listing.displayId} <span aria-hidden="true">·</span> {data.dataSource === 'sample' ? 'Updated today' : formatUpdatedLabel(listing.updatedAt)}</p>
     </header>
     {data.dataSource === 'sample' && <Alert type="info">Sample listing data for development. Supplier ratings and product details are illustrative.</Alert>}
