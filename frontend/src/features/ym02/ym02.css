@@ -93,6 +93,12 @@
   display: flex;
   justify-content: flex-end;
 }
+.ym02-form .ym-status {
+  justify-self: start;
+}
+.ym02-link--center {
+  text-align: center;
+}
 
 /* Narrow screens: brand panel becomes a short banner on top */
 @media (max-width: 900px) {
