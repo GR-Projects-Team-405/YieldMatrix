@@ -1,5 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import api from '../../services/api';
 import { useAuth, type Role } from '../../context/AuthContext';
 import { ContentCard } from '../../components/ContentCard';
 import { InputField } from '../../components/InputField';
@@ -8,6 +10,12 @@ import { Button } from '../../components/Button';
 import { Alert } from '../../components/Alert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { StatusBadge } from '../../components/StatusBadge';
+import type {
+  UserProfile,
+  GetProfileResponse,
+  UpdateProfilePayload,
+  UpdateProfileResponse,
+} from './types';
 import {
   ArrowLeft,
   Save,
@@ -15,8 +23,7 @@ import {
   ShieldCheck,
   Fingerprint,
   Sparkles,
-  Clock,
-  Info,
+  RotateCcw,
 } from 'lucide-react';
 import './profile.css';
 
@@ -65,8 +72,8 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 
 /**
- * Validates Sri Lankan phone numbers:
- * Standard local format: 10 digits starting with 0 (e.g., 0712345678, 0112345678)
+ * Validates Sri Lankan telephone numbers:
+ * Local format: 10 digits starting with 0 (e.g., 0712345678, 0112345678)
  * International format: +94 followed by 9 digits (e.g., +94712345678)
  */
 function isValidSriLankanPhone(phone: string): boolean {
@@ -74,43 +81,217 @@ function isValidSriLankanPhone(phone: string): boolean {
   return /^(?:0[1-9]\d{8}|\+94[1-9]\d{8})$/.test(sanitized);
 }
 
-interface ExtendedUserFields {
-  email?: string | null;
-  phone?: string | null;
-  district?: string | null;
-  approval_status?: string | null;
+interface FormFieldErrors {
+  name?: string;
+  phone?: string;
+  district?: string;
+}
+
+interface FetchError {
+  status?: number;
+  message: string;
 }
 
 export default function EditProfile() {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  // Safely extract potential profile fields from user object
-  const profile = (user as unknown as ExtendedUserFields) || {};
+  // Loaded database profile
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<FetchError | null>(null);
 
-  // Form field states prepopulated strictly with available information
-  const [name, setName] = useState<string>(user?.name || '');
-  const [phone, setPhone] = useState<string>(profile.phone || '');
-  const [district, setDistrict] = useState<string>(profile.district || '');
+  // Baseline database values used for unsaved changes comparison
+  const [initialData, setInitialData] = useState<{
+    name: string;
+    phone: string;
+    district: string;
+  } | null>(null);
 
-  // Form validation errors
-  const [errors, setErrors] = useState<{
-    name?: string;
-    phone?: string;
-  }>({});
+  // Form field states
+  const [name, setName] = useState<string>('');
+  const [phone, setPhone] = useState<string>('');
+  const [district, setDistrict] = useState<string>('');
 
-  // Feedback banner state
-  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+  // Submission & validation state
+  const [saving, setSaving] = useState<boolean>(false);
+  const [errors, setErrors] = useState<FormFieldErrors>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Unsaved changes confirmation dialog state
+  // Unsaved changes modal state
   const [showCancelDialog, setShowCancelDialog] = useState<boolean>(false);
 
-  // Authentication loading state
-  if (loading) {
+  // Fetch live profile details on mount
+  const fetchProfile = useCallback(async () => {
+    setLoadingProfile(true);
+    setLoadError(null);
+    try {
+      const { data } = await api.get<GetProfileResponse>('/ym32/profile');
+      const p = data.profile;
+      setProfile(p);
+      const loadedName = p.name || '';
+      const loadedPhone = p.phone || '';
+      const loadedDistrict = p.district || '';
+
+      setName(loadedName);
+      setPhone(loadedPhone);
+      setDistrict(loadedDistrict);
+
+      setInitialData({
+        name: loadedName,
+        phone: loadedPhone,
+        district: loadedDistrict,
+      });
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        if (status === 401) {
+          setLoadError({
+            status,
+            message: 'Your authentication session has expired. Please sign in again.',
+          });
+        } else if (status === 403) {
+          setLoadError({
+            status,
+            message: 'Access forbidden. You do not have permission to edit this profile.',
+          });
+        } else if (status === 404) {
+          setLoadError({
+            status,
+            message: 'User profile record was not found in the database.',
+          });
+        } else {
+          const serverError = err.response?.data?.error;
+          setLoadError({
+            status,
+            message:
+              serverError ||
+              'Unable to load profile from the server. Check that the backend is running, then try again.',
+          });
+        }
+      } else {
+        setLoadError({
+          message: 'An unexpected error occurred while loading profile data.',
+        });
+      }
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user, fetchProfile]);
+
+  // Determine whether any field has been modified compared to loaded database values
+  const isDirty = initialData
+    ? name.trim() !== initialData.name.trim() ||
+      phone.trim() !== initialData.phone.trim() ||
+      district !== initialData.district
+    : false;
+
+  // Handle Cancel action with unsaved changes confirmation
+  const handleCancel = () => {
+    const targetRole = profile?.role || user?.role;
+    if (isDirty) {
+      setShowCancelDialog(true);
+    } else {
+      navigate(`/${targetRole}/profile`);
+    }
+  };
+
+  const handleConfirmDiscard = () => {
+    setShowCancelDialog(false);
+    const targetRole = profile?.role || user?.role;
+    navigate(`/${targetRole}/profile`);
+  };
+
+  // Form submission: Validate and save via PUT /api/ym32/profile
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (saving) return; // Prevent duplicate submissions
+
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
+    const newErrors: FormFieldErrors = {};
+
+    // 1. Client-side Name validation
+    if (!trimmedName) {
+      newErrors.name = 'Full name is required and cannot be empty.';
+    }
+
+    // 2. Client-side Phone validation
+    if (trimmedPhone && !isValidSriLankanPhone(trimmedPhone)) {
+      newErrors.phone =
+        'Please enter a valid Sri Lankan phone number (e.g. 07XXXXXXXX or +947XXXXXXXX).';
+    }
+
+    // 3. Client-side District validation
+    if (district && !SRI_LANKA_DISTRICTS.includes(district)) {
+      newErrors.district = 'Please select a valid Sri Lankan district.';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setSubmitError(null);
+      return;
+    }
+
+    setErrors({});
+    setSubmitError(null);
+    setSaving(true);
+
+    const payload: UpdateProfilePayload = {
+      name: trimmedName,
+      phone: trimmedPhone ? trimmedPhone : null,
+      district: district ? district : null,
+    };
+
+    try {
+      const { data } = await api.put<UpdateProfileResponse>('/ym32/profile', payload);
+      if (data?.profile) {
+        // Clear dirty state so confirmation modal will not trigger upon navigation
+        setInitialData({
+          name: data.profile.name,
+          phone: data.profile.phone || '',
+          district: data.profile.district || '',
+        });
+        // Navigate back to My Profile page which re-fetches and displays updated DB records
+        navigate(`/${data.profile.role}/profile`, { replace: true });
+      }
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        if (status === 422 && err.response?.data?.fields) {
+          setErrors(err.response.data.fields);
+          setSubmitError(err.response.data.error || 'Please correct the validation errors below.');
+        } else if (status === 401) {
+          setSubmitError('Authentication session expired. Please sign in again.');
+        } else if (status === 403) {
+          setSubmitError('Access forbidden. You do not have permission to update this profile.');
+        } else if (status === 404) {
+          setSubmitError('User record not found in the database.');
+        } else {
+          setSubmitError(
+            err.response?.data?.error || 'Failed to save profile changes. Please try again.'
+          );
+        }
+      } else {
+        setSubmitError('An unexpected error occurred while saving profile changes.');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Auth Loading state
+  if (authLoading) {
     return (
       <div className="ym32-profile" role="status" aria-busy="true">
         <ContentCard title="Loading Profile" subtitle="Verifying your YieldMatrix session…">
-          <p className="loading-state">Checking profile records, please wait…</p>
+          <p className="loading-state">Checking session authentication, please wait…</p>
         </ContentCard>
       </div>
     );
@@ -122,7 +303,7 @@ export default function EditProfile() {
       <div className="ym32-profile">
         <ContentCard title="Profile Unavailable" subtitle="Authentication required">
           <Alert type="error">You are not currently signed in. Please sign in to edit your profile.</Alert>
-          <div style={{ marginTop: '16px' }}>
+          <div className="ym32-error-actions">
             <Button variant="primary" onClick={() => navigate('/login')}>
               Go to Login
             </Button>
@@ -132,63 +313,45 @@ export default function EditProfile() {
     );
   }
 
-  const roleName = ROLE_LABELS[user.role] || user.role;
-
-  // Track whether the user has modified any field from initial state
-  const isDirty =
-    name.trim() !== (user.name || '').trim() ||
-    phone.trim() !== (profile.phone || '').trim() ||
-    district !== (profile.district || '');
-
-  // Handle Cancel action with unsaved changes check
-  const handleCancel = () => {
-    if (isDirty) {
-      setShowCancelDialog(true);
-    } else {
-      navigate(`/${user.role}/profile`);
-    }
-  };
-
-  const handleConfirmDiscard = () => {
-    setShowCancelDialog(false);
-    navigate(`/${user.role}/profile`);
-  };
-
-  // Handle Form Submission and Validation
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const trimmedName = name.trim();
-    const trimmedPhone = phone.trim();
-
-    const newErrors: { name?: string; phone?: string } = {};
-
-    // Validate Name: Required and non-empty
-    if (!trimmedName) {
-      newErrors.name = 'Full name cannot be empty.';
-    }
-
-    // Validate Phone: Optional, but if provided must follow Sri Lankan format
-    if (trimmedPhone && !isValidSriLankanPhone(trimmedPhone)) {
-      newErrors.phone =
-        'Please enter a valid Sri Lankan phone number (e.g. 07XXXXXXXX or +947XXXXXXXX).';
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      setFeedbackNotice(null);
-      return;
-    }
-
-    // Clear validation errors and preserve entered form data
-    setErrors({});
-    setName(trimmedName);
-    setPhone(trimmedPhone);
-
-    // Transparent status message indicating backend persistence is pending
-    setFeedbackNotice(
-      'Profile information validated successfully. Backend persistence API is not yet connected; entered values remain in the form but cannot be saved to the database at this time.'
+  // Profile data fetch loading state
+  if (loadingProfile) {
+    return (
+      <div className="ym32-profile" role="status" aria-busy="true">
+        <ContentCard title="Loading Profile" subtitle="Retrieving current profile details…">
+          <p className="loading-state">Loading profile information, please wait…</p>
+        </ContentCard>
+      </div>
     );
-  };
+  }
+
+  // Load error state with retry (no hardcoded fallback)
+  if (loadError || !profile) {
+    return (
+      <div className="ym32-profile">
+        <ContentCard
+          title="Unable to Load Profile"
+          subtitle="There was an issue fetching your profile from the database"
+        >
+          <Alert type="error">{loadError?.message || 'Failed to retrieve profile record.'}</Alert>
+          <div className="ym32-error-actions">
+            <Button variant="primary" onClick={fetchProfile} aria-label="Retry loading profile">
+              <RotateCcw size={16} aria-hidden="true" />
+              Retry
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/${user.role}/profile`)}
+              aria-label="Back to My Profile"
+            >
+              Back to Profile
+            </Button>
+          </div>
+        </ContentCard>
+      </div>
+    );
+  }
+
+  const roleName = ROLE_LABELS[profile.role] || profile.role;
 
   return (
     <div className="ym32-profile">
@@ -210,15 +373,15 @@ export default function EditProfile() {
           </div>
         </div>
 
-        <StatusBadge status={user.role} />
+        <StatusBadge status={profile.role} />
       </ContentCard>
 
       {/* Profile Edit Form */}
       <form onSubmit={handleSubmit} className="ym32-form" noValidate>
-        {/* Feedback Alert */}
-        {feedbackNotice && (
-          <Alert type="info">
-            {feedbackNotice}
+        {/* Error Alert */}
+        {submitError && (
+          <Alert type="error">
+            {submitError}
           </Alert>
         )}
 
@@ -234,6 +397,7 @@ export default function EditProfile() {
                 label="Full Name *"
                 id="profile-name"
                 value={name}
+                disabled={saving}
                 onChange={(e) => {
                   setName(e.target.value);
                   if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
@@ -253,7 +417,7 @@ export default function EditProfile() {
                 value={profile.email || ''}
                 readOnly
                 disabled
-                placeholder={profile.email ? undefined : 'Unavailable (Pending backend sync)'}
+                placeholder={profile.email ? undefined : 'Not provided'}
               />
               <span className="ym32-input-hint">
                 <Lock size={12} aria-hidden="true" />
@@ -268,6 +432,7 @@ export default function EditProfile() {
                 id="profile-phone"
                 type="tel"
                 value={phone}
+                disabled={saving}
                 onChange={(e) => {
                   setPhone(e.target.value);
                   if (errors.phone) setErrors((prev) => ({ ...prev, phone: undefined }));
@@ -285,7 +450,12 @@ export default function EditProfile() {
                 id="profile-district"
                 options={DISTRICT_OPTIONS}
                 value={district}
-                onChange={(e) => setDistrict(e.target.value)}
+                disabled={saving}
+                onChange={(e) => {
+                  setDistrict(e.target.value);
+                  if (errors.district) setErrors((prev) => ({ ...prev, district: undefined }));
+                }}
+                error={errors.district}
               />
               <span className="ym32-input-hint">Your primary regional agricultural district.</span>
             </div>
@@ -318,14 +488,7 @@ export default function EditProfile() {
                 Account Status
               </span>
               <div>
-                {profile.approval_status ? (
-                  <StatusBadge status={profile.approval_status} />
-                ) : (
-                  <span className="ym32-unavailable">
-                    <Clock size={13} aria-hidden="true" />
-                    Unavailable (Pending verification)
-                  </span>
-                )}
+                <StatusBadge status={profile.approval_status} />
               </div>
             </div>
 
@@ -334,7 +497,7 @@ export default function EditProfile() {
                 <Fingerprint size={14} aria-hidden="true" />
                 System User ID
               </span>
-              <span className="ym32-field-value ym32-mono">{user.id}</span>
+              <span className="ym32-field-value ym32-mono">{profile.id}</span>
             </div>
           </div>
         </ContentCard>
@@ -344,6 +507,7 @@ export default function EditProfile() {
           <Button
             variant="outline"
             type="button"
+            disabled={saving}
             onClick={handleCancel}
             aria-label="Cancel editing"
           >
@@ -353,10 +517,11 @@ export default function EditProfile() {
           <Button
             variant="primary"
             type="submit"
+            disabled={saving}
             aria-label="Save profile changes"
           >
             <Save size={16} aria-hidden="true" />
-            Save Changes
+            {saving ? 'Saving changes…' : 'Save Changes'}
           </Button>
         </div>
       </form>

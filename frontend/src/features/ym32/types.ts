@@ -20,3 +20,17 @@ export interface GetProfileResponse {
   profile: UserProfile;
   requestId: string;
 }
+
+/** Request payload for PUT /api/ym32/profile */
+export interface UpdateProfilePayload {
+  name: string;
+  phone: string | null;
+  district: string | null;
+}
+
+/** Response payload for PUT /api/ym32/profile */
+export interface UpdateProfileResponse {
+  profile: UserProfile;
+  requestId: string;
+}
+
