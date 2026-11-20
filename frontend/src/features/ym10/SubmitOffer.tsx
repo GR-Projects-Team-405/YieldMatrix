@@ -1,5 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import api from '../../services/api';
 import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -7,8 +8,8 @@ import { ContentCard } from '../../components/ContentCard';
 import { EmptyState } from '../../components/EmptyState';
 import { InputField } from '../../components/InputField';
 import { SelectField } from '../../components/SelectField';
-import { addSubmittedOffer, buyerRequests, harvestBatches } from './sampleData';
-import { formatLkr } from './utils';
+import type { BuyerRequestDetailsResponse, SubmitOfferResponse } from './types';
+import { formatLkr, formatPlainDate, getApiErrorMessage, isNotFoundError } from './utils';
 
 type OfferErrors = {
   batchId?: string;
@@ -17,28 +18,12 @@ type OfferErrors = {
   availableFrom?: string;
 };
 
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(`${date}T00:00:00`));
-
 export default function SubmitOffer() {
   const { requestId } = useParams<{ requestId: string }>();
   const navigate = useNavigate();
-  const request = buyerRequests.find((item) => item.id === requestId);
-  const matchingBatches = useMemo(
-    () =>
-      request
-        ? harvestBatches.filter(
-            (batch) =>
-              batch.produce.trim().toLowerCase() === request.produce.trim().toLowerCase() &&
-              batch.grade.trim().toLowerCase() === request.grade.trim().toLowerCase(),
-          )
-        : [],
-    [request],
-  );
+  const [data, setData] = useState<BuyerRequestDetailsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [batchId, setBatchId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
@@ -47,21 +32,122 @@ export default function SubmitOffer() {
   const [errors, setErrors] = useState<OfferErrors>({});
   const [submitError, setSubmitError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const submissionInProgress = useRef(false);
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
+
+  const loadRequest = useCallback(async () => {
+    if (!requestId) {
+      setLoadError(new Error('Missing request ID.'));
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const response = await api.get<BuyerRequestDetailsResponse>(
+        `/ym10/buyer-requests/${requestId}`,
+      );
+      setData(response.data);
+    } catch (requestError) {
+      setLoadError(requestError);
+    } finally {
+      setLoading(false);
+    }
+  }, [requestId]);
+
+  useEffect(() => {
+    void loadRequest();
+  }, [loadRequest]);
+
+  const matchingBatches = data?.matchingBatches ?? [];
   const selectedBatch = matchingBatches.find((batch) => batch.id === batchId);
   const quantityValue = Number(quantity) || 0;
   const priceValue = Number(price) || 0;
   const totalValue = quantityValue * priceValue;
-  const priceOutsideRange =
-    request !== undefined &&
+  const priceAboveMaximum =
+    data?.request.maxPricePerKgCents !== null &&
+    data?.request.maxPricePerKgCents !== undefined &&
     priceValue > 0 &&
-    (priceValue < request.minimumPrice || priceValue > request.maximumPrice);
+    priceValue * 100 > data.request.maxPricePerKgCents;
+  const maximumPricePerKgCents = data?.request.maxPricePerKgCents;
+  const isClosed = data ? Date.now() >= Date.parse(data.request.expiresAt) : false;
+  const hasPendingOffer = data?.myOffer?.status === 'pending';
 
   const clearFieldError = (field: keyof OfferErrors) => {
     setErrors((current) => ({ ...current, [field]: undefined }));
     setSubmitError('');
   };
 
-  if (!request) {
+  const validate = (): boolean => {
+    if (!data) return false;
+    const nextErrors: OfferErrors = {};
+    if (!batchId) {
+      nextErrors.batchId = 'Select a harvest batch.';
+    }
+    if (!quantity || !Number.isFinite(quantityValue) || quantityValue <= 0) {
+      nextErrors.quantity = 'Enter a quantity greater than 0.';
+    } else if (!/^(?:\d+|\d*\.\d{1,3})$/.test(quantity)) {
+      nextErrors.quantity = 'Use no more than 3 decimal places.';
+    } else if (selectedBatch && quantityValue > selectedBatch.availableKg) {
+      nextErrors.quantity = `Quantity cannot exceed ${selectedBatch.availableKg} kg available in this batch.`;
+    }
+    if (!price || !Number.isFinite(priceValue) || priceValue <= 0) {
+      nextErrors.price = 'Enter a price greater than 0.';
+    } else if (!Number.isInteger(priceValue)) {
+      nextErrors.price = 'Enter a whole LKR amount.';
+    }
+    if (!availableFrom) {
+      nextErrors.availableFrom = 'Choose an available-from date.';
+    } else if (availableFrom > data.request.deliveryUntil) {
+      nextErrors.availableFrom = `Choose a date on or before ${formatPlainDate(data.request.deliveryUntil)}.`;
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitError('');
+    if (validate()) setConfirmOpen(true);
+  };
+
+  const confirmSubmit = async () => {
+    if (!data || submissionInProgress.current) return;
+    submissionInProgress.current = true;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const body = {
+        batchId,
+        quantityKg: quantityValue,
+        pricePerKgLkr: priceValue,
+        ...(availableFrom ? { availableFrom } : {}),
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+      };
+      await api.post<SubmitOfferResponse>(
+        `/ym10/buyer-requests/${data.request.id}/offers`,
+        body,
+        { headers: { 'Idempotency-Key': idempotencyKey } },
+      );
+      setConfirmOpen(false);
+      navigate('/farmer/offers', { state: { toastMessage: 'Offer submitted' } });
+    } catch (requestError) {
+      setConfirmOpen(false);
+      setSubmitError(getApiErrorMessage(requestError, 'We could not submit your offer. Please try again.'));
+    } finally {
+      submissionInProgress.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const offerSummary = `${quantityValue || 0} kg at ${formatLkr((priceValue || 0) * 100)} per kg, total ${formatLkr(totalValue * 100)}.${notes.trim() ? ` Note: ${notes.trim()}` : ''}`;
+
+  if (loading) {
+    return <div className="ym10-page"><p className="ym10-placeholder">Loading...</p></div>;
+  }
+
+  if (isNotFoundError(loadError)) {
     return (
       <div className="ym10-page">
         <EmptyState
@@ -77,75 +163,37 @@ export default function SubmitOffer() {
     );
   }
 
-  const validate = (): boolean => {
-    const nextErrors: OfferErrors = {};
-    if (!batchId) {
-      nextErrors.batchId = 'Select a harvest batch.';
-    }
-    if (!quantity || !Number.isFinite(quantityValue) || quantityValue <= 0) {
-      nextErrors.quantity = 'Enter a quantity greater than 0.';
-    } else if (!/^(?:\d+|\d*\.\d{1,3})$/.test(quantity)) {
-      nextErrors.quantity = 'Use no more than 3 decimal places.';
-    } else if (selectedBatch && quantityValue > selectedBatch.availableQuantityKg) {
-      nextErrors.quantity = `Quantity cannot exceed ${selectedBatch.availableQuantityKg} kg available in this batch.`;
-    }
-    if (!price || !Number.isFinite(priceValue) || priceValue <= 0) {
-      nextErrors.price = 'Enter a price greater than 0.';
-    } else if (!Number.isInteger(priceValue)) {
-      nextErrors.price = 'Enter a whole LKR amount.';
-    }
-    if (!availableFrom) {
-      nextErrors.availableFrom = 'Choose an available-from date.';
-    } else if (availableFrom > request.deliveryDate) {
-      nextErrors.availableFrom = `Choose a date on or before ${formatDate(request.deliveryDate)}.`;
-    }
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
+  if (loadError || !data) {
+    return (
+      <div className="ym10-page">
+        <Alert type="error">
+          {getApiErrorMessage(loadError, 'Could not load this buyer request.')}{' '}
+          <Button variant="outline" onClick={() => void loadRequest()}>
+            Retry
+          </Button>
+        </Alert>
+      </div>
+    );
+  }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubmitError('');
-    if (validate()) setConfirmOpen(true);
-  };
-
-  const confirmSubmit = () => {
-    try {
-      setConfirmOpen(false);
-      addSubmittedOffer({
-        requestId: request.id,
-        buyerName: request.buyerName,
-        produce: request.produce,
-        grade: request.grade,
-        quantityKg: quantityValue,
-        pricePerKg: priceValue,
-        notes: notes.trim() || undefined,
-      });
-      navigate('/farmer/offers', { state: { toastMessage: 'Offer submitted' } });
-    } catch {
-      setConfirmOpen(false);
-      setSubmitError('We could not submit your offer. Please try again.');
-    }
-  };
-
-  const offerSummary = `${quantityValue || 0} kg at ${formatLkr(priceValue || 0)} per kg, total ${formatLkr(totalValue)}.${notes.trim() ? ` Note: ${notes.trim()}` : ''}`;
+  const request = data.request;
+  const offerSummaryText = `${request.requestCode}: ${offerSummary}${availableFrom ? ` Available from ${formatPlainDate(availableFrom)}.` : ''}`;
 
   return (
     <div className="ym10-page ym10-offer-layout">
       <form className="ym10-offer-form" onSubmit={handleSubmit} noValidate>
         {submitError && <Alert type="error">{submitError}</Alert>}
-        {request.status.toLowerCase() === 'closed' && (
-          <Alert type="warning">This request is closed and is no longer accepting offers.</Alert>
+        {isClosed && <Alert type="warning">This request is closed and is no longer accepting offers.</Alert>}
+        {!request.hasMatchingStock && (
+          <Alert type="warning">You have no matching stock for this request.</Alert>
         )}
-        {matchingBatches.length === 0 && (
-          <Alert type="warning">You have no matching stock for this request</Alert>
-        )}
+        {hasPendingOffer && <Alert>You already have a pending offer for this request.</Alert>}
         <ContentCard title="Submit offer">
-          {priceOutsideRange && (
+          {priceAboveMaximum && maximumPricePerKgCents !== null && maximumPricePerKgCents !== undefined && (
             <div className="ym10-price-warning">
               <Alert type="warning">
-                Your price is outside the buyer&apos;s range of {formatLkr(request.minimumPrice)}-
-                {request.maximumPrice.toLocaleString('en-US')} per kg.
+                Your price is above the buyer&apos;s maximum of{' '}
+                {formatLkr(maximumPricePerKgCents)} per kg.
               </Alert>
             </div>
           )}
@@ -163,7 +211,7 @@ export default function SubmitOffer() {
                 { value: '', label: 'Select a matching batch' },
                 ...matchingBatches.map((batch) => ({
                   value: batch.id,
-                  label: `${batch.id} · ${batch.availableQuantityKg} kg available`,
+                  label: `${batch.batchCode} · ${batch.availableKg} kg available · harvested ${formatPlainDate(batch.harvestDate)}`,
                 })),
               ]}
             />
@@ -171,7 +219,7 @@ export default function SubmitOffer() {
               label="Quantity offered"
               type="number"
               min="0"
-              max={selectedBatch?.availableQuantityKg}
+              max={selectedBatch?.availableKg}
               step="0.001"
               unit="kg"
               value={quantity}
@@ -197,7 +245,7 @@ export default function SubmitOffer() {
             <InputField
               label="Available from"
               type="date"
-              max={request.deliveryDate}
+              max={request.deliveryUntil}
               value={availableFrom}
               error={errors.availableFrom}
               onChange={(event) => {
@@ -218,6 +266,7 @@ export default function SubmitOffer() {
           <div className="ym10-detail-actions">
             <Button
               variant="outline"
+              disabled={submitting}
               onClick={() => navigate(`/farmer/buyer-requests/${request.id}`)}
             >
               Cancel
@@ -225,7 +274,7 @@ export default function SubmitOffer() {
             <Button
               variant="primary"
               type="submit"
-              disabled={request.status.toLowerCase() === 'closed' || matchingBatches.length === 0}
+              disabled={submitting || isClosed || !request.hasMatchingStock || matchingBatches.length === 0 || hasPendingOffer}
             >
               Submit offer
             </Button>
@@ -235,21 +284,22 @@ export default function SubmitOffer() {
 
       <ContentCard title="Offer summary" className="ym10-offer-summary">
         <dl className="ym10-summary-list">
-          <div><dt>Request</dt><dd>{request.id} · {request.buyerName}</dd></div>
-          <div><dt>Produce</dt><dd>{request.produce} · Grade {request.grade}</dd></div>
+          <div><dt>Request</dt><dd>{request.requestCode} · {request.buyerName}</dd></div>
+          <div><dt>Produce</dt><dd>{request.cropName} · {request.gradeName}</dd></div>
           <div><dt>Quantity offered</dt><dd>{quantityValue > 0 ? `${quantityValue} kg` : '—'}</dd></div>
-          <div><dt>Price per kg</dt><dd>{priceValue > 0 ? `${formatLkr(priceValue)} per kg` : '—'}</dd></div>
-          <div><dt>Total offer value</dt><dd className="ym10-value-range">{formatLkr(totalValue)}</dd></div>
+          <div><dt>Price per kg</dt><dd>{priceValue > 0 ? `${formatLkr(priceValue * 100)} per kg` : '—'}</dd></div>
+          <div><dt>Total offer value</dt><dd className="ym10-value-range">{formatLkr(totalValue * 100)}</dd></div>
         </dl>
       </ContentCard>
 
       <ConfirmDialog
         open={confirmOpen}
         title="Submit this offer?"
-        description={`${request.id}: ${offerSummary}${availableFrom ? ` Available from ${formatDate(availableFrom)}.` : ''}`}
+        description={offerSummaryText}
         onCancel={() => setConfirmOpen(false)}
-        onConfirm={confirmSubmit}
+        onConfirm={() => void confirmSubmit()}
         confirmLabel="Submit offer"
+        busy={submitting}
       />
     </div>
   );

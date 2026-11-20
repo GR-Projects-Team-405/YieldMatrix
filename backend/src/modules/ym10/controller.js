@@ -280,7 +280,7 @@ export async function getBuyerRequest(req, res) {
     );
     const matchingBatches = batchResult.rows.map((batch) => ({
       id: batch.id,
-      batchCode: `HB-${String(batch.id).slice(0, 4).toUpperCase()}`,
+      batchCode: `HB-${String(batch.id).slice(-6).toUpperCase()}`,
       availableKg: Number(batch.available_kg),
       harvestDate: batch.actual_harvest_date,
     }));

@@ -1,38 +1,82 @@
-export type BuyerRequestStatus = 'Open' | 'Closing soon' | 'Offer sent' | 'Matching' | 'Closed';
+export type OfferStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
 
 export interface BuyerRequest {
   id: string;
+  requestCode: string;
   buyerName: string;
+  cropName: string;
+  gradeName: string;
   district: string;
-  produce: string;
-  grade: string;
   quantityKg: number;
-  deliveryDate: string;
-  minimumPrice: number;
-  maximumPrice: number;
-  status: BuyerRequestStatus;
-  notes?: string;
+  deliveryFrom: string;
+  deliveryUntil: string;
+  budgetCents: number | null;
+  maxPricePerKgCents: number | null;
+  expiresAt: string;
+  closingSoon: boolean;
+  hasMatchingStock: boolean;
+  myOfferStatus: OfferStatus | null;
+}
+
+export interface BuyerRequestDetails extends BuyerRequest {
+  destination: string | null;
+  allowPartial: boolean;
 }
 
 export interface HarvestBatch {
   id: string;
-  produce: string;
-  grade: string;
-  availableQuantityKg: number;
-  availableDate: string;
+  batchCode: string;
+  availableKg: number;
+  harvestDate: string;
 }
 
-export type OfferStatus = 'Pending' | 'Accepted' | 'Declined';
+export interface BuyerRequestsResponse {
+  summary: {
+    openRequests: number;
+    matchingRequests: number;
+    offersSubmitted: number;
+    awaitingReply: number;
+    closingSoon: number;
+  };
+  requests: BuyerRequest[];
+}
+
+export interface BuyerRequestDetailsResponse {
+  request: BuyerRequestDetails;
+  matchingBatches: HarvestBatch[];
+  myOffer: { status: OfferStatus } | null;
+}
 
 export interface Offer {
   id: string;
+  offerCode: string;
   requestId: string;
+  requestCode: string;
   buyerName: string;
-  produce: string;
-  grade: string;
+  cropName: string;
+  gradeName: string;
   quantityKg: number;
-  pricePerKg: number;
+  pricePerKgCents: number;
+  totalCents: number;
   status: OfferStatus;
-  submittedDate: string;
+  createdAt: string;
+  availableFrom?: string;
   notes?: string;
+}
+
+export interface OffersResponse {
+  summary: {
+    pending: number;
+    accepted: number;
+    rejected: number;
+    withdrawn: number;
+    expired: number;
+    totalOfferedCents: number;
+    offerCount: number;
+  };
+  offers: Offer[];
+}
+
+export interface SubmitOfferResponse {
+  offer: Offer;
 }

@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import api from '../../services/api';
+import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ContentCard } from '../../components/ContentCard';
 import { EmptyState } from '../../components/EmptyState';
@@ -9,55 +11,69 @@ import { StatCard } from '../../components/StatCard';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Table, TableRow } from '../../components/Table';
 import { Toast } from '../../components/Toast';
-import { sampleOffers, submittedOffers } from './sampleData';
-import type { OfferStatus } from './types';
-import { formatLkr } from './utils';
+import type { Offer, OffersResponse } from './types';
+import { formatColomboTimestamp, formatLkr, getApiErrorMessage } from './utils';
 
 const allFilter = 'All';
 
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(`${date}T00:00:00`));
+const statusLabel = (status: Offer['status']) => {
+  switch (status) {
+    case 'pending': return 'Pending';
+    case 'accepted': return 'Accepted';
+    case 'rejected': return 'Declined';
+    case 'withdrawn': return 'Withdrawn';
+    case 'expired': return 'Expired';
+  }
+};
 
 export default function MyOffers() {
   const location = useLocation();
   const navigate = useNavigate();
   const toastMessage = (location.state as { toastMessage?: string } | null)?.toastMessage;
-  const offers = [...submittedOffers, ...sampleOffers];
+  const [data, setData] = useState<OffersResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState(allFilter);
   const [produce, setProduce] = useState(allFilter);
 
-  const produceOptions = [
-    allFilter,
-    ...Array.from(new Set(offers.map((offer) => offer.produce))).sort(),
-  ];
-  const filteredOffers = offers.filter((offer) => {
-    const query = search.trim().toLowerCase();
-    const matchesSearch =
-      !query ||
-      [offer.id, offer.buyerName, offer.produce].some((value) =>
-        value.toLowerCase().includes(query),
-      );
-    return (
-      matchesSearch &&
-      (status === allFilter || offer.status === status) &&
-      (produce === allFilter || offer.produce === produce)
-    );
-  });
-  const countByStatus = (offerStatus: OfferStatus) =>
-    offers.filter((offer) => offer.status === offerStatus).length;
-  const totalOfferedValue = offers.reduce(
-    (total, offer) => total + offer.quantityKg * offer.pricePerKg,
-    0,
+  const loadOffers = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.get<OffersResponse>('/ym10/offers');
+      setData(response.data);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Could not load your offers.'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadOffers();
+  }, [loadOffers]);
+
+  const offers = data?.offers ?? [];
+  const produceOptions = useMemo(
+    () => [allFilter, ...Array.from(new Set(offers.map((offer) => offer.cropName))).sort()],
+    [offers],
   );
-  const showEmptyState = filteredOffers.length === 0;
-  const emptyDescription = offers.length === 0
-    ? 'You have not sent any offers yet. Browse buyer requests to get started.'
-    : 'No offers match your filters. Try changing your search or selections.';
+  const filteredOffers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return offers.filter((offer) => {
+      const matchesSearch =
+        !query ||
+        [offer.offerCode, offer.requestCode, offer.buyerName, offer.cropName].some((value) =>
+          value.toLowerCase().includes(query),
+        );
+      return (
+        matchesSearch &&
+        (status === allFilter || offer.status === status) &&
+        (produce === allFilter || offer.cropName === produce)
+      );
+    });
+  }, [offers, produce, search, status]);
 
   const renderBrowseButton = () => (
     <Button variant="primary" onClick={() => navigate('/farmer/buyer-requests')}>
@@ -72,16 +88,18 @@ export default function MyOffers() {
         {renderBrowseButton()}
       </header>
 
-      <section className="ym10-stats" aria-label="Offer summary">
-        <StatCard label="Pending" value={countByStatus('Pending')} subtext="Awaiting buyer response" />
-        <StatCard label="Accepted" value={countByStatus('Accepted')} subtext="Accepted by buyers" />
-        <StatCard label="Declined" value={countByStatus('Declined')} subtext="Declined by buyers" />
-        <StatCard
-          label="Total offered value"
-          value={formatLkr(totalOfferedValue)}
-          subtext={`${offers.length} offers submitted`}
-        />
-      </section>
+      {data && (
+        <section className="ym10-stats" aria-label="Offer summary">
+          <StatCard label="Pending" value={data.summary.pending} subtext="Awaiting buyer response" />
+          <StatCard label="Accepted" value={data.summary.accepted} subtext="Accepted by buyers" />
+          <StatCard label="Declined" value={data.summary.rejected} subtext="Declined by buyers" />
+          <StatCard
+            label="Total offered value"
+            value={formatLkr(data.summary.totalOfferedCents)}
+            subtext={`${data.summary.offerCount} ${data.summary.offerCount === 1 ? 'offer' : 'offers'} submitted`}
+          />
+        </section>
+      )}
 
       <section className="ym10-filters ym10-offer-filters" aria-label="Filter offers">
         <InputField
@@ -97,9 +115,11 @@ export default function MyOffers() {
           onChange={(event) => setStatus(event.target.value)}
           options={[
             { value: allFilter, label: 'All' },
-            { value: 'Pending', label: 'Pending' },
-            { value: 'Accepted', label: 'Accepted' },
-            { value: 'Declined', label: 'Declined' },
+            { value: 'pending', label: 'Pending' },
+            { value: 'accepted', label: 'Accepted' },
+            { value: 'rejected', label: 'Declined' },
+            { value: 'withdrawn', label: 'Withdrawn' },
+            { value: 'expired', label: 'Expired' },
           ]}
         />
         <SelectField
@@ -114,11 +134,25 @@ export default function MyOffers() {
       </section>
 
       <ContentCard title="Offers I have sent" className="ym10-request-card">
-        {showEmptyState ? (
+        {loading ? (
+          <p className="ym10-placeholder">Loading...</p>
+        ) : error ? (
+          <Alert type="error">
+            {error}{' '}
+            <Button variant="outline" onClick={() => void loadOffers()}>
+              Retry
+            </Button>
+          </Alert>
+        ) : offers.length === 0 ? (
           <EmptyState
             title="No offers yet"
-            description={emptyDescription}
+            description="You have not sent any offers yet. Browse buyer requests to get started."
             action={renderBrowseButton()}
+          />
+        ) : filteredOffers.length === 0 ? (
+          <EmptyState
+            title="No offers match your filters"
+            description="Try changing your search or selections."
           />
         ) : (
           <>
@@ -138,20 +172,20 @@ export default function MyOffers() {
               {filteredOffers.map((offer) => (
                 <TableRow key={offer.id}>
                   <td>
-                    <strong className="ym10-table-primary">{offer.id}</strong>
+                    <strong className="ym10-table-primary">{offer.offerCode}</strong>
                     <span className="ym10-table-secondary">
-                      {offer.buyerName} {offer.requestId}
+                      {offer.buyerName} · {offer.requestCode}
                     </span>
                   </td>
                   <td>
-                    <strong className="ym10-table-primary">{offer.produce}</strong>
-                    <span className="ym10-table-secondary">Grade {offer.grade}</span>
+                    <strong className="ym10-table-primary">{offer.cropName}</strong>
+                    <span className="ym10-table-secondary">{offer.gradeName}</span>
                   </td>
                   <td>{offer.quantityKg.toLocaleString('en-US')}</td>
-                  <td>{formatLkr(offer.pricePerKg)}</td>
-                  <td>{formatLkr(offer.quantityKg * offer.pricePerKg)}</td>
-                  <td><StatusBadge status={offer.status} /></td>
-                  <td>{formatDate(offer.submittedDate)}</td>
+                  <td>{formatLkr(offer.pricePerKgCents)}</td>
+                  <td>{formatLkr(offer.totalCents)}</td>
+                  <td><StatusBadge status={statusLabel(offer.status)} /></td>
+                  <td>{formatColomboTimestamp(offer.createdAt)}</td>
                   <td>
                     <Link
                       className="ym10-view-link"
@@ -164,7 +198,7 @@ export default function MyOffers() {
               ))}
             </Table>
             <p className="ym10-table-footer">
-              Showing {filteredOffers.length} of {offers.length} offers
+              Showing {filteredOffers.length} of {offers.length} {offers.length === 1 ? 'offer' : 'offers'}
             </p>
           </>
         )}

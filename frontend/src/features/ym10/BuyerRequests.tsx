@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import api from '../../services/api';
+import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ContentCard } from '../../components/ContentCard';
 import { EmptyState } from '../../components/EmptyState';
@@ -8,75 +10,92 @@ import { SelectField } from '../../components/SelectField';
 import { StatCard } from '../../components/StatCard';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Table, TableRow } from '../../components/Table';
-import { buyerRequests } from './sampleData';
-import type { BuyerRequestStatus } from './types';
+import type { BuyerRequest, BuyerRequestsResponse } from './types';
+import { formatLkr, formatPlainDate, getApiErrorMessage } from './utils';
 
 const allFilter = 'All';
 
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(`${date}T00:00:00`));
+const statusForRequest = (request: BuyerRequest) => {
+  if (request.myOfferStatus === 'pending') return 'Offer sent';
+  if (request.closingSoon) return 'Closing soon';
+  if (request.hasMatchingStock) return 'Matching';
+  return 'Open';
+};
 
-const statusClass: Record<BuyerRequestStatus, string> = {
-  Open: 'ym10-status--open',
-  'Closing soon': 'ym10-status--closing',
-  'Offer sent': 'ym10-status--sent',
-  Matching: 'ym10-status--matching',
-  Closed: 'ym10-status--closed',
+const statusClassForRequest = (status: string) => {
+  switch (status) {
+    case 'Offer sent': return 'ym10-status--sent';
+    case 'Closing soon': return 'ym10-status--closing';
+    case 'Matching': return 'ym10-status--matching';
+    default: return 'ym10-status--open';
+  }
 };
 
 export default function BuyerRequests() {
   const navigate = useNavigate();
+  const [data, setData] = useState<BuyerRequestsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [produce, setProduce] = useState(allFilter);
   const [grade, setGrade] = useState(allFilter);
   const [district, setDistrict] = useState(allFilter);
   const [deliveryDate, setDeliveryDate] = useState(allFilter);
 
+  const loadRequests = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.get<BuyerRequestsResponse>('/ym10/buyer-requests');
+      setData(response.data);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Could not load buyer requests.'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests]);
+
+  const requests = data?.requests ?? [];
   const produceOptions = useMemo(
-    () => [allFilter, ...Array.from(new Set(buyerRequests.map((request) => request.produce))).sort()],
-    [],
+    () => [allFilter, ...Array.from(new Set(requests.map((request) => request.cropName))).sort()],
+    [requests],
   );
   const gradeOptions = useMemo(
-    () => [allFilter, ...Array.from(new Set(buyerRequests.map((request) => request.grade))).sort()],
-    [],
+    () => [allFilter, ...Array.from(new Set(requests.map((request) => request.gradeName))).sort()],
+    [requests],
   );
   const districtOptions = useMemo(
-    () => [allFilter, ...Array.from(new Set(buyerRequests.map((request) => request.district))).sort()],
-    [],
+    () => [allFilter, ...Array.from(new Set(requests.map((request) => request.district))).sort()],
+    [requests],
   );
   const deliveryDateOptions = useMemo(
-    () => [allFilter, ...Array.from(new Set(buyerRequests.map((request) => request.deliveryDate))).sort()],
-    [],
+    () => [allFilter, ...Array.from(new Set(requests.map((request) => request.deliveryFrom))).sort()],
+    [requests],
   );
 
   const filteredRequests = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return buyerRequests.filter((request) => {
+    return requests.filter((request) => {
       const matchesSearch =
         !query ||
-        [
-          request.buyerName,
-          request.id,
-          request.district,
-          request.produce,
-          request.grade,
-          request.status,
-        ].some((value) => value.toLowerCase().includes(query));
+        [request.buyerName, request.cropName, request.requestCode].some((value) =>
+          value.toLowerCase().includes(query),
+        );
 
       return (
         matchesSearch &&
-        (produce === allFilter || request.produce === produce) &&
-        (grade === allFilter || request.grade === grade) &&
+        (produce === allFilter || request.cropName === produce) &&
+        (grade === allFilter || request.gradeName === grade) &&
         (district === allFilter || request.district === district) &&
-        (deliveryDate === allFilter || request.deliveryDate === deliveryDate)
+        (deliveryDate === allFilter || request.deliveryFrom === deliveryDate)
       );
     });
-  }, [deliveryDate, district, grade, produce, search]);
+  }, [deliveryDate, district, grade, produce, requests, search]);
 
   return (
     <div className="ym10-page">
@@ -89,16 +108,18 @@ export default function BuyerRequests() {
         </Button>
       </header>
 
-      <section className="ym10-stats" aria-label="Buyer request summary">
-        <StatCard label="Open requests" value="18" subtext="6 new this week" />
-        <StatCard
-          label="Matching my produce"
-          value="7"
-          subtext="Based on your active listings"
-        />
-        <StatCard label="Offers submitted" value="05" subtext="2 awaiting a buyer reply" />
-        <StatCard label="Closing soon" value="03" subtext="Within the next 48 hours" />
-      </section>
+      {data && (
+        <section className="ym10-stats" aria-label="Buyer request summary">
+          <StatCard label="Open requests" value={data.summary.openRequests} />
+          <StatCard label="Matching my produce" value={data.summary.matchingRequests} />
+          <StatCard
+            label="Offers submitted"
+            value={data.summary.offersSubmitted}
+            subtext={`${data.summary.awaitingReply} awaiting a buyer reply`}
+          />
+          <StatCard label="Closing soon" value={data.summary.closingSoon} />
+        </section>
+      )}
 
       <section className="ym10-filters" aria-label="Filter buyer requests">
         <InputField
@@ -123,7 +144,7 @@ export default function BuyerRequests() {
           onChange={(event) => setGrade(event.target.value)}
           options={gradeOptions.map((option) => ({
             value: option,
-            label: option === allFilter ? 'All grades' : `Grade ${option}`,
+            label: option === allFilter ? 'All grades' : option,
           }))}
         />
         <SelectField
@@ -141,50 +162,66 @@ export default function BuyerRequests() {
           onChange={(event) => setDeliveryDate(event.target.value)}
           options={deliveryDateOptions.map((option) => ({
             value: option,
-            label: option === allFilter ? 'Any date' : formatDate(option),
+            label: option === allFilter ? 'Any date' : formatPlainDate(option),
           }))}
         />
       </section>
 
       <ContentCard title="Requests matching you" className="ym10-request-card">
-        {filteredRequests.length ? (
+        {loading ? (
+          <p className="ym10-placeholder">Loading...</p>
+        ) : error ? (
+          <Alert type="error">
+            {error}{' '}
+            <Button variant="outline" onClick={() => void loadRequests()}>
+              Retry
+            </Button>
+          </Alert>
+        ) : filteredRequests.length ? (
           <Table
             className="ym10-request-table"
             headers={[
               'Buyer / request',
               'Produce',
               'Quantity needed (kg)',
-              'Delivery by',
-              'Price range (LKR per kg)',
+              'Delivery window',
+              'Maximum price (LKR per kg)',
               'Status',
               '',
             ]}
           >
-            {filteredRequests.map((request) => (
-              <TableRow key={request.id}>
-                <td>
-                  <strong className="ym10-table-primary">{request.buyerName}</strong>
-                  <span className="ym10-table-secondary">{request.id} · {request.district}</span>
-                </td>
-                <td>
-                  <strong className="ym10-table-primary">{request.produce}</strong>
-                  <span className="ym10-table-secondary">Grade {request.grade}</span>
-                </td>
-                <td>{request.quantityKg.toLocaleString('en-US')}</td>
-                <td>{formatDate(request.deliveryDate)}</td>
-                <td>{request.minimumPrice}–{request.maximumPrice}</td>
-                <td>
-                  <span className={statusClass[request.status]}>
-                    <StatusBadge status={request.status} />
-                  </span>
-                </td>
-                <td>
-                  <Link className="ym10-view-link" to={`/farmer/buyer-requests/${request.id}`}>
-                    View request
-                  </Link>
-                </td>
-              </TableRow>
-            ))}
+            {filteredRequests.map((request) => {
+              const status = statusForRequest(request);
+              return (
+                <TableRow key={request.id}>
+                  <td>
+                    <strong className="ym10-table-primary">{request.buyerName}</strong>
+                    <span className="ym10-table-secondary">{request.requestCode} · {request.district}</span>
+                  </td>
+                  <td>
+                    <strong className="ym10-table-primary">{request.cropName}</strong>
+                    <span className="ym10-table-secondary">{request.gradeName}</span>
+                  </td>
+                  <td>{request.quantityKg.toLocaleString('en-US')}</td>
+                  <td>{formatPlainDate(request.deliveryFrom)} – {formatPlainDate(request.deliveryUntil)}</td>
+                  <td>
+                    {request.maxPricePerKgCents === null
+                      ? 'Not specified'
+                      : `Up to ${formatLkr(request.maxPricePerKgCents)} / kg`}
+                  </td>
+                  <td>
+                    <span className={statusClassForRequest(status)}>
+                      <StatusBadge status={status} />
+                    </span>
+                  </td>
+                  <td>
+                    <Link className="ym10-view-link" to={`/farmer/buyer-requests/${request.id}`}>
+                      View request
+                    </Link>
+                  </td>
+                </TableRow>
+              );
+            })}
           </Table>
         ) : (
           <EmptyState
@@ -192,9 +229,9 @@ export default function BuyerRequests() {
             description="Try adjusting or clearing your filters to see more buyer requests."
           />
         )}
-        {filteredRequests.length > 0 && (
+        {!loading && !error && (
           <p className="ym10-table-footer">
-            Showing {filteredRequests.length} of {filteredRequests.length} matching requests
+            Showing {filteredRequests.length} of {requests.length} requests
           </p>
         )}
       </ContentCard>

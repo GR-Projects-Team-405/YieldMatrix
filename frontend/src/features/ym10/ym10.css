@@ -29,6 +29,19 @@
 
 .ym10-stats .ym-stat-card {
   border-radius: 12px;
+  min-width: 0;
+}
+
+.ym10-stats .ym-stat-label {
+  min-height: 2.6em;
+}
+
+.ym10-stats .ym-stat-value {
+  white-space: nowrap;
+}
+
+.ym10-stats .ym-stat-card:nth-child(4) .ym-stat-value {
+  font-size: 24px;
 }
 
 .ym10-filters {
