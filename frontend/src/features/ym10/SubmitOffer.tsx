@@ -15,7 +15,6 @@ type OfferErrors = {
   batchId?: string;
   quantity?: string;
   price?: string;
-  availableFrom?: string;
 };
 
 export default function SubmitOffer() {
@@ -27,8 +26,6 @@ export default function SubmitOffer() {
   const [batchId, setBatchId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
-  const [availableFrom, setAvailableFrom] = useState('');
-  const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<OfferErrors>({});
   const [submitError, setSubmitError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -97,11 +94,6 @@ export default function SubmitOffer() {
     } else if (!Number.isInteger(priceValue)) {
       nextErrors.price = 'Enter a whole LKR amount.';
     }
-    if (!availableFrom) {
-      nextErrors.availableFrom = 'Choose an available-from date.';
-    } else if (availableFrom > data.request.deliveryUntil) {
-      nextErrors.availableFrom = `Choose a date on or before ${formatPlainDate(data.request.deliveryUntil)}.`;
-    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -122,8 +114,6 @@ export default function SubmitOffer() {
         batchId,
         quantityKg: quantityValue,
         pricePerKgLkr: priceValue,
-        ...(availableFrom ? { availableFrom } : {}),
-        ...(notes.trim() ? { notes: notes.trim() } : {}),
       };
       await api.post<SubmitOfferResponse>(
         `/ym10/buyer-requests/${data.request.id}/offers`,
@@ -141,7 +131,7 @@ export default function SubmitOffer() {
     }
   };
 
-  const offerSummary = `${quantityValue || 0} kg at ${formatLkr((priceValue || 0) * 100)} per kg, total ${formatLkr(totalValue * 100)}.${notes.trim() ? ` Note: ${notes.trim()}` : ''}`;
+  const offerSummary = `${quantityValue || 0} kg at ${formatLkr((priceValue || 0) * 100)} per kg, total ${formatLkr(totalValue * 100)}.`;
 
   if (loading) {
     return <div className="ym10-page"><p className="ym10-placeholder">Loading...</p></div>;
@@ -177,10 +167,11 @@ export default function SubmitOffer() {
   }
 
   const request = data.request;
-  const offerSummaryText = `${request.requestCode}: ${offerSummary}${availableFrom ? ` Available from ${formatPlainDate(availableFrom)}.` : ''}`;
+  const offerSummaryText = `${request.requestCode}: ${offerSummary}`;
 
   return (
     <div className="ym10-page ym10-offer-layout">
+      {/* Available from and Notes are omitted until the offers table has those columns. */}
       <form className="ym10-offer-form" onSubmit={handleSubmit} noValidate>
         {submitError && <Alert type="error">{submitError}</Alert>}
         {isClosed && <Alert type="warning">This request is closed and is no longer accepting offers.</Alert>}
@@ -241,23 +232,6 @@ export default function SubmitOffer() {
                 setPrice(event.target.value);
                 clearFieldError('price');
               }}
-            />
-            <InputField
-              label="Available from"
-              type="date"
-              max={request.deliveryUntil}
-              value={availableFrom}
-              error={errors.availableFrom}
-              onChange={(event) => {
-                setAvailableFrom(event.target.value);
-                clearFieldError('availableFrom');
-              }}
-            />
-            <InputField
-              label="Notes (optional)"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Add a note for the buyer"
             />
           </div>
           <div className="ym10-offer-info">
