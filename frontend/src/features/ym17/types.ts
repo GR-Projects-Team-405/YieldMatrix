@@ -27,11 +27,16 @@ export interface AllocationItem {
   reservationExpiresAt?: string | null;
   reservationExpiryFormatted: string;
   expirySubtext: string;
-  isExpiringSoon?: boolean;
+  isExpiringSoon: boolean;
+  /** Derived from the reservation row; never changes the stored status. */
+  holdState: HoldState;
   status: string;
   statusDisplay: string;
   createdAt?: string;
 }
+
+/** Lifecycle of the reservation hold attached to an allocation, for display only. */
+export type HoldState = 'active' | 'expired' | 'consumed' | 'none';
 
 export type TabKey = 'all' | 'awaiting' | 'accepted' | 'declined' | 'expired';
 
@@ -41,4 +46,12 @@ export interface FilterState {
   status: string;
   crop: string;
   sort: string;
+}
+
+/** Pagination block returned by GET /api/ym17/allocations. */
+export interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
