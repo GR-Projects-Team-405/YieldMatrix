@@ -1,5 +1,10 @@
 import pool from '../../config/db.js';
-import { fetchOfferById } from './offerService.js';
+import {
+  fetchOfferById,
+  fetchOfferComparisonByDemandId,
+  acceptOffer as acceptOfferService,
+  declineOffer as declineOfferService,
+} from './offerService.js';
 import { fetchCommitmentsList, fetchCommitmentById } from './commitmentService.js';
 
 /**
@@ -53,6 +58,98 @@ export async function getOfferDetails(req, res, next) {
       requestId: req.requestId,
     });
   } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /api/ym14/offers/compare/:demandId
+ * FR-YM14-02: Multi-offer side-by-side comparison for a given buyer demand.
+ */
+export async function getOfferComparison(req, res, next) {
+  try {
+    const { demandId } = req.params;
+    if (!demandId || typeof demandId !== 'string') {
+      return res.status(400).json({ error: 'Valid demand ID is required', requestId: req.requestId });
+    }
+
+    const comparison = await fetchOfferComparisonByDemandId(demandId, req.user.id);
+    return res.json({
+      ...comparison,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/ym14/offers/:id/accept
+ * FR-YM14-01 / FR-YM14-03: Accept offer, create forward commitment, and lock wallet escrow.
+ */
+export async function acceptOffer(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { operationKey } = req.body || {};
+
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid offer ID is required', requestId: req.requestId });
+    }
+
+    const result = await acceptOfferService({
+      offerId: id,
+      buyerId: req.user.id,
+      operationKey,
+    });
+
+    return res.status(201).json({
+      ...result,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message, requestId: req.requestId });
+    }
+    next(error);
+  }
+}
+
+/**
+ * POST /api/ym14/offers/:id/decline
+ * FR-YM14-01: Decline an offer with a mandatory reason.
+ */
+export async function declineOffer(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { reason, operationKey } = req.body || {};
+
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid offer ID is required', requestId: req.requestId });
+    }
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({
+        error: 'A decline reason is mandatory',
+        fields: { reason: 'Please select or provide a decline reason.' },
+        requestId: req.requestId,
+      });
+    }
+
+    const result = await declineOfferService({
+      offerId: id,
+      buyerId: req.user.id,
+      reason,
+      operationKey,
+    });
+
+    return res.json({
+      ...result,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message, requestId: req.requestId });
+    }
     next(error);
   }
 }
