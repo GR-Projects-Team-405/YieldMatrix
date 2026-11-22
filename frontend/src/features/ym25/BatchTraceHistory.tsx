@@ -1,353 +1,132 @@
+import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, QrCode } from 'lucide-react';
-
-// Reusable components from frontend/src/components/
-import { Table, TableRow } from '../../components/Table';
+import { ArrowLeft, QrCode } from 'lucide-react';
+import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
+import { Table, TableRow } from '../../components/Table';
+import { getApiErrorMessage, getTraceHistory, formatTraceDate, formatTraceQuantity, formatTraceTimestamp, type TraceHistoryResponse } from './api';
 
-import type { BatchSummaryInfo, BatchTimelineEvent } from './types';
+function getEventLabel(eventType: string) {
+  return eventType.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
-// Demonstration baseline records
-const BATCH_SUMMARIES: Record<string, BatchSummaryInfo> = {
-  'YM25-B001': {
-    batchId: 'YM25-B001',
-    cropGrade: 'Tomatoes · Grade A',
-    farmOrigin: 'Green Valley Farm',
-    harvestDate: '28 Oct 2026',
-    quantityAgreedPrice: '400 kg · LKR 200/kg',
-    allocationId: 'ALC-1042',
-    orderId: 'ORD-8821',
-    tripId: 'TRP-771',
-    buyerAcceptance: 'Accepted',
-    status: 'Delivered',
-  },
-  'YM25-B002': {
-    batchId: 'YM25-B002',
-    cropGrade: 'Carrots · Grade A',
-    farmOrigin: 'Highland Harvest',
-    harvestDate: '27 Oct 2026',
-    quantityAgreedPrice: '350 kg · LKR 180/kg',
-    allocationId: 'ALC-1043',
-    orderId: 'ORD-8822',
-    tripId: 'TRP-772',
-    buyerAcceptance: 'Pending',
-    status: 'In Transit',
-  },
-  'YM25-B003': {
-    batchId: 'YM25-B003',
-    cropGrade: 'Lettuce · Grade Premium',
-    farmOrigin: 'Sunrise Organics',
-    harvestDate: '26 Oct 2026',
-    quantityAgreedPrice: '200 kg · LKR 250/kg',
-    allocationId: 'ALC-1044',
-    orderId: 'ORD-8823',
-    tripId: 'TRP-773',
-    buyerAcceptance: 'Accepted',
-    status: 'Verified',
-  },
-  'YM25-B004': {
-    batchId: 'YM25-B004',
-    cropGrade: 'Spinach · Grade B',
-    farmOrigin: 'Green Valley Farm',
-    harvestDate: '25 Oct 2026',
-    quantityAgreedPrice: '150 kg · LKR 160/kg',
-    allocationId: 'ALC-1045',
-    orderId: 'ORD-8824',
-    tripId: 'TRP-774',
-    buyerAcceptance: 'Processing',
-    status: 'Processing',
-  },
-  'YM25-B005': {
-    batchId: 'YM25-B005',
-    cropGrade: 'Cabbage · Grade A',
-    farmOrigin: 'Highland Harvest',
-    harvestDate: '24 Oct 2026',
-    quantityAgreedPrice: '500 kg · LKR 140/kg',
-    allocationId: 'ALC-1046',
-    orderId: 'ORD-8825',
-    tripId: 'TRP-775',
-    buyerAcceptance: 'Accepted',
-    status: 'Delivered',
-  },
-};
+function getEventTone(eventType: string) {
+  if (eventType === 'acceptance' || eventType === 'handover') return 'ym-tone--success';
+  if (eventType === 'pickup') return 'ym-tone--info';
+  return 'ym-tone--neutral';
+}
 
-const TIMELINE_EVENTS: BatchTimelineEvent[] = [
-  {
-    id: 'evt-1',
-    timestamp: '28 Oct 2026, 06:15',
-    actor: 'Green Valley Farm',
-    location: 'Farm Gate',
-    quantity: '400 kg',
-    outcome: 'Harvested',
-    tone: 'success',
-  },
-  {
-    id: 'evt-2',
-    timestamp: '28 Oct 2026, 07:00',
-    actor: 'YieldMatrix',
-    location: 'Online reservation',
-    quantity: '400 kg',
-    outcome: 'Reserved',
-    tone: 'success',
-  },
-  {
-    id: 'evt-3',
-    timestamp: '28 Oct 2026, 07:15',
-    actor: 'Green Valley Farm',
-    location: 'Supplier workspace',
-    quantity: '400 kg',
-    outcome: 'Supplier accepted',
-    tone: 'success',
-  },
-  {
-    id: 'evt-4',
-    timestamp: '28 Oct 2026, 07:30',
-    actor: 'Dispatch team',
-    location: 'Trip TRP-771',
-    quantity: '400 kg',
-    outcome: 'Confirmed / dispatched',
-    tone: 'success',
-  },
-  {
-    id: 'evt-5',
-    timestamp: '28 Oct 2026, 08:30',
-    actor: 'YieldMatrix Ops',
-    location: 'Packhouse',
-    quantity: '400 kg',
-    outcome: 'Packed',
-    tone: 'success',
-  },
-  {
-    id: 'evt-6',
-    timestamp: '28 Oct 2026, 10:45',
-    actor: 'Driver S. Sheriff',
-    location: 'Packhouse',
-    quantity: '400 kg',
-    outcome: 'Collected',
-    tone: 'info',
-  },
-  {
-    id: 'evt-7',
-    timestamp: '28 Oct 2026, 14:20',
-    actor: 'Buyer Logistics',
-    location: 'Buyer DC',
-    quantity: '400 kg',
-    outcome: 'Delivered',
-    tone: 'success',
-  },
-  {
-    id: 'evt-8',
-    timestamp: '28 Oct 2026, 15:10',
-    actor: 'Buyer QA',
-    location: 'Buyer DC',
-    quantity: '400 kg',
-    outcome: 'Accepted',
-    tone: 'success',
-  },
-];
-
-const getStatusToneClass = (status: string) => {
-  switch (status) {
-    case 'Delivered':
-    case 'Verified':
-      return 'ym-tone--success';
-    case 'Processing':
-      return 'ym-tone--warning';
-    case 'In Transit':
-      return 'ym-tone--info';
-    default:
-      return 'ym-tone--neutral';
-  }
-};
-
-const getEventToneClass = (tone: BatchTimelineEvent['tone']) => {
-  switch (tone) {
-    case 'success':
-      return 'ym-tone--success';
-    case 'info':
-      return 'ym-tone--info';
-    case 'warning':
-      return 'ym-tone--warning';
-    default:
-      return 'ym-tone--neutral';
-  }
-};
-
-const TABLE_HEADERS = [
-  'Event Timestamp',
-  'Actor',
-  'Location',
-  'Quantity',
-  'Outcome',
-];
+function getPublicLocation(payload: Record<string, unknown> | undefined, district: string) {
+  const value = payload?.district ?? payload?.locality;
+  return typeof value === 'string' && value.trim() ? value : district;
+}
 
 export default function BatchTraceHistory() {
-  const { batchId } = useParams<{ batchId: string }>();
+  const { batchId = '' } = useParams<{ batchId: string }>();
   const navigate = useNavigate();
+  const [history, setHistory] = useState<TraceHistoryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Find record or default to YM25-B001 template
-  const activeBatchId = batchId || 'YM25-B001';
-  const batch: BatchSummaryInfo = BATCH_SUMMARIES[activeBatchId] || {
-    ...BATCH_SUMMARIES['YM25-B001'],
-    batchId: activeBatchId,
-  };
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    getTraceHistory(batchId, controller.signal)
+      .then(({ data }) => setHistory(data))
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(getApiErrorMessage(requestError));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [batchId]);
 
   return (
-    <div className="space-y-6">
-      {/* Back navigation link */}
-      <div>
-        <Link
-          to="../.."
-          relative="path"
-          className="inline-flex items-center gap-2 text-[14px] font-medium text-[var(--muted)] hover:text-[#315A42] transition"
-        >
-          <ArrowLeft size={16} />
-          <span>Back To Trace Records</span>
-        </Link>
-      </div>
+    <div className="space-y-5">
+      <Link to="../.." relative="path" className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-text)] hover:underline">
+        <ArrowLeft size={16} aria-hidden="true" /> Back To Trace Records
+      </Link>
 
-      {/* Page Title & Subtitle */}
-      <div>
-        <h1 className="text-[26px] font-bold text-[var(--text)] tracking-tight">
-          Batch Trace History
-        </h1>
-        <p className="text-[14px] text-[var(--muted)] mt-1">
-          Completed Journey of Batch {batch.batchId}
-        </p>
-      </div>
+      <header>
+        <h1 className="text-2xl font-semibold text-[var(--text)]">Batch Trace History</h1>
+        <p className="mt-1 text-sm text-[var(--muted)]">Trace events and custody history for batch {history?.batch.displayId || batchId}.</p>
+      </header>
 
-      {/* Batch Summary Card */}
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[12px] p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-          <div>
-            <h2 className="text-[18px] font-semibold text-[var(--text)]">Batch Summary</h2>
-            <p className="text-[13px] text-[var(--muted)] mt-0.5">
-              Demonstration sample data for delivered batch {batch.batchId}
-            </p>
-          </div>
-          <span className={`ym-status self-start sm:self-auto ${getStatusToneClass(batch.status)}`}>
-            {batch.status}
-          </span>
+      {error && <Alert type="error">{error}</Alert>}
+      {loading ? (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]" role="status">
+          Loading batch history…
         </div>
-
-        {/* 2 rows of 4 summary boxes */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-[var(--canvas)] rounded-[8px] p-3.5">
-            <p className="text-[12px] text-[var(--muted)] font-medium">Crop / Grade</p>
-            <p className="text-[14px] font-semibold text-[var(--text)] mt-1">{batch.cropGrade}</p>
-          </div>
-          <div className="bg-[var(--canvas)] rounded-[8px] p-3.5">
-            <p className="text-[12px] text-[var(--muted)] font-medium">Farm Origin</p>
-            <p className="text-[14px] font-semibold text-[var(--text)] mt-1">{batch.farmOrigin}</p>
-          </div>
-          <div className="bg-[var(--canvas)] rounded-[8px] p-3.5">
-            <p className="text-[12px] text-[var(--muted)] font-medium">Harvest Date</p>
-            <p className="text-[14px] font-semibold text-[var(--text)] mt-1">{batch.harvestDate}</p>
-          </div>
-          <div className="bg-[var(--canvas)] rounded-[8px] p-3.5">
-            <p className="text-[12px] text-[var(--muted)] font-medium">Quantity / agreed price</p>
-            <p className="text-[14px] font-semibold text-[var(--text)] mt-1">{batch.quantityAgreedPrice}</p>
-          </div>
-          <div className="bg-[var(--canvas)] rounded-[8px] p-3.5">
-            <p className="text-[12px] text-[var(--muted)] font-medium">Allocation ID</p>
-            <p className="text-[14px] font-semibold text-[var(--text)] mt-1">{batch.allocationId}</p>
-          </div>
-          <div className="bg-[var(--canvas)] rounded-[8px] p-3.5">
-            <p className="text-[12px] text-[var(--muted)] font-medium">Order ID</p>
-            <p className="text-[14px] font-semibold text-[var(--text)] mt-1">{batch.orderId}</p>
-          </div>
-          <div className="bg-[var(--canvas)] rounded-[8px] p-3.5">
-            <p className="text-[12px] text-[var(--muted)] font-medium">Trip ID</p>
-            <p className="text-[14px] font-semibold text-[var(--text)] mt-1">{batch.tripId}</p>
-          </div>
-          <div className="bg-[var(--canvas)] rounded-[8px] p-3.5">
-            <p className="text-[12px] text-[var(--muted)] font-medium">Buyer Acceptance</p>
-            <p className="text-[14px] font-semibold text-[var(--text)] mt-1">{batch.buyerAcceptance}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Event Timeline Table */}
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[12px] overflow-hidden">
-        <Table headers={TABLE_HEADERS}>
-          {TIMELINE_EVENTS.map((event) => (
-            <TableRow key={event.id}>
-              <td className="text-[14px] text-[var(--text)]">{event.timestamp}</td>
-              <td className="text-[14px] text-[var(--text)]">{event.actor}</td>
-              <td className="text-[14px] text-[var(--text)]">{event.location}</td>
-              <td className="text-[14px] text-[var(--text)]">{event.quantity}</td>
-              <td>
-                <span className={`ym-status ${getEventToneClass(event.tone)}`}>
-                  {event.outcome}
-                </span>
-              </td>
-            </TableRow>
-          ))}
-        </Table>
-      </div>
-
-      {/* Bottom Grid: QR Access & Ledger Integrity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Batch Trace / QR Access */}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[12px] p-6 flex flex-col justify-between">
-          <div>
-            <h3 className="text-[18px] font-semibold text-[var(--text)] mb-4">
-              Batch Trace / QR Access
-            </h3>
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-[var(--canvas)] border border-[var(--border)] flex items-center justify-center flex-shrink-0">
-                <QrCode size={38} className="text-[#315A42]" />
+      ) : history ? (
+        <>
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--text)]">Batch Summary</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">{history.batch.displayId}</p>
               </div>
-              <div className="space-y-1 flex-1 min-w-0">
-                <p className="text-[14px] font-semibold text-[var(--text)]">
-                  QR Trace ID: TRC-{batch.batchId}
-                </p>
-                <p className="text-[12px] text-[var(--muted)]">
-                  QR preview only — not connected to a live trace service.
-                </p>
-                <div className="pt-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => navigate(`../../qr/${batch.batchId}`, { relative: 'path' })}
-                    className="!h-9 !px-4 text-[13px] font-medium"
-                  >
-                    Trace preview · Demo
-                  </Button>
-                </div>
-              </div>
+              <span className="ym-status ym-tone--neutral">{getEventLabel(history.batch.status)}</span>
             </div>
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                ['Produce / Grade', `${history.batch.produce} · ${history.batch.grade}`],
+                ['Farm Origin', history.batch.farm],
+                ['District', history.batch.district],
+                ['Harvest Date', formatTraceDate(history.batch.harvestDate)],
+                ['Quantity', formatTraceQuantity(history.batch.quantityKg)],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg bg-[var(--canvas)] p-3">
+                  <dt className="text-xs font-medium text-[var(--muted)]">{label}</dt>
+                  <dd className="mt-1 text-sm font-semibold text-[var(--text)]">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+            <div className="border-b border-[var(--border)] px-4 py-4">
+              <h2 className="text-lg font-semibold text-[var(--text)]">Trace &amp; Custody Events</h2>
+            </div>
+            {history.events.length > 0 ? (
+              <Table headers={['Event Timestamp', 'Record', 'Location', 'Quantity', 'Event']}>
+                {history.events.map((event) => (
+                  <TableRow key={`${event.source}-${event.id}`}>
+                    <td className="whitespace-nowrap text-sm text-[var(--text)]">{formatTraceTimestamp(event.occurredAt)}</td>
+                    <td className="text-sm text-[var(--text)]">{event.source === 'trace' ? 'Trace record' : 'Custody record'}</td>
+                    <td className="text-sm text-[var(--text)]">{getPublicLocation(event.publicPayload, history.batch.district)}</td>
+                    <td className="text-sm text-[var(--text)]">{event.quantityKg ? formatTraceQuantity(event.quantityKg) : '—'}</td>
+                    <td><span className={`ym-status ${getEventTone(event.eventType)}`}>{getEventLabel(event.eventType)}</span></td>
+                  </TableRow>
+                ))}
+              </Table>
+            ) : (
+              <p className="p-5 text-sm text-[var(--muted)]">No trace or custody events have been recorded for this batch.</p>
+            )}
+          </section>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <section className="flex items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+              <div>
+                <h2 className="font-semibold text-[var(--text)]">Batch QR Code</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">Open the QR preview for this batch.</p>
+              </div>
+              <Button variant="primary" onClick={() => navigate(`../../preview/${encodeURIComponent(history.batch.displayId)}`, { relative: 'path' })}>
+                <QrCode size={16} aria-hidden="true" /> QR Preview
+              </Button>
+            </section>
+            <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+              <h2 className="font-semibold text-[var(--text)]">Verification</h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">Inspect trace event fingerprints and anchoring status.</p>
+              <Button variant="outline" className="mt-3" onClick={() => navigate(`../../verify/${encodeURIComponent(history.batch.displayId)}`, { relative: 'path' })}>
+                View Verification Details
+              </Button>
+            </section>
           </div>
-        </div>
-
-        {/* Local Ledger Integrity */}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[12px] p-6">
-          <h3 className="text-[18px] font-semibold text-[var(--text)] mb-4">
-            Local Ledger Integrity
-          </h3>
-
-          {/* Demonstration Notice Banner */}
-          <div className="bg-[var(--soft)] text-[var(--accent-text)] rounded-[8px] px-3.5 py-2 text-[13px] font-medium flex items-center gap-2 mb-4">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#315A42]" />
-            <span>Demonstration only · no live verification</span>
-          </div>
-
-          {/* Checklist */}
-          <ul className="space-y-2.5 text-[13px] text-[var(--text)]">
-            <li className="flex items-center gap-2.5">
-              <CheckCircle2 size={16} className="text-[#315A42] flex-shrink-0" />
-              <span>Sample event fingerprints · local chain demonstration.</span>
-            </li>
-            <li className="flex items-center gap-2.5">
-              <CheckCircle2 size={16} className="text-[#315A42] flex-shrink-0" />
-              <span>Anchored hashes can reveal later record changes.</span>
-            </li>
-            <li className="flex items-center gap-2.5">
-              <CheckCircle2 size={16} className="text-[#315A42] flex-shrink-0" />
-              <span>Does not prove original claims or produce quality.</span>
-            </li>
-          </ul>
-        </div>
-      </div>
+        </>
+      ) : null}
     </div>
   );
 }

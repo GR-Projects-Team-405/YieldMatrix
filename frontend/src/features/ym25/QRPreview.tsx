@@ -4,17 +4,17 @@ import { ArrowDownToLine, ArrowLeft, Info } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { ContentCard } from '../../components/ContentCard';
 import QRCodeGraphic, { createQrMatrix } from '../../components/QRCodeGraphic';
-import { INITIAL_RECORDS } from './TraceRecords';
-import type { TraceRecord } from './types';
+import { getApiErrorMessage, getTraceHistory, formatTraceDate, formatTraceQuantity, type TraceBatchDto } from './api';
+import { Alert } from '../../components/Alert';
 
-const getStatusToneClass = (status: TraceRecord['status']) => {
+const getStatusToneClass = (status: string) => {
   switch (status) {
-    case 'Delivered':
-    case 'Verified':
+    case 'harvested':
+    case 'delivered':
+    case 'closed':
       return 'ym-tone--success';
-    case 'Processing':
-      return 'ym-tone--warning';
-    case 'In Transit':
+    case 'ready':
+    case 'in_fulfilment':
       return 'ym-tone--info';
     default:
       return 'ym-tone--neutral';
@@ -22,11 +22,29 @@ const getStatusToneClass = (status: TraceRecord['status']) => {
 };
 
 export default function QRPreview() {
-  const { batchId } = useParams<{ batchId: string }>();
-  const record = INITIAL_RECORDS.find((item) => item.id === batchId);
+  const { batchId = '' } = useParams<{ batchId: string }>();
+  const [record, setRecord] = useState<TraceBatchDto | null>(null);
   const [matrix, setMatrix] = useState<boolean[][] | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const qrRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    getTraceHistory(batchId, controller.signal)
+      .then(({ data }) => setRecord(data.batch))
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(getApiErrorMessage(requestError));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [batchId]);
 
   useEffect(() => {
     try {
@@ -44,7 +62,7 @@ export default function QRPreview() {
     const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${record.id}-qr.svg`;
+    link.download = `${record.displayId}-qr.svg`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -59,19 +77,22 @@ export default function QRPreview() {
         <p className="text-sm text-[var(--muted)]">Preview the QR code for this batch's authenticity and traceability information.</p>
       </header>
 
-      {!record ? (
+      {error && <Alert type="error">{error}</Alert>}
+      {loading ? (
+        <ContentCard><p className="text-sm text-[var(--muted)]">Loading batch QR information…</p></ContentCard>
+      ) : !record ? (
         <ContentCard>
-          <p className="text-sm text-[var(--muted)]">No trace record was found for batch {batchId}.</p>
+          <p className="text-sm text-[var(--muted)]">Batch information is unavailable.</p>
         </ContentCard>
       ) : (
         <div className="grid grid-cols-1 gap-5 min-[960px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <ContentCard className="flex min-h-[410px] flex-col items-center justify-center text-center">
             <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--muted)]">Batch QR Code</p>
             <div className="mb-4 aspect-square w-52 max-w-full">
-              {matrix && <QRCodeGraphic ref={qrRef} matrix={matrix} label={`QR code for batch ${record.id}`} />}
+              {matrix && <QRCodeGraphic ref={qrRef} matrix={matrix} label={`QR code for batch ${record.displayId}`} />}
               {qrError && <p role="alert" className="text-sm text-red-700">{qrError}</p>}
             </div>
-            <p className="font-semibold text-[var(--text)]">Batch ID: {record.id}</p>
+            <p className="font-semibold text-[var(--text)]">Batch ID: {record.displayId}</p>
             <p className="mt-1 text-sm text-[var(--accent-text)]">Produce: {record.produce}</p>
             <Button
               onClick={downloadQrCode}
@@ -90,10 +111,10 @@ export default function QRPreview() {
               </header>
               <dl className="px-5">
                 {[
-                  ['Batch ID', record.id],
+                  ['Batch ID', record.displayId],
                   ['Farm', record.farm],
-                  ['Harvest Date', record.harvestDate],
-                  ['Quantity', record.quantity],
+                  ['Harvest Date', formatTraceDate(record.harvestDate)],
+                  ['Quantity', formatTraceQuantity(record.quantityKg)],
                 ].map(([label, value]) => (
                   <div key={label} className="grid min-h-11 grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] items-center gap-3 border-b border-[var(--border)] py-2 text-sm">
                     <dt className="text-[var(--muted)]">{label}</dt>
@@ -109,7 +130,7 @@ export default function QRPreview() {
 
             <aside className="flex min-h-24 items-center gap-2 rounded-lg bg-[var(--soft)] px-4 py-4 text-sm font-medium text-[var(--accent-text)]">
               <Info size={16} className="shrink-0" aria-hidden="true" />
-              <p>This QR code links to verified traceability data from farm to delivery.</p>
+              <p>This QR code links to this batch’s traceability preview. Verification status is shown separately.</p>
             </aside>
           </div>
         </div>

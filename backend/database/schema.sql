@@ -68,6 +68,34 @@ CREATE TABLE IF NOT EXISTS harvest_batches (
   FOREIGN KEY (farm_id, farmer_id) REFERENCES farms(id, farmer_id),
   CHECK (sellable_kg <= COALESCE(actual_kg, 0))
 );
+CREATE SEQUENCE IF NOT EXISTS harvest_batch_display_id_seq;
+ALTER TABLE harvest_batches ADD COLUMN IF NOT EXISTS display_id TEXT;
+ALTER TABLE harvest_batches
+  ALTER COLUMN display_id SET DEFAULT (
+    'BM-' || lpad(nextval('harvest_batch_display_id_seq')::text, 2, '0')
+  );
+CREATE UNIQUE INDEX IF NOT EXISTS harvest_batches_display_id_idx ON harvest_batches(display_id);
+UPDATE harvest_batches
+SET display_id = 'BM-' || lpad(substring(display_id FROM '^BM-25-([0-9]+)$')::BIGINT::text, 2, '0')
+WHERE display_id ~ '^BM-25-[0-9]+$';
+WITH numbered_batches AS (
+  SELECT
+    id,
+    COALESCE((SELECT MAX(substring(display_id FROM '^BM-([0-9]+)$')::BIGINT) FROM harvest_batches), 0)
+      + row_number() OVER (ORDER BY created_at, id) AS sequence_number
+  FROM harvest_batches
+  WHERE display_id IS NULL
+)
+UPDATE harvest_batches AS batch
+SET display_id = 'BM-' || lpad(numbered_batches.sequence_number::text, 2, '0')
+FROM numbered_batches
+WHERE batch.id = numbered_batches.id;
+SELECT setval(
+  'harvest_batch_display_id_seq',
+  GREATEST(COALESCE(MAX(substring(display_id FROM '^BM-([0-9]+)$')::BIGINT), 1), 1),
+  COALESCE(MAX(substring(display_id FROM '^BM-([0-9]+)$')::BIGINT) IS NOT NULL, false)
+)
+FROM harvest_batches;
 CREATE TABLE IF NOT EXISTS listings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   batch_id UUID NOT NULL REFERENCES harvest_batches(id),

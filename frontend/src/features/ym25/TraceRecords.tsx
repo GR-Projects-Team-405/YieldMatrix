@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
@@ -19,23 +19,10 @@ import { Table, TableRow } from '../../components/Table';
 import { Button } from '../../components/Button';
 import { StatCard } from '../../components/StatCard';
 import { EmptyState } from '../../components/EmptyState';
+import { Alert } from '../../components/Alert';
+import { getApiErrorMessage, getTraceRecords, formatTraceDate, formatTraceQuantity, type TraceRecordDto } from './api';
 
-import type { TraceRecord, TraceStats } from './types';
-
-const INITIAL_STATS: TraceStats = {
-  totalBatches: 48,
-  delivered: 42,
-  verifiedRate: '98%',
-  scanCount: '1.2K',
-};
-
-export const INITIAL_RECORDS: TraceRecord[] = [
-  { id: 'YM25-B001', produce: 'Tomatoes', farm: 'Green Valley Farm', harvestDate: '28 Oct 2026', quantity: '500 kg', status: 'Delivered' },
-  { id: 'YM25-B002', produce: 'Carrots', farm: 'Highland Harvest', harvestDate: '27 Oct 2026', quantity: '350 kg', status: 'In Transit' },
-  { id: 'YM25-B003', produce: 'Lettuce', farm: 'Sunrise Organics', harvestDate: '26 Oct 2026', quantity: '200 kg', status: 'Verified' },
-  { id: 'YM25-B004', produce: 'Spinach', farm: 'Green Valley Farm', harvestDate: '25 Oct 2026', quantity: '150 kg', status: 'Processing' },
-  { id: 'YM25-B005', produce: 'Cabbage', farm: 'Highland Harvest', harvestDate: '24 Oct 2026', quantity: '500 kg', status: 'Delivered' },
-];
+import type { TraceRecord } from './types';
 
 const getStatusToneClass = (status: TraceRecord['status']) => {
   switch (status) {
@@ -56,44 +43,48 @@ export default function TraceRecords() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange] = useState('Last 30 days');
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 5;
+  const [records, setRecords] = useState<TraceRecordDto[]>([]);
+  const [summary, setSummary] = useState({ total: 0, delivered: 0, verified: 0 });
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Filter records based on search input (Batch ID, Produce, or Farm)
-  const filteredRecords = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return INITIAL_RECORDS;
-    return INITIAL_RECORDS.filter(
-      (r) =>
-        r.id.toLowerCase().includes(q) ||
-        r.produce.toLowerCase().includes(q) ||
-        r.farm.toLowerCase().includes(q)
-    );
-  }, [searchQuery]);
-
-  // Reset to page 1 whenever the search query changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
 
-  // Dynamic pagination calculations
-  const totalRecords = filteredRecords.length;
-  const totalPages = Math.ceil(totalRecords / ITEMS_PER_PAGE) || 1;
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    getTraceRecords(currentPage, searchQuery.trim(), controller.signal)
+      .then(({ data }) => {
+        setRecords(data.records);
+        setSummary(data.summary);
+        setTotalPages(Math.max(data.pagination.totalPages, 1));
+      })
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(getApiErrorMessage(requestError));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [currentPage, searchQuery]);
 
-  // Slice the 5 records for the active page
-  const paginatedRecords = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredRecords.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredRecords, currentPage]);
-
-  // Indexes for the "Showing X–Y of Z records" text
-  const startIndex = totalRecords === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
-  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, totalRecords);
+  const totalRecords = summary.total;
+  const startIndex = totalRecords === 0 ? 0 : (currentPage - 1) * 5 + 1;
+  const endIndex = Math.min(currentPage * 5, totalRecords);
+  const firstVisiblePage = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+  const visiblePages = Array.from({ length: Math.min(totalPages, 5) }, (_, index) => firstVisiblePage + index);
 
   const tableHeaders = [
     'Batch ID',
     'Produce',
     'Farm',
     'Harvest Date',
+    'Quantity',
     'Status',
     <div key="actions" className="text-center">Actions</div>,
   ];
@@ -115,7 +106,7 @@ export default function TraceRecords() {
         </Button>
       </div>
 
-      {/* 4 Stat Cards matching your UI design */}
+      {/* Metrics reflect the active search scope. Scan counts are not stored yet. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Batches */}
         <StatCard
@@ -125,7 +116,7 @@ export default function TraceRecords() {
             </div>
           }
           label="Total Batches"
-          value={INITIAL_STATS.totalBatches}
+          value={summary.total}
         />
 
         {/* Delivered */}
@@ -136,18 +127,18 @@ export default function TraceRecords() {
             </div>
           }
           label="Delivered"
-          value={INITIAL_STATS.delivered}
+          value={summary.delivered}
         />
 
-        {/* Verified */}
+        {/* Accepted batches */}
         <StatCard
           icon={
             <div className="w-8 h-8 rounded-full bg-[#eaf2e8] flex items-center justify-center text-[#315A42]">
               <CheckCircle2 size={16} />
             </div>
           }
-          label="Verified"
-          value={INITIAL_STATS.verifiedRate}
+          label="Verified batches"
+          value={summary.verified}
         />
 
         {/* Scan Count */}
@@ -158,7 +149,8 @@ export default function TraceRecords() {
             </div>
           }
           label="Scan Count"
-          value={INITIAL_STATS.scanCount}
+          value="—"
+          subtext="Not tracked yet"
         />
       </div>
 
@@ -184,15 +176,21 @@ export default function TraceRecords() {
       </div>
 
       {/* Reusing Table and TableRow components */}
-      {filteredRecords.length > 0 ? (
+      {error && <Alert type="error">{error}</Alert>}
+      {loading ? (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]" role="status">
+          Loading trace records…
+        </div>
+      ) : records.length > 0 ? (
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[12px] overflow-hidden">
           <Table headers={tableHeaders}>
-            {paginatedRecords.map((record) => (
+            {records.map((record) => (
               <TableRow key={record.id}>
-                <td className="font-semibold text-[var(--text)]">{record.id}</td>
+                <td className="font-semibold text-[var(--text)]">{record.displayId}</td>
                 <td>{record.produce}</td>
                 <td>{record.farm}</td>
-                <td className="text-[var(--muted)]">{record.harvestDate}</td>
+                <td className="text-[var(--muted)]">{formatTraceDate(record.harvestDate)}</td>
+                <td className="text-[var(--muted)]">{formatTraceQuantity(record.quantityKg)}</td>
                 <td>
                   <span className={`ym-status ${getStatusToneClass(record.status)}`}>
                     {record.status}
@@ -204,11 +202,11 @@ export default function TraceRecords() {
                       variant="outline"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`history/${record.id}`);
+                        navigate(`history/${encodeURIComponent(record.displayId)}`);
                       }}
                       className="!h-8 !px-3 !py-1 text-[13px] gap-1.5 hover:!border-[#315A42] hover:!text-[#315A42] hover:!bg-[#eaf2e8] shadow-sm"
-                      title={`View trace history for ${record.id}`}
-                      aria-label={`View trace history for batch ${record.id}`}
+                      title={`View trace history for ${record.displayId}`}
+                      aria-label={`View trace history for batch ${record.displayId}`}
                     >
                       <Eye size={15} />
                       <span>View</span>
@@ -219,17 +217,19 @@ export default function TraceRecords() {
             ))}
           </Table>
         </div>
-      ) : (
+      ) : !error ? (
         <EmptyState
           title="No trace records found"
           description="We couldn't find any batches matching your search query. Try searching by a different crop, farm, or ID."
         />
-      )}
+      ) : null}
 
       {/* Dynamic Pagination Footer */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2">
         <p className="text-[13px] text-[var(--muted)]">
-          {totalRecords === 0
+          {loading
+            ? 'Loading records…'
+            : totalRecords === 0
             ? 'Showing 0 records'
             : `Showing ${startIndex}–${endIndex} of ${totalRecords} records`}
         </p>
@@ -261,7 +261,7 @@ export default function TraceRecords() {
 
           {/* Next pages: Only rendered if more than 5 batches (totalPages > 1) */}
           {totalPages > 1 &&
-            Array.from({ length: totalPages - 1 }, (_, index) => index + 2).map((page) => (
+            visiblePages.map((page) => (
               <button
                 key={page}
                 type="button"
