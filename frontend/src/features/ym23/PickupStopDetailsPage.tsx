@@ -5,7 +5,7 @@ import { ContentCard } from '../../components/ContentCard';
 import { EmptyState } from '../../components/EmptyState';
 import { StatusBadge } from '../../components/StatusBadge';
 import { mockPickupStops } from './mockPickupStops';
-import './pickup-stop-details.css';
+import './ym23.css';
 
 function DetailValue({ label, value }: { label: string; value: string }) {
   return (

@@ -10,7 +10,7 @@ import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Toast } from '../../components/Toast';
 import { mockPickupStops } from './mockPickupStops';
-import './record-pickup.css';
+import './ym23.css';
 
 type PickupResult = '' | 'completed' | 'partially-collected' | 'unable-to-collect';
 type PickupField = 'quantity' | 'date' | 'time' | 'result';
