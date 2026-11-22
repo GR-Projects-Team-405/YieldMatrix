@@ -100,6 +100,7 @@ export default function DriverAuthPage() {
     useState(operatingAreas[0]);
 
   const [vehicleType, setVehicleType] = useState('mini_lorry');
+  const [capacityKg, setCapacityKg] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [licenceNumber, setLicenceNumber] = useState('');
   const [password, setPassword] = useState('');
@@ -139,6 +140,21 @@ export default function DriverAuthPage() {
   function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback('');
+
+    const capacity = Number(capacityKg);
+
+    if (
+      !capacityKg.trim() ||
+      !Number.isFinite(capacity) ||
+      capacity <= 0 ||
+      !/^\d+(?:\.\d{1,3})?$/.test(capacityKg)
+    ) {
+      setFeedback(
+        'Enter a valid vehicle capacity greater than 0, ' +
+        'with at most 3 decimal places.'
+      );
+      return;
+    }
 
     if (!fullName.trim() || !email.trim() || !mobile.trim()) {
       setStep(1);
@@ -437,6 +453,22 @@ export default function DriverAuthPage() {
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    <label htmlFor="ym03-driver-capacity">
+                      Vehicle Capacity (kg)
+                    </label>
+                    <div className="ym03-driver-field">
+                      <input
+                        id="ym03-driver-capacity"
+                        type="number"
+                        min="0.001"
+                        step="0.001"
+                        placeholder="e.g. 1500"
+                        value={capacityKg}
+                        onChange={(e) => setCapacityKg(e.target.value)}
+                        required
+                      />
                     </div>
 
                     <div className="ym03-driver-two-cols">

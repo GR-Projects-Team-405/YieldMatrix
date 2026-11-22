@@ -76,6 +76,7 @@ export default function FarmerAuthPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [farmName, setFarmName] = useState('');
+  const [pickupAddress, setPickupAddress] = useState('');
   const [district, setDistrict] = useState('Nuwara Eliya');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -303,6 +304,20 @@ export default function FarmerAuthPage() {
                       </select>
                     </div>
                   </div>
+
+                  <label htmlFor="farmer-pickup-address">
+                    Farm Pickup Address
+                  </label>
+                  <input
+                    id="farmer-pickup-address"
+                    type="text"
+                    placeholder="Enter the address for produce pickup"
+                    value={pickupAddress}
+                    onChange={(e) => setPickupAddress(e.target.value)}
+                    autoComplete="street-address"
+                    maxLength={500}
+                    required
+                  />
 
                   <div className="ym03-farmer-label-row">
                     <label htmlFor="farmer-password">
