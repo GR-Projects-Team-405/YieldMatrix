@@ -7,6 +7,7 @@ import RoleSelectionPage from './pages/RoleSelectionPage';
 import FarmerAuthPage from './pages/FarmerAuthPage';
 import BuyerAuthPage from './pages/BuyerAuthPage';
 import DriverAuthPage from './pages/DriverAuthPage';
+import ApprovalStatusPage from './pages/ApprovalStatusPage';
 
 import './styles/ym03.css';
 
@@ -29,6 +30,11 @@ export default function YM03() {
         <Route
           path="driver"
           element={<DriverAuthPage />}
+        />
+
+        <Route
+          path="status"
+          element={<ApprovalStatusPage />}
         />
 
         <Route
