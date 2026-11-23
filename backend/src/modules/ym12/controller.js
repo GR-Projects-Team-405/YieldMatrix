@@ -1,7 +1,8 @@
 import pool from '../../config/db.js';
-import { DEMO_BUYER_ID, getSampleListing, getSampleSupplierProfile } from './mockData.js';
+import { DEMO_BUYER_ID, getSampleListing, getSampleSupplierProfile, getSampleSupplierPerformance } from './mockData.js';
 import { findApprovedSupplier, findSupplierListings, findSupplierPerformance } from './supplierQueries.js';
-import { calculatePerformanceMetrics } from './performanceMetrics.js';
+import { calculatePerformanceMetrics, calculateRateMetric } from './performanceMetrics.js';
+import { findSupplierMonthlyTrend, findSupplierPerformanceCounts } from './performanceQueries.js';
 // YM12 · MHD Muhthas · Produce & suppliers
 export async function getStatus(req, res, next) {
   try {
@@ -13,6 +14,8 @@ export async function getStatus(req, res, next) {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_PERFORMANCE_FROM = '2026-06-01';
+const PERFORMANCE_TIMEZONE = 'Asia/Colombo (UTC+05:30)';
 const DATABASE_CONNECTION_CODES = new Set([
   'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN',
   '57P01', '57P02', '57P03', '08000', '08001', '08003', '08004', '08006', '08007',
@@ -41,6 +44,119 @@ function centsToLkr(centsValue) {
 
 function centsToLkrLabel(centsValue) {
   return centsToLkr(centsValue);
+}
+
+function isIsoDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function todayInColombo() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Colombo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const value = (type) => parts.find((part) => part.type === type)?.value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
+function addTwelveMonths(value) {
+  const [year, month, day] = value.split('-').map(Number);
+  const targetYear = year + 1;
+  const lastDay = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
+  return `${targetYear}-${String(month).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
+function getPerformancePeriod(query) {
+  const to = query.to === undefined ? todayInColombo() : query.to;
+  const from = query.from === undefined ? DEFAULT_PERFORMANCE_FROM : query.from;
+  if (!isIsoDate(from) || !isIsoDate(to) || from > to || to > addTwelveMonths(from)) return null;
+  return { from, to };
+}
+
+function safeCount(value) {
+  return calculateRateMetric(value, '1').numerator;
+}
+
+function makeMonthlyBuckets(from, to, rows) {
+  const rowByMonth = new Map(rows.map((row) => [row.month, row]));
+  const fromMonth = from.slice(0, 7);
+  const toMonth = to.slice(0, 7);
+  const currentDate = todayInColombo();
+  const currentMonth = currentDate.slice(0, 7);
+  const [fromYear, fromMonthNumber] = fromMonth.split('-').map(Number);
+  const [toYear, toMonthNumber] = toMonth.split('-').map(Number);
+  const buckets = [];
+
+  for (let cursor = new Date(Date.UTC(fromYear, fromMonthNumber - 1, 1));
+    cursor <= new Date(Date.UTC(toYear, toMonthNumber - 1, 1));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+    const year = cursor.getUTCFullYear();
+    const monthNumber = cursor.getUTCMonth() + 1;
+    const month = `${year}-${String(monthNumber).padStart(2, '0')}`;
+    const monthStart = `${month}-01`;
+    const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+    const row = rowByMonth.get(month);
+    const completed = String(row?.completed ?? 0);
+    const confirmed = String(row?.confirmed ?? 0);
+    const sampleThrough = row?.through || null;
+    const isPartial = from > monthStart || to < monthEnd || month === currentMonth || sampleThrough !== null;
+    const throughDate = to < monthEnd ? to : monthEnd;
+    buckets.push({
+      month,
+      label: new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(cursor),
+      completed: safeCount(completed),
+      confirmed: safeCount(confirmed),
+      percent: calculateRateMetric(completed, confirmed).percent,
+      isPartial,
+      through: isPartial ? sampleThrough || (month === currentMonth && currentDate < throughDate ? currentDate : throughDate) : null,
+    });
+  }
+  return buckets;
+}
+
+function makeSupplierPerformanceResponse(supplier, counts, monthlyRows, period, dataSource, requestId) {
+  const completedOrders = String(counts.completed_orders ?? 0);
+  const fulfilment = calculatePerformanceMetrics(completedOrders, counts.confirmed_orders ?? 0);
+  const insufficientHistory = fulfilment.insufficientHistory;
+  const acceptanceRate = calculateRateMetric(counts.accepted_requests, counts.buyer_requests);
+  const onTimePickup = calculateRateMetric(counts.on_time_pickups, counts.pickup_denominator);
+  const disputeRate = calculateRateMetric(counts.disputed_completed_orders, completedOrders, 1);
+  const trend = insufficientHistory ? [] : makeMonthlyBuckets(period.from, period.to, monthlyRows);
+
+  return {
+    supplier,
+    period: { ...period, timezone: PERFORMANCE_TIMEZONE },
+    insufficientHistory,
+    metrics: {
+      acceptanceRate: insufficientHistory ? { percent: null, numerator: null, denominator: null } : acceptanceRate,
+      fulfilmentRate: insufficientHistory
+        ? { percent: null, numerator: null, denominator: null }
+        : {
+          percent: fulfilment.fulfilmentRatePercent,
+          numerator: safeCount(completedOrders),
+          denominator: safeCount(counts.confirmed_orders),
+        },
+      onTimePickup: insufficientHistory ? { percent: null, numerator: null, denominator: null } : onTimePickup,
+      disputeRate: insufficientHistory ? { percent: null, numerator: null, denominator: null } : disputeRate,
+      completedOrders: { count: insufficientHistory ? null : safeCount(completedOrders) },
+    },
+    trend,
+    basis: insufficientHistory ? {
+      buyerRequests: null,
+      confirmedOrders: null,
+      completedOrders: null,
+    } : {
+      buyerRequests: counts.buyer_requests === null ? null : safeCount(counts.buyer_requests),
+      confirmedOrders: safeCount(counts.confirmed_orders),
+      completedOrders: safeCount(completedOrders),
+    },
+    dataSource,
+    requestId,
+  };
 }
 
 function categoryFor(cropName) {
@@ -253,6 +369,79 @@ export async function getSupplierProfile(req, res, next) {
       }
       found.requestId = req.requestId;
       return res.json(found);
+    }
+    return next(error);
+  }
+}
+
+export async function getSupplierPerformance(req, res, next) {
+  if (!UUID_PATTERN.test(req.params.supplierId)) {
+    return res.status(400).json({ error: 'Invalid supplier ID.', requestId: req.requestId });
+  }
+  const period = getPerformancePeriod(req.query);
+  if (!period) {
+    return res.status(400).json({ error: 'Invalid performance period. Use ISO dates within a 12-month range.', requestId: req.requestId });
+  }
+
+  if (!process.env.DATABASE_URL && isDevelopment()) {
+    if (req.user.id !== DEMO_BUYER_ID) {
+      return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
+    }
+    const found = getSampleSupplierPerformance(req.params.supplierId, period.from, period.to);
+    if (!found) {
+      return res.status(404).json({ error: 'Supplier profile not found or supplier is not approved.', requestId: req.requestId });
+    }
+    return res.json(makeSupplierPerformanceResponse(
+      found.supplier,
+      found.counts,
+      found.trend,
+      period,
+      found.dataSource,
+      req.requestId,
+    ));
+  }
+
+  try {
+    const account = await pool.query(
+      'SELECT approval_status FROM users WHERE id = $1 AND role = $2',
+      [req.user.id, 'buyer'],
+    );
+    if (account.rows[0]?.approval_status !== 'approved') {
+      return res.status(403).json({ error: 'Buyer account is not approved for trading.', requestId: req.requestId });
+    }
+
+    const supplier = await findApprovedSupplier(req.params.supplierId);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier profile not found or supplier is not approved.', requestId: req.requestId });
+    }
+    const [counts, monthlyRows] = await Promise.all([
+      findSupplierPerformanceCounts(req.params.supplierId, period.from, period.to),
+      findSupplierMonthlyTrend(req.params.supplierId, period.from, period.to),
+    ]);
+
+    return res.json(makeSupplierPerformanceResponse({
+      id: supplier.supplier_id,
+      name: supplier.supplier_name,
+      district: supplier.district,
+      verified: false,
+    }, counts || {}, monthlyRows, period, 'database', req.requestId));
+  } catch (error) {
+    if (isDevelopment() && isConnectionUnavailable(error)) {
+      if (req.user.id !== DEMO_BUYER_ID) {
+        return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
+      }
+      const found = getSampleSupplierPerformance(req.params.supplierId, period.from, period.to);
+      if (!found) {
+        return res.status(404).json({ error: 'Supplier profile not found or supplier is not approved.', requestId: req.requestId });
+      }
+      return res.json(makeSupplierPerformanceResponse(
+        found.supplier,
+        found.counts,
+        found.trend,
+        period,
+        found.dataSource,
+        req.requestId,
+      ));
     }
     return next(error);
   }

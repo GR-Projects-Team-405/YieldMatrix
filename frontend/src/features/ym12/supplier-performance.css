@@ -1,0 +1,63 @@
+.ym12-performance-page { display: grid; gap: 22px; color: var(--text); }
+.ym12-performance-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; }
+.ym12-performance-page-heading h1 { font-size: clamp(30px, 3vw, 38px); line-height: 1.15; font-weight: 550; letter-spacing: -.025em; }
+.ym12-performance-page-heading > div > p { margin-top: 8px; color: var(--muted); line-height: 1.5; }
+.ym12-performance-profile-link { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.ym12-performance-supplier { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.ym12-performance-supplier h2 { font-size: 19px; line-height: 1.4; }
+.ym12-performance-supplier > div:first-child p { margin-top: 5px; color: var(--muted); font-size: 14px; }
+.ym12-performance-period { display: grid; justify-items: end; gap: 5px; text-align: right; }
+.ym12-performance-period strong { font-size: 15px; }
+.ym12-performance-period > span { color: var(--muted); font-size: 12px; }
+.ym12-performance-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.ym12-performance-metrics .ym-stat-card { min-width: 0; padding: 18px; }
+.ym12-performance-metrics .ym-stat-value { overflow-wrap: anywhere; font-size: clamp(20px, 2vw, 28px); }
+.ym12-performance-metrics .ym-stat-subtext { min-height: 36px; line-height: 1.5; overflow-wrap: anywhere; }
+.ym12-performance-details { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, .8fr); align-items: start; gap: 18px; }
+.ym12-performance-trend-card, .ym12-performance-basis { min-width: 0; }
+.ym12-performance-chart { width: 100%; margin-top: 12px; overflow-x: auto; }
+.ym12-performance-chart svg { display: block; width: 100%; min-width: 490px; height: auto; overflow: visible; }
+.ym12-chart-grid-line { stroke: var(--border); stroke-width: 1; }
+.ym12-chart-axis-label, .ym12-chart-month, .ym12-chart-count { fill: var(--muted); font-family: inherit; }
+.ym12-chart-axis-label { font-size: 12px; }
+.ym12-chart-month { fill: var(--text); font-size: 12px; font-weight: 600; }
+.ym12-chart-count { font-size: 11px; }
+.ym12-chart-value { fill: var(--text); font-family: inherit; font-size: 12px; font-weight: 650; }
+.ym12-chart-bar { fill: var(--accent-text); }
+.ym12-chart-bar--partial { fill: var(--orange); }
+.ym12-performance-partial-note { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.ym12-performance-no-trend { margin-top: 14px; color: var(--muted); font-size: 14px; }
+.ym12-performance-basis { display: grid; gap: 18px; }
+.ym12-performance-basis dl { display: grid; gap: 12px; margin: 0; }
+.ym12-performance-basis dl > div { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.ym12-performance-basis dt { color: var(--muted); font-size: 13px; }
+.ym12-performance-basis dd { margin: 0; font-size: 14px; font-weight: 650; text-align: right; }
+.ym12-performance-guarantee { padding: 14px; border-radius: 10px; background: var(--soft); color: var(--text); }
+.ym12-performance-guarantee strong { font-size: 14px; }
+.ym12-performance-guarantee p { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.ym12-performance-footer { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.ym12-performance-insufficient { max-width: 760px; }
+.ym12-performance-state { display: grid; justify-items: start; gap: 14px; max-width: 680px; }
+.ym12-performance-state .ym-empty-state { width: 100%; }
+.ym12-performance-skeleton { display: grid; gap: 18px; }
+.ym12-performance-skeleton-header, .ym12-performance-skeleton-chart, .ym12-performance-skeleton-metrics span { display: block; border-radius: 12px; background: var(--soft); animation: ym12-pulse 1.3s ease-in-out infinite alternate; }
+.ym12-performance-skeleton-header { min-height: 90px; }
+.ym12-performance-skeleton-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.ym12-performance-skeleton-metrics span { min-height: 126px; }
+.ym12-performance-skeleton-chart { min-height: 310px; }
+@media (max-width: 1050px) {
+  .ym12-performance-metrics, .ym12-performance-skeleton-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ym12-performance-details { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .ym12-performance-page { gap: 18px; }
+  .ym12-performance-page-heading { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .ym12-performance-page-heading h1 { font-size: 30px; }
+  .ym12-performance-profile-link { min-height: 44px; }
+  .ym12-performance-supplier { align-items: flex-start; flex-direction: column; padding: 18px; }
+  .ym12-performance-period { justify-items: start; text-align: left; }
+  .ym12-performance-metrics, .ym12-performance-skeleton-metrics { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ym12-performance-skeleton-header, .ym12-performance-skeleton-chart, .ym12-performance-skeleton-metrics span { animation: none; }
+}

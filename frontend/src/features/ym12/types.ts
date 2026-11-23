@@ -80,3 +80,58 @@ export interface SupplierProfileResponse {
   dataSource: ProduceDataSource;
   requestId: string;
 }
+
+export interface PerformanceMetric {
+  percent: number | null;
+  numerator: number | null;
+  denominator: number | null;
+}
+
+export interface CompletedOrdersMetric {
+  count: number | null;
+}
+
+export interface SupplierPerformanceTrendMonth {
+  month: string;
+  label: string;
+  completed: number;
+  confirmed: number;
+  percent: number | null;
+  isPartial: boolean;
+  through: string | null;
+}
+
+export interface SupplierPerformanceResponse {
+  supplier: {
+    id: string;
+    name: string;
+    district: string;
+    verified: boolean;
+  };
+  period: {
+    from: string;
+    to: string;
+    timezone: 'Asia/Colombo (UTC+05:30)';
+  };
+  insufficientHistory: boolean;
+  metrics: {
+    acceptanceRate: PerformanceMetric;
+    fulfilmentRate: PerformanceMetric;
+    onTimePickup: PerformanceMetric;
+    disputeRate: PerformanceMetric;
+    completedOrders: CompletedOrdersMetric;
+  };
+  trend: SupplierPerformanceTrendMonth[];
+  basis: {
+    buyerRequests: number | null;
+    confirmedOrders: number | null;
+    completedOrders: number | null;
+  };
+  dataSource: ProduceDataSource;
+  requestId: string;
+}
+
+export interface PerformancePeriodQuery {
+  from?: string;
+  to?: string;
+}

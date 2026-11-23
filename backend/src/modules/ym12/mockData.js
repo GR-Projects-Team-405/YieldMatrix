@@ -148,3 +148,68 @@ export function getSampleSupplierProfile(id) {
   }
   return null;
 }
+
+const samplePerformanceMonths = [
+  { month: '2026-06', completed: '14', confirmed: '15', through: null },
+  { month: '2026-07', completed: '19', confirmed: '20', through: null },
+  { month: '2026-08', completed: '22', confirmed: '23', through: null },
+  { month: '2026-09', completed: '24', confirmed: '25', through: null },
+  { month: '2026-10', completed: '26', confirmed: '27', through: null },
+  { month: '2026-11', completed: '21', confirmed: '21', through: '2026-11-11' },
+];
+
+export function getSampleSupplierPerformance(id, from, to) {
+  const normalizedId = id.toLowerCase();
+  if (normalizedId === 'b1111111-1111-4111-8111-111111111111') {
+    const trend = samplePerformanceMonths.filter(({ month, through }) => {
+      const [year, monthNumber] = month.split('-').map(Number);
+      const monthStart = `${month}-01`;
+      const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+      return from <= monthStart && to >= (through || monthEnd);
+    });
+    const completed = trend.reduce((total, item) => total + BigInt(item.completed), 0n).toString();
+    const confirmed = trend.reduce((total, item) => total + BigInt(item.confirmed), 0n).toString();
+    const hasFullSamplePeriod = from === '2026-06-01' && to >= '2026-11-11';
+    return {
+      supplier: {
+        id: suppliers[0].id,
+        name: suppliers[0].name,
+        district: suppliers[0].district,
+        verified: true,
+      },
+      counts: {
+        buyer_requests: hasFullSamplePeriod ? '150' : null,
+        accepted_requests: hasFullSamplePeriod ? '144' : null,
+        completed_orders: completed,
+        confirmed_orders: confirmed,
+        on_time_pickups: hasFullSamplePeriod ? '118' : null,
+        pickup_denominator: hasFullSamplePeriod ? '126' : null,
+        disputed_completed_orders: hasFullSamplePeriod ? '2' : null,
+      },
+      trend,
+      dataSource: 'sample',
+    };
+  }
+  if (normalizedId === 'b4444444-4444-4444-8444-444444444444') {
+    return {
+      supplier: {
+        id: normalizedId,
+        name: 'New Growers Cooperative',
+        district: 'Anuradhapura',
+        verified: true,
+      },
+      counts: {
+        buyer_requests: null,
+        accepted_requests: null,
+        completed_orders: '0',
+        confirmed_orders: '0',
+        on_time_pickups: null,
+        pickup_denominator: '0',
+        disputed_completed_orders: '0',
+      },
+      trend: [],
+      dataSource: 'sample',
+    };
+  }
+  return null;
+}
