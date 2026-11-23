@@ -33,6 +33,7 @@ export async function listDeliveries(req, res, next) {
               COALESCE(SUM(a.picked_up_kg), 0)::float8 AS picked_up_kg,
               COALESCE(SUM(a.handed_over_kg), 0)::float8 AS handed_over_kg,
               COALESCE(SUM(a.accepted_kg), 0)::float8 AS accepted_kg,
+              COUNT(DISTINCT hb.farm_id)::int AS farm_count,
               COALESCE(array_agg(a.status) FILTER (WHERE a.id IS NOT NULL), '{}') AS alloc_statuses
          FROM trips t
          JOIN orders o ON o.id = t.order_id
@@ -40,6 +41,7 @@ export async function listDeliveries(req, res, next) {
          JOIN vehicles v ON v.id = t.vehicle_id
          LEFT JOIN trip_stops ts ON ts.trip_id = t.id
          LEFT JOIN allocations a ON a.id = ts.allocation_id
+         LEFT JOIN harvest_batches hb ON hb.id = a.batch_id
         WHERE t.driver_id = $1 AND t.status IN ('handed_over', 'completed')
         GROUP BY t.id, o.destination, u.name, v.registration
         ORDER BY delivered_at DESC NULLS LAST
@@ -51,6 +53,7 @@ export async function listDeliveries(req, res, next) {
       code: shortCode('YM ', r.id),
       destination: r.destination,
       buyer: r.buyer,
+      farms: r.farm_count,
       vehicle: r.vehicle,
       deliveredAt: r.delivered_at,
       pickedUpKg: r.picked_up_kg,

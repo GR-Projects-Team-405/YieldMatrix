@@ -4,46 +4,49 @@ interface RouteStop {
   kind: 'pickup' | 'handover';
 }
 
+const WIDTH = 900;
+const HEIGHT = 200;
+const BEND = 52; // how strongly each leg curves up (arch) or down (dip)
+
 export default function RouteMap({ stops }: { stops: RouteStop[] }) {
   const n = stops.length;
+
+  // Stops are spread evenly along the line. The handover (last stop) sits a little higher.
   const pts = stops.map((_, i) => ({
-    x: n === 1 ? 450 : 72 + (i * 702) / (n - 1),
-    y: n === 1 ? 90 : i === 0 ? 95 : i === n - 1 ? 62 : 100,
+    x: n === 1 ? WIDTH / 2 : 110 + (i * (WIDTH - 220)) / (n - 1),
+    y: n > 1 && i === n - 1 ? 100 : 120,
   }));
 
-  // Wave: alternate an arch and a dip between stops, like a real road.
-  const d = pts.reduce((path, p, i) => {
-    if (i === 0) return `M${p.x} ${p.y}`;
-    const prev = pts[i - 1];
-    const dx = p.x - prev.x;
-    const bend = i % 2 === 1 ? -55 : 55;
-    return `${path} C${prev.x + dx * 0.33} ${prev.y + bend} ${p.x - dx * 0.33} ${p.y + bend} ${p.x} ${p.y}`;
-  }, '');
+  // Each leg is a smooth curve. Legs alternate: arch (bulges up), dip (bulges down), arch ...
+  let d = '';
+  pts.forEach((p, i) => {
+    if (i === 0) {
+      d = 'M' + p.x + ' ' + p.y;
+    } else {
+      const prev = pts[i - 1];
+      const dx = p.x - prev.x;
+      const dir = (i - 1) % 2 === 0 ? -1 : 1;
+      d += ' C' + (prev.x + dx * 0.35) + ' ' + (prev.y + dir * BEND) + ', ' + (p.x - dx * 0.35) + ' ' + (p.y + dir * BEND) + ', ' + p.x + ' ' + p.y;
+    }
+  });
+
+  // Text gets a thin outline in the card colour so the dashed line never cuts through letters.
+  const halo = { stroke: 'var(--surface)', strokeWidth: 4, strokeLinejoin: 'round' as const, paintOrder: 'stroke' as const };
+  const label = 'Route: ' + stops.map((s) => s.name).join(', then ');
 
   return (
-    <svg viewBox="0 40 900 115" role="img" aria-label={`Route: ${stops.map((s) => s.name).join(', then ')}`}>
-      <path d={d} fill="none" stroke="var(--control-border)" strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" />
-      {pts.map((p, i) => {
-        const handover = stops[i].kind === 'handover';
-        return (
-          <g key={i}>
-            <circle cx={p.x} cy={p.y} r="9" fill={handover ? 'var(--orange)' : 'var(--ym24-primary)'} stroke="var(--surface)" strokeWidth="3" />
-            {handover && (
-              <path
-                d="M-4 0 L-1.2 3 L4 -3"
-                transform={`translate(${p.x} ${p.y})`}
-                fill="none"
-                stroke="#263a31"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-            <text className="ym24-route-text" x={p.x} y={p.y + 28} textAnchor="middle">{stops[i].name}</text>
-            <text className="ym24-route-sub" x={p.x} y={p.y + 43} textAnchor="middle">{stops[i].detail}</text>
-          </g>
-        );
-      })}
+    <svg viewBox={'0 0 ' + WIDTH + ' ' + HEIGHT} role="img" aria-label={label}>
+      {n > 1 && <path d={d} fill="none" stroke="var(--control-border)" strokeWidth="1.5" strokeDasharray="4 4" />}
+      {pts.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r="9" fill={stops[i].kind === 'handover' ? 'var(--orange)' : 'var(--ym24-primary)'} />
+          {stops[i].kind === 'handover' && (
+            <text x={p.x} y={p.y + 4} textAnchor="middle" fill="#fff" fontSize="12" fontWeight="700">✓</text>
+          )}
+          <text className="ym24-route-text" x={p.x} y={p.y + 30} textAnchor="middle" style={halo}>{stops[i].name}</text>
+          <text className="ym24-route-sub" x={p.x} y={p.y + 46} textAnchor="middle" style={halo}>{stops[i].detail}</text>
+        </g>
+      ))}
     </svg>
   );
 }
