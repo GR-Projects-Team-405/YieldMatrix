@@ -96,11 +96,13 @@ export default function MarketplacePage() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [filterError, setFilterError] = useState('');
 
-  const hasQuickFilter = Boolean(cropId || gradeId || district || pricePreset || availability);
+  const hasQuickFilter = Boolean(
+    queryText.trim() || cropId || gradeId || district || pricePreset || availability
+  );
 
-  const loadMarketplace = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError('');
+  const loadMarketplace = useCallback(async (signal?: AbortSignal, silent = false) => {
+    if (!silent) setLoading(true);
+    if (!silent) setError('');
     try {
       const response = await api.get<MarketplaceOverviewResponse>('/ym11/marketplace', { signal });
       if (signal?.aborted) return;
@@ -113,9 +115,9 @@ export default function MarketplacePage() {
       ) {
         return;
       }
-      setError('Could not load the marketplace right now. Please try again.');
+      if (!silent) setError('Could not load the marketplace right now. Please try again.');
     } finally {
-      if (!signal?.aborted) {
+      if (!signal?.aborted && !silent) {
         setLoading(false);
       }
     }
@@ -127,7 +129,16 @@ export default function MarketplacePage() {
     return () => controller.abort();
   }, [loadMarketplace]);
 
-  // Immediately run live filter query when any quick filter dropdown changes
+  // Auto-refresh marketplace & dynamic filter lists when user returns to this tab
+  useEffect(() => {
+    const handleFocus = () => {
+      void loadMarketplace(undefined, true);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadMarketplace]);
+
+  // Immediately filter when dropdowns change, and debounce free-text search by 250ms
   useEffect(() => {
     if (!hasQuickFilter) {
       setFilteredItems(null);
@@ -137,48 +148,59 @@ export default function MarketplacePage() {
     }
 
     const controller = new AbortController();
-    setFilterLoading(true);
-    setFilterError('');
+    const delayMs = queryText.trim() ? 250 : 0;
 
-    const params = buildMarketplaceSearchParams({
-      q: queryText,
-      cropId,
-      gradeId,
-      district,
-      pricePreset,
-      availability,
-    });
-    const paramsObj: Record<string, string> = {};
-    params.forEach((value, key) => {
-      paramsObj[key] = value;
-    });
+    const timerId = window.setTimeout(() => {
+      setFilterLoading(true);
+      setFilterError('');
 
-    api
-      .get<MarketplaceSearchResponse>('/ym11/marketplace/search', {
-        params: paramsObj,
-        signal: controller.signal,
-      })
-      .then((res) => {
-        if (controller.signal.aborted) return;
-        setFilteredItems(res.data.items);
-      })
-      .catch((err) => {
-        if (
-          controller.signal.aborted ||
-          (err as { code?: string })?.code === 'ERR_CANCELED' ||
-          (err as { name?: string })?.name === 'CanceledError'
-        ) {
-          return;
-        }
-        setFilterError('Could not apply filters right now. Please try again.');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setFilterLoading(false);
-        }
+      const params = buildMarketplaceSearchParams({
+        q: queryText,
+        cropId,
+        gradeId,
+        district,
+        pricePreset,
+        availability,
+      });
+      const paramsObj: Record<string, string> = {};
+      params.forEach((value, key) => {
+        paramsObj[key] = value;
       });
 
-    return () => controller.abort();
+      api
+        .get<MarketplaceSearchResponse>('/ym11/marketplace/search', {
+          params: paramsObj,
+          signal: controller.signal,
+        })
+        .then((res) => {
+          if (controller.signal.aborted) return;
+          setFilteredItems(res.data.items);
+          // Sync latest dynamic filter lists (newly added crops, grades, districts) from DB
+          if (res.data.filters) {
+            setData((prev) => (prev ? { ...prev, filters: res.data.filters } : prev));
+          }
+        })
+        .catch((err) => {
+          if (
+            controller.signal.aborted ||
+            (err as { code?: string })?.code === 'ERR_CANCELED' ||
+            (err as { name?: string })?.name === 'CanceledError'
+          ) {
+            return;
+          }
+          setFilterError('Could not apply filters right now. Please try again.');
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setFilterLoading(false);
+          }
+        });
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timerId);
+      controller.abort();
+    };
   }, [hasQuickFilter, cropId, gradeId, district, pricePreset, availability, queryText]);
 
   function toggleSaved(id: string) {

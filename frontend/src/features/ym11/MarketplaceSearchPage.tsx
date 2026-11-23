@@ -135,6 +135,15 @@ export default function MarketplaceSearchPage() {
     return () => controller.abort();
   }, [fetchSearch]);
 
+  // Refresh dynamic DB filters & results when tab regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      void fetchSearch();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [fetchSearch]);
+
   function commitFilters(overrides?: Partial<SearchFilterDraft>) {
     setValidationError('');
     const draft: SearchFilterDraft = {

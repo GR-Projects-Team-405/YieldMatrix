@@ -45,12 +45,54 @@ async function runQuery(sql, params = []) {
 function classifyCropCategory(cropName) {
   const name = String(cropName || '').trim().toLowerCase();
   if (!name) return 'other';
-  if (/(spinach|leafy|lettuce|kale|gotukola|kankun|mukunuwenna|greens)/.test(name)) return 'leafy_greens';
-  if (/(carrot|potato|beetroot|radish|yam|manioc|cassava|ginger|turmeric|onion|garlic)/.test(name)) return 'root_crops';
-  if (/(rice|paddy|maize|corn|millet|kurakkan|grain|lentil|gram|cowpea|oat|wheat)/.test(name)) return 'grains';
-  if (/(banana|mango|papaya|pineapple|watermelon|avocado|guava|passion|orange|lime|apple|grape|berry|fruit)/.test(name)) return 'fruits';
-  if (/(tomato|cabbage|bean|brinjal|eggplant|okra|pumpkin|chili|chilli|capsicum|cucumber|gourd|leek|broccoli|cauliflower|pepper|squash)/.test(name)) return 'vegetables';
+  if (/(spinach|leafy|lettuce|kale|gotukola|kankun|mukunuwenna|greens|mukunu|sarana|nivithi)/.test(name)) return 'leafy_greens';
+  if (/(carrot|potato|beetroot|radish|yam|manioc|cassava|ginger|turmeric|onion|garlic|sweet potato|turnip)/.test(name)) return 'root_crops';
+  if (/(rice|paddy|maize|corn|millet|kurakkan|grain|lentil|gram|cowpea|oat|wheat|dhal)/.test(name)) return 'grains';
+  if (/(banana|mango|papaya|pineapple|watermelon|avocado|guava|passion|orange|lime|apple|grape|berry|fruit|melon|woodapple|king coconut|coconut)/.test(name)) return 'fruits';
+  if (/(tomato|cabbage|bean|brinjal|eggplant|okra|pumpkin|chili|chilli|capsicum|cucumber|gourd|leek|broccoli|cauliflower|pepper|squash|drumstick|bitter|snake|knolkhol|zucchini)/.test(name)) return 'vegetables';
   return 'other';
+}
+
+function normalizeCropKey(name) {
+  const cleaned = String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  if (!cleaned) return '';
+  if (cleaned.endsWith('ies') && cleaned.length > 4) {
+    return `${cleaned.slice(0, -3)}y`;
+  }
+  if (/(o|ch|sh|x|z)es$/.test(cleaned) && cleaned.length > 4) {
+    return cleaned.slice(0, -2);
+  }
+  if (cleaned.endsWith('s') && !cleaned.endsWith('ss') && cleaned.length > 3) {
+    return cleaned.slice(0, -1);
+  }
+  return cleaned;
+}
+
+function deduplicateCrops(rawCrops) {
+  const byKey = new Map();
+  for (const crop of rawCrops) {
+    const key = normalizeCropKey(crop.name);
+    if (!key) continue;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, {
+        id: crop.id,
+        name: crop.name,
+        category: classifyCropCategory(crop.name),
+      });
+    } else if (crop.name.length < existing.name.length) {
+      // Prefer canonical singular display label (e.g. "Tomato" over "Tomatoes", "Carrot" over "Carrots")
+      byKey.set(key, {
+        id: crop.id,
+        name: crop.name,
+        category: classifyCropCategory(crop.name),
+      });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function formatDateOnly(value) {
@@ -492,7 +534,8 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
   );
 
   const metaRow = filterMetaRes.rows[0] || {};
-  const cropsList = Array.isArray(metaRow.crops) ? metaRow.crops : [];
+  const rawCropsList = Array.isArray(metaRow.crops) ? metaRow.crops : [];
+  const cropsList = deduplicateCrops(rawCropsList).map(({ id, name }) => ({ id, name }));
   const gradesList = Array.isArray(metaRow.grades) ? metaRow.grades : [];
   const districtsList = Array.isArray(metaRow.districts) ? metaRow.districts : [];
 
@@ -816,20 +859,36 @@ export async function getBuyingInsights(req, res, next) {
 async function loadMarketplaceFilterOptions() {
   const { rows } = await runQuery(
     `SELECT
-       COALESCE((SELECT json_agg(json_build_object('id', c.id, 'name', c.name) ORDER BY c.name ASC) FROM crops c WHERE c.active = true), '[]'::json) AS crops,
-       COALESCE((SELECT json_agg(json_build_object('id', g.id, 'name', g.name) ORDER BY g.name ASC) FROM grades g WHERE g.active = true), '[]'::json) AS grades,
-       COALESCE((SELECT json_agg(d.district ORDER BY d.district ASC) FROM (SELECT DISTINCT district FROM farms WHERE status = 'active' AND district IS NOT NULL AND length(trim(district)) > 0) d), '[]'::json) AS districts`
+       COALESCE((
+         SELECT json_agg(json_build_object('id', c.id, 'name', c.name) ORDER BY c.name ASC)
+         FROM crops c
+         WHERE c.active = true
+            OR EXISTS (SELECT 1 FROM harvest_batches b WHERE b.crop_id = c.id AND b.status IN ('planned', 'ready', 'harvested'))
+       ), '[]'::json) AS crops,
+       COALESCE((
+         SELECT json_agg(json_build_object('id', g.id, 'name', g.name) ORDER BY g.name ASC)
+         FROM grades g
+         WHERE g.active = true
+            OR EXISTS (SELECT 1 FROM harvest_batches b WHERE b.grade_id = g.id AND b.status IN ('planned', 'ready', 'harvested'))
+       ), '[]'::json) AS grades,
+       COALESCE((
+         SELECT json_agg(d.district ORDER BY d.district ASC)
+         FROM (
+           SELECT DISTINCT trim(f.district) AS district
+           FROM farms f
+           WHERE f.status = 'active'
+             AND f.district IS NOT NULL
+             AND length(trim(f.district)) > 0
+         ) d
+       ), '[]'::json) AS districts`
   );
   const row = rows[0] || {};
   const rawCrops = Array.isArray(row.crops) ? row.crops : [];
   const rawGrades = Array.isArray(row.grades) ? row.grades : [];
   const rawDistricts = Array.isArray(row.districts) ? row.districts : [];
   return {
-    crops: rawCrops.map((crop) => ({
-      id: crop.id,
-      name: crop.name,
-      category: classifyCropCategory(crop.name),
-    })),
+    allCropsRaw: rawCrops,
+    crops: deduplicateCrops(rawCrops),
     grades: rawGrades,
     districts: rawDistricts,
   };
@@ -974,7 +1033,11 @@ export async function getMarketplaceOverview(req, res, next) {
       categories,
       availableNow: availableItems.slice(0, 12),
       comingSoon: plannedItems.slice(0, 6),
-      filters: filterOptions,
+      filters: {
+        crops: filterOptions.crops,
+        grades: filterOptions.grades,
+        districts: filterOptions.districts,
+      },
       requestId: req.requestId,
     });
   } catch (error) {
@@ -1109,6 +1172,7 @@ export async function searchMarketplace(req, res, next) {
       return res.status(403).json({ error: 'Account is not approved', requestId: req.requestId });
     }
 
+    const filterOptions = await loadMarketplaceFilterOptions();
     const whereClauses = ['1=1'];
     const params = [];
     const addParam = (val) => {
@@ -1116,23 +1180,23 @@ export async function searchMarketplace(req, res, next) {
       return `$${params.length}`;
     };
 
-    if (q) {
-      const p = addParam(`%${q}%`);
-      whereClauses.push(
-        `(crop_name ILIKE ${p} OR farm_name ILIKE ${p} OR district ILIKE ${p} OR grade_name ILIKE ${p})`
-      );
-    }
     if (cropId) {
-      const p = addParam(cropId);
-      whereClauses.push(
-        `(crop_id = ${p}::uuid OR lower(regexp_replace(crop_name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = ${p}::uuid))`
-      );
+      const selectedCrop = filterOptions.allCropsRaw.find((c) => c.id === cropId);
+      if (selectedCrop) {
+        const targetKey = normalizeCropKey(selectedCrop.name);
+        const matchingCropIds = filterOptions.allCropsRaw
+          .filter((c) => c.id === cropId || normalizeCropKey(c.name) === targetKey)
+          .map((c) => c.id);
+        whereClauses.push(`crop_id = ANY(${addParam(matchingCropIds)}::uuid[])`);
+      } else {
+        whereClauses.push(`crop_id = ${addParam(cropId)}::uuid`);
+      }
     }
     if (gradeIds.length > 0) {
       whereClauses.push(`grade_id = ANY(${addParam(gradeIds)}::uuid[])`);
     }
     if (district) {
-      whereClauses.push(`lower(district) = lower(${addParam(district)})`);
+      whereClauses.push(`lower(trim(district)) = lower(${addParam(district)})`);
     }
     if (minPriceCents !== null) {
       whereClauses.push(`unit_price_cents IS NOT NULL AND unit_price_cents >= ${addParam(minPriceCents)}::bigint`);
@@ -1166,7 +1230,6 @@ export async function searchMarketplace(req, res, next) {
       newest: 'created_at DESC, effective_kg DESC',
     };
 
-    const filterOptions = await loadMarketplaceFilterOptions();
     const result = await runQuery(
       `${MARKETPLACE_BASE_CTE}
        SELECT *
@@ -1177,6 +1240,27 @@ export async function searchMarketplace(req, res, next) {
     );
 
     let items = result.rows.map(mapMarketplaceRow);
+    if (q) {
+      const qLower = q.toLowerCase();
+      const qNorm = normalizeCropKey(q);
+      const categoryLabelByKey = new Map(CROP_CATEGORIES.map((c) => [c.key, c.label.toLowerCase()]));
+      items = items.filter((item) => {
+        const cropLower = item.cropName.toLowerCase();
+        const cropNorm = normalizeCropKey(item.cropName);
+        const farmLower = item.farmName.toLowerCase();
+        const districtLower = item.district.toLowerCase();
+        const gradeLower = item.gradeName.toLowerCase();
+        const catLabel = categoryLabelByKey.get(item.category) || '';
+        return (
+          cropLower.includes(qLower) ||
+          (qNorm && (cropNorm.includes(qNorm) || qNorm.includes(cropNorm))) ||
+          farmLower.includes(qLower) ||
+          districtLower.includes(qLower) ||
+          gradeLower.includes(qLower) ||
+          catLabel.includes(qLower)
+        );
+      });
+    }
     if (category) {
       items = items.filter((item) => item.category === category);
     }
@@ -1207,7 +1291,9 @@ export async function searchMarketplace(req, res, next) {
         sort,
       },
       filters: {
-        ...filterOptions,
+        crops: filterOptions.crops,
+        grades: filterOptions.grades,
+        districts: filterOptions.districts,
         categories: CROP_CATEGORIES,
       },
       requestId: req.requestId,
@@ -1280,16 +1366,29 @@ export async function getHarvestAvailability(req, res, next) {
     const { monthStart, monthEnd } = getMonthBounds(month);
 
     const filterOptions = await loadMarketplaceFilterOptions();
+    let matchingCropIds = null;
+    if (cropId) {
+      const selectedCrop = filterOptions.allCropsRaw.find((c) => c.id === cropId);
+      if (selectedCrop) {
+        const targetKey = normalizeCropKey(selectedCrop.name);
+        matchingCropIds = filterOptions.allCropsRaw
+          .filter((c) => c.id === cropId || normalizeCropKey(c.name) === targetKey)
+          .map((c) => c.id);
+      } else {
+        matchingCropIds = [cropId];
+      }
+    }
+
     const result = await runQuery(
       `${MARKETPLACE_BASE_CTE}
        SELECT *
        FROM marketplace_items
-       WHERE ($1::uuid IS NULL OR crop_id = $1::uuid OR lower(regexp_replace(crop_name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = $1::uuid))
+       WHERE ($1::uuid[] IS NULL OR crop_id = ANY($1::uuid[]))
          AND ($2::uuid IS NULL OR grade_id = $2::uuid)
-         AND ($3::text IS NULL OR lower(district) = lower($3::text))
+         AND ($3::text IS NULL OR lower(trim(district)) = lower($3::text))
          AND ($4::text = 'all' OR availability_status = $4::text)
        ORDER BY availability_date ASC, effective_kg DESC, farm_name ASC`,
-      [cropId, gradeId, district, status]
+      [matchingCropIds, gradeId, district, status]
     );
 
     const entries = result.rows.map((row) => {
@@ -1349,7 +1448,11 @@ export async function getHarvestAvailability(req, res, next) {
       },
       entries,
       calendarDays,
-      filters: filterOptions,
+      filters: {
+        crops: filterOptions.crops,
+        grades: filterOptions.grades,
+        districts: filterOptions.districts,
+      },
       appliedFilters: {
         month,
         cropId,
