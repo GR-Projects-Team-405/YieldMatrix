@@ -1426,8 +1426,10 @@ export async function getHarvestAvailability(req, res, next) {
     const activeSuppliersCount = new Set(entries.map((e) => e.farmId)).size;
 
     const calendarDays = {};
+    const monthEntries = [];
     for (const entry of entries) {
       if (entry.availabilityDate && entry.availabilityDate >= monthStart && entry.availabilityDate <= monthEnd) {
+        monthEntries.push(entry);
         if (!calendarDays[entry.availabilityDate]) {
           calendarDays[entry.availabilityDate] = [];
         }
@@ -1436,6 +1438,7 @@ export async function getHarvestAvailability(req, res, next) {
     }
 
     return res.json({
+      generatedAt: new Date().toISOString(),
       month,
       monthStart,
       monthEnd,
@@ -1445,8 +1448,10 @@ export async function getHarvestAvailability(req, res, next) {
         upcoming30DaysKg,
         activeSuppliersCount,
         totalEntries: entries.length,
+        monthEntriesCount: monthEntries.length,
       },
       entries,
+      monthEntries,
       calendarDays,
       filters: {
         crops: filterOptions.crops,

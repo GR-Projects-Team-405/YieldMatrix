@@ -296,6 +296,7 @@ export interface HarvestAvailabilityEntry extends MarketplaceItem {
 }
 
 export interface HarvestAvailabilityResponse {
+  generatedAt?: string;
   month: string;
   monthStart: string;
   monthEnd: string;
@@ -305,8 +306,10 @@ export interface HarvestAvailabilityResponse {
     upcoming30DaysKg: number;
     activeSuppliersCount: number;
     totalEntries: number;
+    monthEntriesCount?: number;
   };
   entries: HarvestAvailabilityEntry[];
+  monthEntries?: HarvestAvailabilityEntry[];
   calendarDays: Record<string, HarvestAvailabilityEntry[]>;
   filters: MarketplaceFilterOptions;
   appliedFilters: {

@@ -24,7 +24,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { Table, TableRow } from '../../components/Table';
 import { MarketplaceSubnav } from './ProduceCard';
 import type { HarvestAvailabilityEntry, HarvestAvailabilityResponse } from './types';
-import { formatColomboShortDate, formatKg, formatPaddedCount } from './utils';
+import { formatColomboShortDate, formatColomboTime, formatKg, formatLkrFromCents, formatPaddedCount } from './utils';
 import './ym11.css';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -108,7 +108,9 @@ export default function HarvestAvailabilityPage() {
 
   const [data, setData] = useState<HarvestAvailabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [refreshWarning, setRefreshWarning] = useState('');
 
   const [month, setMonth] = useState(searchParams.get('month') || getCurrentColomboMonth());
   const [cropId, setCropId] = useState(searchParams.get('cropId') || '');
@@ -118,28 +120,33 @@ export default function HarvestAvailabilityPage() {
     (searchParams.get('status') as 'all' | 'available_now' | 'planned') || 'all'
   );
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [tableScope, setTableScope] = useState<'month' | 'all'>('month');
   const [selectedDate, setSelectedDate] = useState<string>('');
 
   const paramsKey = searchParams.toString();
 
   const fetchAvailability = useCallback(
-    async (signal?: AbortSignal) => {
-      setLoading(true);
-      setError('');
+    async (options?: { signal?: AbortSignal; silent?: boolean }) => {
+      const silent = Boolean(options?.silent);
+      if (silent) setRefreshing(true);
+      else setLoading(true);
+      if (!silent) setError('');
+      setRefreshWarning('');
       try {
+        const parsed = new URLSearchParams(paramsKey);
         const params: Record<string, string> = {};
-        const currentMonth = searchParams.get('month') || getCurrentColomboMonth();
+        const currentMonth = parsed.get('month') || getCurrentColomboMonth();
         params.month = currentMonth;
-        if (searchParams.get('cropId')) params.cropId = searchParams.get('cropId') || '';
-        if (searchParams.get('gradeId')) params.gradeId = searchParams.get('gradeId') || '';
-        if (searchParams.get('district')) params.district = searchParams.get('district') || '';
-        if (searchParams.get('status')) params.status = searchParams.get('status') || '';
+        if (parsed.get('cropId')) params.cropId = parsed.get('cropId') || '';
+        if (parsed.get('gradeId')) params.gradeId = parsed.get('gradeId') || '';
+        if (parsed.get('district')) params.district = parsed.get('district') || '';
+        if (parsed.get('status')) params.status = parsed.get('status') || '';
 
         const response = await api.get<HarvestAvailabilityResponse>(
           '/ym11/marketplace/harvest-availability',
-          { params, signal }
+          { params, signal: options?.signal }
         );
-        if (signal?.aborted) return;
+        if (options?.signal?.aborted) return;
         setData(response.data);
 
         const datesWithItems = Object.keys(response.data.calendarDays).sort();
@@ -149,35 +156,57 @@ export default function HarvestAvailabilityPage() {
         });
       } catch (err) {
         if (
-          signal?.aborted ||
+          options?.signal?.aborted ||
           (err as { code?: string })?.code === 'ERR_CANCELED' ||
           (err as { name?: string })?.name === 'CanceledError'
         ) {
           return;
         }
-        setError('Could not load harvest availability data. Please try again.');
+        if (silent) {
+          setRefreshWarning('Live refresh failed — showing last synced availability.');
+        } else {
+          setError('Could not load harvest availability data. Please try again.');
+        }
       } finally {
-        if (!signal?.aborted) {
-          setLoading(false);
+        if (!options?.signal?.aborted) {
+          if (silent) setRefreshing(false);
+          else setLoading(false);
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [paramsKey]
   );
 
   useEffect(() => {
-    setMonth(searchParams.get('month') || getCurrentColomboMonth());
-    setCropId(searchParams.get('cropId') || '');
-    setDistrict(searchParams.get('district') || '');
-    setGradeId(searchParams.get('gradeId') || '');
-    setStatus((searchParams.get('status') as 'all' | 'available_now' | 'planned') || 'all');
-  }, [paramsKey, searchParams]);
+    const parsed = new URLSearchParams(paramsKey);
+    setMonth(parsed.get('month') || getCurrentColomboMonth());
+    setCropId(parsed.get('cropId') || '');
+    setDistrict(parsed.get('district') || '');
+    setGradeId(parsed.get('gradeId') || '');
+    setStatus((parsed.get('status') as 'all' | 'available_now' | 'planned') || 'all');
+  }, [paramsKey]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchAvailability(controller.signal);
+    void fetchAvailability({ signal: controller.signal });
     return () => controller.abort();
+  }, [fetchAvailability]);
+
+  // Real-time background refresh every 30s and on tab focus
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void fetchAvailability({ silent: true });
+      }
+    }, 30000);
+    const handleFocus = () => {
+      void fetchAvailability({ silent: true });
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [fetchAvailability]);
 
   function applyQuery(overrides?: {
@@ -212,8 +241,16 @@ export default function HarvestAvailabilityPage() {
     applyQuery({ month: nextMonth });
   }
 
+  const tableEntries = useMemo(() => {
+    if (!data) return [];
+    if (tableScope === 'month' && Array.isArray(data.monthEntries)) {
+      return data.monthEntries;
+    }
+    return data.entries;
+  }, [data, tableScope]);
+
   function handleExportCsv() {
-    if (!data || data.entries.length === 0) return;
+    if (!data || tableEntries.length === 0) return;
     const headers = [
       'Crop',
       'Grade',
@@ -223,7 +260,7 @@ export default function HarvestAvailabilityPage() {
       'Availability Date',
       'Status',
     ];
-    const rows = data.entries.map((entry) => [
+    const rows = tableEntries.map((entry) => [
       entry.cropName,
       entry.gradeName,
       entry.farmName,
@@ -274,10 +311,28 @@ export default function HarvestAvailabilityPage() {
           <p className="ym11-eyebrow">Supply timeline</p>
           <h2 className="ym11-greeting">Harvest Availability</h2>
           <p className="ym11-subtitle">
-            Explore available stock and plan purchases around upcoming harvests.
+            Explore real-time available stock and plan purchases around upcoming harvests.
           </p>
         </div>
+        <div className="ym11-header-actions">
+          {data?.generatedAt && (
+            <span className="ym11-planned-notice-pill" title="Auto-refreshes from Neon PostgreSQL every 30 seconds">
+              <span className="ym11-dot ym11-seg-0" aria-hidden="true" />
+              Live · Updated {formatColomboTime(data.generatedAt)}
+            </span>
+          )}
+          <Button
+            variant="outline"
+            disabled={refreshing || loading}
+            onClick={() => void fetchAvailability({ silent: true })}
+          >
+            <RefreshCw size={15} aria-hidden="true" />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        </div>
       </section>
+
+      {refreshWarning && <Alert type="warning">{refreshWarning}</Alert>}
 
       <MarketplaceSubnav />
 
@@ -599,6 +654,14 @@ export default function HarvestAvailabilityPage() {
                           <span>Availability date</span>
                           <strong>{formatColomboShortDate(entry.availabilityDate)}</strong>
                         </div>
+                        <div className="ym11-kv-row">
+                          <span>Unit price</span>
+                          <strong>
+                            {entry.unitPriceCents !== null
+                              ? `${formatLkrFromCents(entry.unitPriceCents)}/kg`
+                              : 'Price on inquiry'}
+                          </strong>
+                        </div>
                       </div>
 
                       <Button
@@ -632,24 +695,44 @@ export default function HarvestAvailabilityPage() {
               <div>
                 <h3 className="ym11-card-title">Harvest Availability Overview</h3>
                 <p className="ym11-card-sub">
-                  Current and planned supply across matching growers ({data.entries.length} records).
+                  {tableScope === 'month'
+                    ? `Current and planned supply for ${formatMonthTitle(data.month)} (${tableEntries.length} records).`
+                    : `All current and planned supply across matching growers (${tableEntries.length} records).`}
                 </p>
               </div>
-              <Button
-                variant="outline"
-                disabled={data.entries.length === 0}
-                onClick={handleExportCsv}
-                style={{ height: 40, padding: '0 14px', fontSize: 13 }}
-              >
-                <Download size={14} aria-hidden="true" />
-                Export overview
-              </Button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                <div className="ym11-view-toggle" role="group" aria-label="Table date scope">
+                  <button
+                    type="button"
+                    className={tableScope === 'month' ? 'is-active' : ''}
+                    onClick={() => setTableScope('month')}
+                  >
+                    {formatMonthTitle(data.month)}
+                  </button>
+                  <button
+                    type="button"
+                    className={tableScope === 'all' ? 'is-active' : ''}
+                    onClick={() => setTableScope('all')}
+                  >
+                    All dates ({data.entries.length})
+                  </button>
+                </div>
+                <Button
+                  variant="outline"
+                  disabled={tableEntries.length === 0}
+                  onClick={handleExportCsv}
+                  style={{ height: 40, padding: '0 14px', fontSize: 13 }}
+                >
+                  <Download size={14} aria-hidden="true" />
+                  Export overview
+                </Button>
+              </div>
             </div>
 
-            {data.entries.length === 0 ? (
+            {tableEntries.length === 0 ? (
               <EmptyState
                 title="No harvest availability entries"
-                description="Try clearing a filter or create a buyer demand so growers can offer matching supply."
+                description="Try switching to All dates, clearing a filter, or creating a buyer demand so growers can offer matching supply."
                 action={
                   <Button variant="primary" onClick={() => navigate('/buyer/demands')}>
                     Create demand
@@ -669,7 +752,7 @@ export default function HarvestAvailabilityPage() {
                   'Action',
                 ]}
               >
-                {data.entries.map((entry) => (
+                {tableEntries.map((entry) => (
                   <TableRow key={entry.id}>
                     <td>
                       <strong>{entry.cropName}</strong>
