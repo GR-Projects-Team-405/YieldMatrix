@@ -5,7 +5,7 @@ import { ContentCard } from '../../components/ContentCard';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Button } from '../../components/Button';
 import { Alert } from '../../components/Alert';
-import { ArrowLeft, ShieldAlert, CheckCircle, Clock, FileText, ExternalLink, Info } from 'lucide-react';
+import { ArrowLeft, ShieldAlert, CheckCircle, FileText, Info, Scale, Printer, Gavel, X } from 'lucide-react';
 
 export function DisputeDetails() {
   const { id } = useParams<{ id: string }>();
@@ -14,27 +14,78 @@ export function DisputeDetails() {
   const [dispute, setDispute] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Adjudication dialog state
+  const [showResolveModal, setShowResolveModal] = useState<boolean>(false);
+  const [resolveVerdict, setResolveVerdict] = useState<string>('');
+  const [resolvedKg, setResolvedKg] = useState<string>('');
+  const [refundLkr, setRefundLkr] = useState<string>('');
+  const [settlementLkr, setSettlementLkr] = useState<string>('');
+  const [resolving, setResolving] = useState<boolean>(false);
+
+  const fetchDispute = async () => {
+    if (!id) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get(`/ym19/disputes/${id}`);
+      const disp = res.data.dispute;
+      setDispute(disp);
+
+      // Pre-fill default suggested split
+      if (disp) {
+        const totalDisputedLkr = (parseInt(disp.disputed_cents, 10) / 100);
+        setResolvedKg(disp.disputed_kg?.toString() || '0');
+        setRefundLkr(totalDisputedLkr.toFixed(2));
+        setSettlementLkr('0.00');
+        setResolveVerdict('QA inspection confirmed non-conforming produce. Buyer refunded for damaged quantity.');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load dispute details');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchDispute() {
-      if (!id) return;
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await api.get(`/ym19/disputes/${id}`);
-        setDispute(res.data.dispute);
-      } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to load dispute details');
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchDispute();
   }, [id]);
 
   const formatLkr = (centsStr: string | number) => {
     const cents = typeof centsStr === 'string' ? parseInt(centsStr, 10) : centsStr;
     return `LKR ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const handleResolveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dispute) return;
+
+    const refundCents = Math.round((parseFloat(refundLkr) || 0) * 100);
+    const settlementCents = Math.round((parseFloat(settlementLkr) || 0) * 100);
+    const resolvedKgNum = parseFloat(resolvedKg) || 0;
+
+    try {
+      setResolving(true);
+      setFeedback(null);
+      await api.post(`/ym19/disputes/${dispute.id}/resolve`, {
+        resolution: resolveVerdict.trim(),
+        resolvedKg: resolvedKgNum,
+        refundCents,
+        settlementCents,
+      });
+
+      setShowResolveModal(false);
+      setFeedback({
+        type: 'success',
+        message: 'Dispute formally resolved! Escrow funds adjusted and notifications sent.',
+      });
+      await fetchDispute();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.response?.data?.error || 'Failed to resolve dispute' });
+    } finally {
+      setResolving(false);
+    }
   };
 
   if (loading) {
@@ -79,7 +130,31 @@ export function DisputeDetails() {
             </span>
           </div>
         </div>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button
+            variant="outline"
+            onClick={() => window.print()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
+          >
+            <Printer size={15} />
+            Print Dossier
+          </Button>
+
+          {dispute.dispute_status !== 'resolved' && (
+            <Button
+              variant="secondary"
+              onClick={() => setShowResolveModal(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
+            >
+              <Gavel size={15} />
+              Adjudicate Claim
+            </Button>
+          )}
+        </div>
       </div>
+
+      {feedback && <Alert type={feedback.type}>{feedback.message}</Alert>}
 
       {/* Overview Grid */}
       <ContentCard title="Delivery & Produce Context">
@@ -206,7 +281,7 @@ export function DisputeDetails() {
               <strong style={{ fontSize: '15px' }}>{dispute.resolved_kg?.toFixed(1)} kg</strong>
             </div>
             <div>
-              <span style={{ fontSize: '12px', color: '#059669', display: 'block' }}>Farmer Settlement</span>
+              <span style={{ fontSize: '12px', color: '#059669', display: 'block' }}>Farmer Payout Release</span>
               <strong style={{ fontSize: '15px', color: '#059669' }}>{formatLkr(dispute.settlement_cents)}</strong>
             </div>
             <div>
@@ -224,11 +299,131 @@ export function DisputeDetails() {
                 Pending Platform Review ({dispute.dispute_status === 'under_review' ? 'In Mediation' : 'Queued'})
               </strong>
               <p style={{ margin: 0, fontSize: '13px', color: '#1e3a8a', lineHeight: 1.5 }}>
-                Under YieldMatrix rule FR-ORD-08, disputed funds ({formatLkr(dispute.disputed_cents)}) remain securely locked in the smart escrow contract. The platform administrator and supplier will review the evidence provided and determine final refund vs settlement amounts.
+                Under YieldMatrix rule FR-ORD-08, disputed funds ({formatLkr(dispute.disputed_cents)}) remain securely locked in the smart escrow contract. Use the "Adjudicate Claim" button to simulate or execute administrative resolution.
               </p>
             </div>
           </div>
         </ContentCard>
+      )}
+
+      {/* Adjudication Modal */}
+      {showResolveModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '8px',
+              maxWidth: '550px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Scale size={20} color="#15803d" />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Adjudicate & Settle Dispute</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResolveModal(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>
+              Adjudicate claim for <strong>{dispute.disputed_kg?.toFixed(1)} kg</strong> ({formatLkr(dispute.disputed_cents)}).
+              Determine refund to buyer vs payout to farmer.
+            </p>
+
+            <form onSubmit={handleResolveSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>
+                  Approved Disputed Quantity (kg)
+                </label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  max={dispute.disputed_kg}
+                  value={resolvedKg}
+                  onChange={(e) => setResolvedKg(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px', color: '#2563eb' }}>
+                    Refund to Buyer (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={refundLkr}
+                    onChange={(e) => setRefundLkr(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px', color: '#16a34a' }}>
+                    Release to Farmer (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={settlementLkr}
+                    onChange={(e) => setSettlementLkr(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>
+                  Formal Verdict & Explanation
+                </label>
+                <textarea
+                  rows={3}
+                  value={resolveVerdict}
+                  onChange={(e) => setResolveVerdict(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <Button variant="outline" type="button" onClick={() => setShowResolveModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={resolving}>
+                  {resolving ? 'Applying Verdict…' : 'Confirm Adjudication & Release'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

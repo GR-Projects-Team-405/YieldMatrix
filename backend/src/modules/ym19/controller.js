@@ -1,7 +1,7 @@
 import pool from '../../config/db.js';
 
 // YM19 · Pasan Kalhara · Acceptance & disputes
-// Handles delivery acceptance review, partial acceptance, disputes, stats, notifications, and audit logging.
+// Handles delivery acceptance review, partial acceptance, disputes, stats, resolution, notifications, and audit logging.
 
 /**
  * Get module status and user details
@@ -640,6 +640,170 @@ export async function raiseFullDispute(req, res, next) {
       success: true,
       message: 'Full dispute raised successfully',
       dispute: disputeRes.rows[0],
+      requestId: req.requestId
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Resolve dispute (Adjudication by Admin or authorised mediator)
+ * Satisfies SRS FR-ORD-09 and verification scenario AT-ORD.
+ * Resolves dispute with accepted kg, refund amount, and releases remaining escrow funds.
+ */
+export async function resolveDispute(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { resolution, resolvedKg = 0, settlementCents = 0, refundCents = 0 } = req.body || {};
+
+    if (!resolution || typeof resolution !== 'string' || resolution.trim().length === 0) {
+      return res.status(422).json({ error: 'Formal resolution verdict and explanation is required', requestId: req.requestId });
+    }
+
+    await client.query('BEGIN');
+
+    // Fetch and lock dispute
+    const dispRes = await client.query('SELECT * FROM disputes WHERE id = $1 FOR UPDATE;', [id]);
+    if (!dispRes.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Dispute record not found', requestId: req.requestId });
+    }
+
+    const dispute = dispRes.rows[0];
+    if (dispute.status === 'resolved') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'This dispute has already been resolved', requestId: req.requestId });
+    }
+
+    const disputedKgNum = parseFloat(dispute.disputed_kg);
+    const disputedCentsVal = BigInt(dispute.disputed_cents);
+
+    const resolvedKgNum = parseFloat(resolvedKg) || 0;
+    const finalSettlementCents = BigInt(settlementCents || '0');
+    const finalRefundCents = BigInt(refundCents || '0');
+
+    // Validations per schema constraints
+    if (resolvedKgNum < 0 || resolvedKgNum > disputedKgNum) {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: `Resolved quantity (${resolvedKgNum} kg) must be between 0 and disputed quantity (${disputedKgNum} kg)`,
+        requestId: req.requestId
+      });
+    }
+
+    if (finalSettlementCents + finalRefundCents > disputedCentsVal) {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: `Total resolution amount (${finalSettlementCents + finalRefundCents} cents) cannot exceed disputed value (${disputedCentsVal} cents)`,
+        requestId: req.requestId
+      });
+    }
+
+    // Workflow transition check: 'open' -> 'under_review' -> 'resolved'
+    if (dispute.status === 'open') {
+      await client.query(`UPDATE disputes SET status = 'under_review' WHERE id = $1;`, [id]);
+    }
+
+    // Resolve the dispute
+    const updateDisputeQuery = `
+      UPDATE disputes
+      SET
+        status = 'resolved',
+        resolved_kg = $1,
+        settlement_cents = $2,
+        refund_cents = $3,
+        resolution = $4,
+        resolved_by = $5,
+        resolved_at = now()
+      WHERE id = $6
+      RETURNING *;
+    `;
+
+    const updatedDispute = await client.query(updateDisputeQuery, [
+      resolvedKgNum.toFixed(3),
+      finalSettlementCents.toString(),
+      finalRefundCents.toString(),
+      resolution.trim(),
+      req.user.id,
+      id
+    ]);
+
+    // Update parent allocation
+    const allocRes = await client.query('SELECT * FROM allocations WHERE id = $1 FOR UPDATE;', [dispute.allocation_id]);
+    if (allocRes.rows[0]) {
+      const alloc = allocRes.rows[0];
+      const newAcceptedKg = (parseFloat(alloc.accepted_kg) + resolvedKgNum).toFixed(3);
+      const newSettledCents = (BigInt(alloc.settled_cents || '0') + finalSettlementCents).toString();
+      const newRefundedCents = (BigInt(alloc.refunded_cents || '0') + finalRefundCents).toString();
+      const currentFunded = BigInt(alloc.funded_cents || '0');
+      const newHeldCents = currentFunded >= (BigInt(newSettledCents) + BigInt(newRefundedCents))
+        ? (currentFunded - (BigInt(newSettledCents) + BigInt(newRefundedCents))).toString()
+        : '0';
+
+      await client.query(
+        `UPDATE allocations
+         SET
+           accepted_kg = $1,
+           settled_cents = $2,
+           refunded_cents = $3,
+           held_cents = $4,
+           status = 'resolved',
+           decision_reason = $5
+         WHERE id = $6;`,
+        [
+          newAcceptedKg,
+          newSettledCents,
+          newRefundedCents,
+          newHeldCents,
+          `Dispute resolved: ${resolution.trim()}`,
+          dispute.allocation_id
+        ]
+      );
+
+      // Notify buyer and farmer
+      const notifKey = `notif:resolve:${id}:${Date.now()}`;
+      await client.query(
+        `INSERT INTO notifications (user_id, title, message, category, target_path, operation_key)
+         VALUES
+           ($1, 'Dispute Adjudicated', $2, 'dispute', '/buyer/disputes/' || $3, $4 || ':buyer'),
+           ($5, 'Dispute Adjudicated', $2, 'dispute', '/farmer/allocations', $4 || ':farmer')
+         ON CONFLICT (operation_key) DO NOTHING;`,
+        [
+          dispute.raised_by,
+          `Dispute on allocation #${dispute.allocation_id.slice(0, 8)} resolved: ${resolution.trim()}`,
+          id,
+          notifKey,
+          alloc.farmer_id
+        ]
+      );
+    }
+
+    // Audit log
+    await client.query(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, reason, safe_changes)
+       VALUES ($1, 'resolve_dispute', 'dispute', $2, $3, $4);`,
+      [
+        req.user.id,
+        id,
+        resolution.trim(),
+        JSON.stringify({
+          resolved_kg: resolvedKgNum,
+          settlement_cents: finalSettlementCents.toString(),
+          refund_cents: finalRefundCents.toString()
+        })
+      ]
+    );
+
+    await client.query('COMMIT');
+    return res.json({
+      success: true,
+      message: 'Dispute formally resolved and escrow funds settled',
+      dispute: updatedDispute.rows[0],
       requestId: req.requestId
     });
   } catch (error) {

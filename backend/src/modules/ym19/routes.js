@@ -8,6 +8,7 @@ import {
   acceptFullDelivery,
   acceptPartialDelivery,
   raiseFullDispute,
+  resolveDispute,
   getDisputes,
   getDisputeDetail
 } from './controller.js';
@@ -26,8 +27,9 @@ router.post('/allocations/:id/accept', verifyToken, authorizeRoles('buyer', 'adm
 router.post('/allocations/:id/partial-accept', verifyToken, authorizeRoles('buyer', 'admin'), acceptPartialDelivery);
 router.post('/allocations/:id/dispute', verifyToken, authorizeRoles('buyer', 'admin'), raiseFullDispute);
 
-// Disputes management
+// Disputes management & adjudication
 router.get('/disputes', verifyToken, authorizeRoles('buyer', 'admin'), getDisputes);
 router.get('/disputes/:id', verifyToken, authorizeRoles('buyer', 'admin'), getDisputeDetail);
+router.post('/disputes/:id/resolve', verifyToken, authorizeRoles('buyer', 'admin'), resolveDispute);
 
 export default router;

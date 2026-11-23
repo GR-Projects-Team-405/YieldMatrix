@@ -4,8 +4,7 @@ import api from '../../services/api';
 import { ContentCard } from '../../components/ContentCard';
 import { Button } from '../../components/Button';
 import { Alert } from '../../components/Alert';
-import { InputField } from '../../components/InputField';
-import { ArrowLeft, AlertTriangle, ShieldAlert, Plus, Trash2, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UploadCloud, Image as ImageIcon } from 'lucide-react';
 import type { DeliveryAllocation } from './DeliveryAcceptanceReview';
 
 export function PartialAcceptance() {
@@ -21,7 +20,7 @@ export function PartialAcceptance() {
   const [acceptedKg, setAcceptedKg] = useState<string>('');
   const [reasonCategory, setReasonCategory] = useState<string>('Damage or transit bruising');
   const [detailedReason, setDetailedReason] = useState<string>('');
-  const [evidenceList, setEvidenceList] = useState<{ label: string; url: string }[]>([]);
+  const [evidenceList, setEvidenceList] = useState<{ label: string; url: string; preview?: string }[]>([]);
   const [newEvidenceLabel, setNewEvidenceLabel] = useState<string>('');
   const [newEvidenceUrl, setNewEvidenceUrl] = useState<string>('');
 
@@ -34,7 +33,6 @@ export function PartialAcceptance() {
         const alloc = res.data.allocation;
         setAllocation(alloc);
 
-        // Pre-fill default suggested accepted kg (e.g. 90% or 0)
         const delivered = alloc.handed_over_kg > 0 ? alloc.handed_over_kg : alloc.picked_up_kg;
         setAcceptedKg(Math.max(0, delivered - 10).toString());
       } catch (err: any) {
@@ -63,11 +61,33 @@ export function PartialAcceptance() {
     return `LKR ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const handleAddEvidence = () => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const previewUrl = event.target?.result as string;
+        setEvidenceList((prev) => [
+          ...prev,
+          {
+            label: file.name,
+            url: `Attached: ${file.name} (${Math.round(file.size / 1024)} KB)`,
+            preview: file.type.startsWith('image/') ? previewUrl : undefined,
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const handleAddManualEvidence = () => {
     if (!newEvidenceLabel.trim()) return;
     setEvidenceList((prev) => [
       ...prev,
-      { label: newEvidenceLabel.trim(), url: newEvidenceUrl.trim() || 'Internal inspection photo' },
+      { label: newEvidenceLabel.trim(), url: newEvidenceUrl.trim() || 'Internal inspection record' },
     ]);
     setNewEvidenceLabel('');
     setNewEvidenceUrl('');
@@ -104,10 +124,16 @@ export function PartialAcceptance() {
       setSubmitting(true);
       setFeedback(null);
 
+      // Strip large base64 strings if needed to keep payload lightweight
+      const sanitizedEvidence = evidenceList.map((item) => ({
+        label: item.label,
+        url: item.url,
+      }));
+
       await api.post(`/ym19/allocations/${allocation.id}/partial-accept`, {
         acceptedKg: acceptedKgNum,
         reason: fullReason,
-        evidence: evidenceList,
+        evidence: sanitizedEvidence,
       });
 
       setFeedback({
@@ -127,7 +153,7 @@ export function PartialAcceptance() {
 
   if (loading) {
     return (
-      <ContentCard title="Partial Acceptance & Dispute Recording">
+      <ContentCard title="Partial Acceptance & Quality Dispute">
         <p style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>Loading allocation details…</p>
       </ContentCard>
     );
@@ -293,34 +319,100 @@ export function PartialAcceptance() {
               />
             </div>
 
-            {/* Evidence items */}
+            {/* Photo / File Upload & Evidence Section */}
             <div>
               <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '6px' }}>
                 Supporting Inspection Evidence (Photos, Weighbridge slips, Reports)
               </label>
 
+              {/* Upload Dropzone */}
+              <div
+                style={{
+                  border: '2px dashed #cbd5e1',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  textAlign: 'center',
+                  backgroundColor: '#f8fafc',
+                  marginBottom: '12px',
+                  cursor: 'pointer',
+                  position: 'relative',
+                }}
+              >
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf"
+                  onChange={handleFileUpload}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    opacity: 0,
+                    cursor: 'pointer',
+                  }}
+                />
+                <UploadCloud size={24} color="#64748b" style={{ margin: '0 auto 6px auto' }} />
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 500, color: '#334155' }}>
+                  Click or drag files here to upload damage photos or QA tickets
+                </p>
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>Supports PNG, JPG, WebP, PDF up to 5 MB</span>
+              </div>
+
+              {/* Evidence cards with previews */}
               {evidenceList.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px', marginBottom: '12px' }}>
                   {evidenceList.map((item, index) => (
                     <div
                       key={index}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '6px 12px',
-                        backgroundColor: '#f1f5f9',
+                        gap: '8px',
+                        padding: '8px 10px',
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #e2e8f0',
                         borderRadius: '6px',
-                        fontSize: '13px',
+                        fontSize: '12px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                       }}
                     >
-                      <span>
-                        <strong>{item.label}</strong> — <span style={{ color: '#64748b' }}>{item.url}</span>
-                      </span>
+                      {item.preview ? (
+                        <img
+                          src={item.preview}
+                          alt="preview"
+                          style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '4px',
+                            backgroundColor: '#e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <ImageIcon size={18} color="#64748b" />
+                        </div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.label}
+                        </strong>
+                        <span style={{ fontSize: '11px', color: '#64748b', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.url}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveEvidence(index)}
-                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444' }}
+                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', padding: '4px' }}
+                        title="Remove evidence"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -329,24 +421,25 @@ export function PartialAcceptance() {
                 </div>
               )}
 
+              {/* Manual reference input fallback */}
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <input
                   type="text"
-                  placeholder="Evidence title (e.g. Bruising photo)"
+                  placeholder="Or enter ticket / document title"
                   value={newEvidenceLabel}
                   onChange={(e) => setNewEvidenceLabel(e.target.value)}
                   style={{ flex: 1, minWidth: '180px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
                 />
                 <input
                   type="text"
-                  placeholder="Reference URL or ticket number"
+                  placeholder="Reference tracking number / notes"
                   value={newEvidenceUrl}
                   onChange={(e) => setNewEvidenceUrl(e.target.value)}
                   style={{ flex: 1, minWidth: '180px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
                 />
-                <Button variant="outline" type="button" onClick={handleAddEvidence} style={{ fontSize: '12px', padding: '6px 12px' }}>
+                <Button variant="outline" type="button" onClick={handleAddManualEvidence} style={{ fontSize: '12px', padding: '6px 12px' }}>
                   <Plus size={14} style={{ marginRight: '4px' }} />
-                  Add
+                  Add Link
                 </Button>
               </div>
             </div>
