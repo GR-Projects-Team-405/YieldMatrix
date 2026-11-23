@@ -1,0 +1,232 @@
+/* Local styles scoped to YM28 · Buyer wallet & reconciliation */
+.ym28-stack {
+  display: grid;
+  gap: 24px;
+}
+
+.ym28-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ym28-subnav-link {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.ym28-subnav-link:hover {
+  background: var(--canvas);
+  color: var(--text);
+}
+
+.ym28-subnav-link.active {
+  background: var(--soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.ym28-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.ym28-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.ym28-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  flex: 1 1 320px;
+}
+
+.ym28-filters .ym-field {
+  min-width: 190px;
+  flex: 1 1 190px;
+}
+
+.ym28-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.ym28-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.ym28-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ym28-chip-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--control-border);
+  background: var(--canvas);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ym28-chip-btn:hover {
+  background: var(--soft);
+  color: var(--accent-text);
+  border-color: var(--accent-text);
+}
+
+.ym28-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.ym28-meta-item {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+}
+
+.ym28-meta-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ym28-meta-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.ym28-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.ym28-muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ym28-amount-pos {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.ym28-amount-neg {
+  color: #b42318;
+  font-weight: 600;
+}
+
+:root[data-theme='dark'] .ym28-amount-neg {
+  color: #ffc0bb;
+}
+
+.ym28-pagination {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ym28-divider {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+.ym28-order-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ym28-inline-link {
+  color: var(--accent-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ym28-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ym28-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+}
+
+.ym28-issue-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.ym28-journal-lines {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.ym28-textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 12px 16px;
+  border: 1px solid var(--control-border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.ym28-textarea[aria-invalid='true'] {
+  border-color: #b42318;
+}
