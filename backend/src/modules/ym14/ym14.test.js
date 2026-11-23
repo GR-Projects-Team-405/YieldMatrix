@@ -7,6 +7,10 @@ import {
   declineOffer,
   getCommitmentsList,
   getCommitmentDetails,
+  getChangeProposal,
+  approveChange,
+  rejectChange,
+  cancelCommitment,
 } from './controller.js';
 
 // Helper to create mock Express request and response objects
@@ -282,7 +286,117 @@ async function runUnitTests() {
     console.log('✔ Test 16: declineOffer transitions offer to rejected with mandatory reason recorded');
   }
 
-  console.log('\n🎉 ALL 16 YM14 PHASE 2 & 3 UNIT & CONTROLLER TESTS PASSED SUCCESSFULLY!\n');
+  // Test 17: getChangeProposal returns 4-column diff, grower statement, and financial refund summary (FR-YM14-05)
+  {
+    const { req, res, next } = createMockReqRes({
+      user: { id: '22222222-2222-2222-2222-222222222222', name: 'Demo Buyer', role: 'buyer' },
+      params: { id: 'c1041' },
+    });
+    await getChangeProposal(req, res, next);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.reference, 'COM-1041');
+    assert.equal(res.body.cropBatch, 'Batch #BT-9024 • Welimada Carrot Grade A');
+    assert.equal(res.body.agronomyVerified, true);
+    assert.ok(Array.isArray(res.body.diff));
+    assert.equal(res.body.diff.length, 4);
+    assert.equal(res.body.diff[0].parameter, 'Harvest Quantity');
+    assert.equal(res.body.diff[0].originalAgreed, '600 kg net');
+    assert.equal(res.body.diff[0].proposedChange, '480 kg net');
+    assert.ok(res.body.diff[0].netVariance.includes('-120 kg'));
+    assert.equal(res.body.diff[3].parameter, 'Total Escrow Value');
+    assert.ok(res.body.diff[3].netVariance.includes('-LKR 26,400'));
+    assert.equal(res.body.financialImpact.escrowAutoRefundCents, 2640000); // LKR 26,400
+    assert.equal(res.body.financialImpact.revisedEscrowHoldCents, 10560000); // LKR 105,600
+    console.log('✔ Test 17: getChangeProposal returns 4-column diff, grower statement & financial impact');
+  }
+
+  // Test 18: getChangeProposal rejects empty ID with 400
+  {
+    const { req, res, next } = createMockReqRes({
+      user: { id: '22222222-2222-2222-2222-222222222222', name: 'Demo Buyer', role: 'buyer' },
+      params: { id: '' },
+    });
+    await getChangeProposal(req, res, next);
+    assert.equal(res.statusCode, 400);
+    assert.ok(res.body.error);
+    console.log('✔ Test 18: getChangeProposal rejects empty ID with 400');
+  }
+
+  // Test 19: approveChange updates status to accepted, applies terms & auto-refunds escrow difference (FR-YM14-05 / DR-02)
+  {
+    const { req, res, next } = createMockReqRes({
+      user: { id: '22222222-2222-2222-2222-222222222222', name: 'Demo Buyer', role: 'buyer' },
+      params: { id: 'c1041' },
+      body: { operationKey: 'op-approve-change-1041' },
+    });
+    await approveChange(req, res, next);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.status, 'accepted');
+    assert.equal(res.body.escrowAutoRefundCents, 2640000); // LKR 26,400
+    assert.equal(res.body.revisedEscrowHoldCents, 10560000); // LKR 105,600
+    assert.ok(res.body.message.includes('credited instantly to Agri Wallet'));
+    console.log('✔ Test 19: approveChange applies revised terms and auto-refunds LKR 26,400 escrow difference');
+  }
+
+  // Test 20: rejectChange keeps original binding terms (FR-YM14-05 / DR-02)
+  {
+    const { req, res, next } = createMockReqRes({
+      user: { id: '22222222-2222-2222-2222-222222222222', name: 'Demo Buyer', role: 'buyer' },
+      params: { id: 'c1041' },
+      body: { reason: 'Must have full 600 kg commitment as agreed' },
+    });
+    await rejectChange(req, res, next);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.status, 'accepted');
+    assert.ok(res.body.message.includes('Original agreed terms remain strictly binding'));
+    console.log('✔ Test 20: rejectChange retains original binding terms and updates commitment');
+  }
+
+  // Test 21: cancelCommitment validates mandatory reason (400 Bad Request)
+  {
+    const { req, res, next } = createMockReqRes({
+      user: { id: '22222222-2222-2222-2222-222222222222', name: 'Demo Buyer', role: 'buyer' },
+      params: { id: 'COM-1041' },
+      body: { reason: '   ' },
+    });
+    await cancelCommitment(req, res, next);
+    assert.equal(res.statusCode, 400);
+    assert.ok(res.body.error.includes('reason is mandatory'));
+    console.log('✔ Test 21: cancelCommitment rejects submission without reason with 400 Bad Request');
+  }
+
+  // Test 22: cancelCommitment successfully cancels and releases 100% of escrow hold
+  {
+    const { req, res, next } = createMockReqRes({
+      user: { id: '22222222-2222-2222-2222-222222222222', name: 'Demo Buyer', role: 'buyer' },
+      params: { id: 'COM-1041' },
+      body: { reason: 'Alternative supply procured due to weather delay' },
+    });
+    await cancelCommitment(req, res, next);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.status, 'cancelled');
+    assert.equal(res.body.reason, 'Alternative supply procured due to weather delay');
+    assert.equal(res.body.escrowRefundCents, 13200000); // LKR 132,000 full refund
+    assert.ok(res.body.message.includes('100% of escrow funds released back to Agri Wallet'));
+    console.log('✔ Test 22: cancelCommitment transitions status to cancelled & releases 100% escrow');
+  }
+
+  // Test 23: getCommitmentDetails reflects cancelled status in memory
+  {
+    const { req, res, next } = createMockReqRes({
+      user: { id: '22222222-2222-2222-2222-222222222222', name: 'Demo Buyer', role: 'buyer' },
+      params: { id: 'COM-1041' },
+    });
+    await getCommitmentDetails(req, res, next);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.commitment.status, 'cancelled');
+    console.log('✔ Test 23: getCommitmentDetails reflects updated contract state after cancellation');
+  }
+
+  console.log('\n🎉 ALL 23 YM14 BACKEND UNIT & CONTROLLER TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runUnitTests().catch((err) => {

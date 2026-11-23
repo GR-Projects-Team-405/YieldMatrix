@@ -5,7 +5,14 @@ import {
   acceptOffer as acceptOfferService,
   declineOffer as declineOfferService,
 } from './offerService.js';
-import { fetchCommitmentsList, fetchCommitmentById } from './commitmentService.js';
+import {
+  fetchCommitmentsList,
+  fetchCommitmentById,
+  fetchChangeProposalByCommitmentId,
+  approveChangeProposal as approveChangeProposalService,
+  rejectChangeProposal as rejectChangeProposalService,
+  cancelCommitment as cancelCommitmentService,
+} from './commitmentService.js';
 
 /**
  * Status and diagnostic check endpoint.
@@ -201,6 +208,137 @@ export async function getCommitmentDetails(req, res, next) {
       requestId: req.requestId,
     });
   } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /api/ym14/commitments/:id/change-proposal
+ * FR-YM14-05: Harvest change review diff and financial impact for a pending grower modification.
+ */
+export async function getChangeProposal(req, res, next) {
+  try {
+    const { id } = req.params;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid commitment ID is required', requestId: req.requestId });
+    }
+
+    const proposal = await fetchChangeProposalByCommitmentId(id, req.user?.id);
+    if (!proposal) {
+      return res.status(404).json({ error: 'Change proposal not found or unauthorized', requestId: req.requestId });
+    }
+
+    return res.json({
+      ...proposal,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message, requestId: req.requestId });
+    }
+    next(error);
+  }
+}
+
+/**
+ * POST /api/ym14/commitments/:id/approve-change
+ * FR-YM14-05: Approve harvest change with escrow refund adjustment (Buyer role only).
+ */
+export async function approveChange(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { operationKey } = req.body || {};
+
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid commitment ID is required', requestId: req.requestId });
+    }
+
+    const result = await approveChangeProposalService({
+      commitmentId: id,
+      buyerId: req.user?.id,
+      operationKey,
+    });
+
+    return res.json({
+      ...result,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message, requestId: req.requestId });
+    }
+    next(error);
+  }
+}
+
+/**
+ * POST /api/ym14/commitments/:id/reject-change
+ * FR-YM14-05: Reject harvest change keeping original terms binding (Buyer role only).
+ */
+export async function rejectChange(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { reason, operationKey } = req.body || {};
+
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid commitment ID is required', requestId: req.requestId });
+    }
+
+    const result = await rejectChangeProposalService({
+      commitmentId: id,
+      buyerId: req.user?.id,
+      reason,
+      operationKey,
+    });
+
+    return res.json({
+      ...result,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message, requestId: req.requestId });
+    }
+    next(error);
+  }
+}
+
+/**
+ * POST /api/ym14/commitments/:id/cancel
+ * FR-YM14-04 / FR-YM14-05: Cancel commitment with mandatory reason and 100% escrow release (Buyer role only).
+ */
+export async function cancelCommitment(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { reason, operationKey } = req.body || {};
+
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid commitment ID is required', requestId: req.requestId });
+    }
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({
+        error: 'A cancellation reason is mandatory',
+        fields: { reason: 'Please provide a valid cancellation reason.' },
+        requestId: req.requestId,
+      });
+    }
+
+    const result = await cancelCommitmentService({
+      commitmentId: id,
+      buyerId: req.user?.id,
+      reason,
+      operationKey,
+    });
+
+    return res.json({
+      ...result,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message, requestId: req.requestId });
+    }
     next(error);
   }
 }
