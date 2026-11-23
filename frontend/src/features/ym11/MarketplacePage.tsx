@@ -25,7 +25,7 @@ import { Button } from '../../components/Button';
 import { ContentCard } from '../../components/ContentCard';
 import { EmptyState } from '../../components/EmptyState';
 import { getProduceImage } from './produceImages';
-import { ProduceCard } from './ProduceCard';
+import { MarketplaceSubnav, ProduceCard } from './ProduceCard';
 import type {
   CropCategoryKey,
   MarketplaceItem,
@@ -287,12 +287,21 @@ export default function MarketplacePage() {
           </p>
         </div>
         <div className="ym11-header-actions">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/buyer/marketplace/harvest-availability')}
+          >
+            <CalendarDays size={16} aria-hidden="true" />
+            Harvest availability
+          </Button>
           <Button variant="primary" onClick={() => navigate('/buyer/demands')}>
             <Plus size={16} aria-hidden="true" />
             Create demand
           </Button>
         </div>
       </section>
+
+      <MarketplaceSubnav />
 
       {/* Search & Inline Pill Filter Card */}
       <ContentCard className="ym11-mkt-search-card">
