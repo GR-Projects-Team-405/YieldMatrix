@@ -140,9 +140,142 @@ export async function getDelivery(req, res, next) {
         status: deliveryStatus(allocResult.rows.map((a) => a.status), handedOverKg, acceptedKg),
         allocations,
         incident: incident
-          ? { id: incident.id, code: shortCode('INC-', incident.id), text: incident.description, status: incident.status }
+          ? { id: incident.id, code: shortCode('INC-', incident.id), text: splitDescription(incident.description).text, status: incident.status }
           : null,
       },
+      requestId: req.requestId,
+    });
+  } catch (error) { next(error); }
+}
+
+// ---------- Incidents ----------
+// The incidents table has no type column, so the type is saved as a tag at the start
+// of the description, like "[spoilage] text", and split again when reading.
+const INCIDENT_TYPES = ['spoilage', 'short_quantity', 'refused_load', 'delay', 'packaging', 'other'];
+const TYPE_TAG = /^\[(spoilage|short_quantity|refused_load|delay|packaging|other)\]\s*/;
+const EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+function splitDescription(text) {
+  const match = TYPE_TAG.exec(text);
+  return match ? { type: match[1], text: text.slice(match[0].length) } : { type: 'other', text };
+}
+
+// GET /api/ym24/incidents: incidents on the logged-in driver's trips (newest first).
+export async function listIncidents(req, res, next) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT i.id, i.trip_id, i.allocation_id, i.description, i.status, i.created_at,
+              i.shortage_kg::float8 AS shortage_kg,
+              jsonb_array_length(i.evidence) AS evidence_count,
+              f.name AS farm
+         FROM incidents i
+         JOIN trips t ON t.id = i.trip_id
+         LEFT JOIN allocations a ON a.id = i.allocation_id
+         LEFT JOIN harvest_batches hb ON hb.id = a.batch_id
+         LEFT JOIN farms f ON f.id = hb.farm_id
+        WHERE t.driver_id = $1
+        ORDER BY i.created_at DESC
+        LIMIT 200`,
+      [req.user.id]
+    );
+    const incidents = rows.map((r) => {
+      const { type, text } = splitDescription(r.description);
+      return {
+        id: r.id,
+        code: shortCode('INC-', r.id),
+        type,
+        description: text,
+        tripId: r.trip_id,
+        tripCode: shortCode('YM ', r.trip_id),
+        allocationId: r.allocation_id,
+        farm: r.farm,
+        shortageKg: r.shortage_kg,
+        evidenceCount: r.evidence_count,
+        status: r.status,
+        createdAt: r.created_at,
+      };
+    });
+    return res.json({ incidents, requestId: req.requestId });
+  } catch (error) { next(error); }
+}
+
+// POST /api/ym24/incidents: the driver reports a problem on one of their own trips.
+export async function createIncident(req, res, next) {
+  try {
+    const b = req.body || {};
+    const errors = [];
+
+    const tripId = typeof b.tripId === 'string' ? b.tripId : '';
+    if (!UUID_RE.test(tripId)) errors.push('tripId is invalid');
+
+    const allocationId = b.allocationId ? String(b.allocationId) : null;
+    if (allocationId && !UUID_RE.test(allocationId)) errors.push('allocationId is invalid');
+
+    const type = typeof b.type === 'string' ? b.type : '';
+    if (!INCIDENT_TYPES.includes(type)) errors.push('type is invalid');
+
+    const description = typeof b.description === 'string' ? b.description.trim() : '';
+    if (description.length < 10 || description.length > 500) errors.push('description must be 10 to 500 characters');
+
+    let shortageKg = null;
+    if (b.quantityKg !== undefined && b.quantityKg !== null && b.quantityKg !== '') {
+      const n = Number(b.quantityKg);
+      if (!Number.isFinite(n) || n <= 0 || n > 1000000 || Math.round(n * 1000) / 1000 !== n) errors.push('quantityKg must be above 0 with at most 3 decimals');
+      else shortageKg = n;
+    }
+
+    const operationKey = typeof b.operationKey === 'string' ? b.operationKey.trim() : '';
+    if (operationKey.length < 8 || operationKey.length > 100) errors.push('operationKey must be 8 to 100 characters');
+
+    const evidenceIn = Array.isArray(b.evidence) ? b.evidence : [];
+    if (evidenceIn.length > 5) errors.push('at most 5 evidence files');
+    const evidence = [];
+    for (const f of evidenceIn.slice(0, 5)) {
+      if (!f || typeof f.name !== 'string' || !f.name.trim() || f.name.length > 200 || !EVIDENCE_TYPES.includes(f.type) || !Number.isInteger(f.size) || f.size <= 0 || f.size > MAX_FILE_BYTES) {
+        errors.push('an evidence file is invalid (JPEG, PNG or PDF, up to 5 MB)');
+        break;
+      }
+      evidence.push({ name: f.name.trim(), type: f.type, size: f.size });
+    }
+
+    if (errors.length) return res.status(400).json({ error: 'Invalid request', details: errors, requestId: req.requestId });
+
+    // The trip must belong to this driver.
+    const trip = await pool.query('SELECT id FROM trips WHERE id = $1 AND driver_id = $2', [tripId, req.user.id]);
+    if (!trip.rows[0]) return res.status(404).json({ error: 'Trip not found', requestId: req.requestId });
+
+    // The allocation must be part of this trip, and the quantity cannot be more than picked up.
+    if (allocationId) {
+      const alloc = await pool.query(
+        `SELECT a.picked_up_kg::float8 AS picked_up_kg
+           FROM trip_stops ts JOIN allocations a ON a.id = ts.allocation_id
+          WHERE ts.trip_id = $1 AND a.id = $2`,
+        [tripId, allocationId]
+      );
+      if (!alloc.rows[0]) return res.status(400).json({ error: 'Invalid request', details: ['allocation is not part of this trip'], requestId: req.requestId });
+      if (shortageKg !== null && shortageKg > alloc.rows[0].picked_up_kg) {
+        return res.status(400).json({ error: 'Invalid request', details: ['quantityKg is more than the picked up quantity'], requestId: req.requestId });
+      }
+    }
+
+    // The key is tied to the driver, so a double click returns the same incident and never saves two.
+    const key = `ym24-incident:${req.user.id}:${operationKey}`;
+    const inserted = await pool.query(
+      `INSERT INTO incidents (trip_id, allocation_id, reported_by, description, shortage_kg, evidence, operation_key)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+       ON CONFLICT (operation_key) DO NOTHING
+       RETURNING id, status, created_at`,
+      [tripId, allocationId, req.user.id, `[${type}] ${description}`, shortageKg, JSON.stringify(evidence), key]
+    );
+    let row = inserted.rows[0];
+    const created = Boolean(row);
+    if (!row) {
+      const existing = await pool.query('SELECT id, status, created_at FROM incidents WHERE operation_key = $1 AND reported_by = $2', [key, req.user.id]);
+      row = existing.rows[0];
+    }
+    return res.status(created ? 201 : 200).json({
+      incident: { id: row.id, code: shortCode('INC-', row.id), type, status: row.status, createdAt: row.created_at },
       requestId: req.requestId,
     });
   } catch (error) { next(error); }
