@@ -515,9 +515,11 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
             fr.generated_at
      FROM forecast_runs fr
      JOIN crops c ON c.id = fr.crop_id
-     WHERE ($1::uuid IS NULL OR fr.crop_id = $1::uuid OR lower(regexp_replace(c.name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = $1::uuid))
+     WHERE fr.sample_data = false
+       AND fr.status = 'available'
+       AND ($1::uuid IS NULL OR fr.crop_id = $1::uuid OR lower(regexp_replace(c.name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = $1::uuid))
        AND ($2::text IS NULL OR lower(fr.district) = lower($2::text))
-     ORDER BY (fr.status = 'available') DESC, fr.generated_at DESC
+     ORDER BY fr.generated_at DESC
      LIMIT 1`,
     [cropId, district]
   );
@@ -525,16 +527,17 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
   const priceRes = await runQuery(
     `SELECT
        COUNT(*)::int AS observation_count,
+       MIN(mo.source) AS source,
        MIN(mo.price_per_kg_cents) AS min_price_cents,
        MAX(mo.price_per_kg_cents) AS max_price_cents,
        ROUND(AVG(mo.price_per_kg_cents))::BIGINT AS avg_price_cents,
        MIN(mo.observation_date) AS date_from,
        MAX(mo.observation_date) AS date_until,
-       MAX(mo.imported_at) AS last_updated,
-       COALESCE(BOOL_OR(mo.sample_data), false) AS sample_data
+       MAX(mo.imported_at) AS last_updated
      FROM market_observations mo
      JOIN crops c ON c.id = mo.crop_id
      WHERE mo.is_current = true
+       AND mo.sample_data = false
        AND ($1::uuid IS NULL OR mo.crop_id = $1::uuid OR lower(regexp_replace(c.name, '(es|s)$', '')) = (SELECT lower(regexp_replace(name, '(es|s)$', '')) FROM crops WHERE id = $1::uuid))
        AND ($2::uuid IS NULL OR mo.grade_id = $2::uuid)
        AND ($3::text IS NULL OR lower(mo.district) = lower($3::text))`,
@@ -572,14 +575,14 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
       baselineMaeKg: forecastRow.baseline_mae_kg !== null ? toKg(forecastRow.baseline_mae_kg) : null,
       trend,
       explanation: forecastRow.explanation,
-      sampleData: Boolean(forecastRow.sample_data),
+      aiServiceConfigured: Boolean(process.env.AI_SERVICE_URL),
       generatedAt: forecastRow.generated_at,
       series,
     };
   } else {
     demandForecast = {
       available: false,
-      status: 'insufficient_data',
+      status: 'pending_api',
       cropId,
       cropName: cropsList.find((c) => c.id === cropId)?.name || null,
       district,
@@ -591,8 +594,8 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
       modelMaeKg: null,
       baselineMaeKg: null,
       trend: 'flat',
-      explanation: 'No demand forecast run is available for the selected crop and district yet.',
-      sampleData: false,
+      explanation: 'AI demand forecasting API is pending integration. Connect the forecasting service endpoint to view 7-day demand predictions.',
+      aiServiceConfigured: Boolean(process.env.AI_SERVICE_URL),
       generatedAt: null,
       series: [],
     };
@@ -603,6 +606,7 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
   const marketPriceInsights = {
     available: observationCount > 0,
     method: 'Recent price observations',
+    source: priceRow.source || null,
     observationCount,
     minPriceCents: toOptionalCents(priceRow.min_price_cents),
     maxPriceCents: toOptionalCents(priceRow.max_price_cents),
@@ -610,7 +614,6 @@ async function loadBuyingInsights({ cropId = null, gradeId = null, district = nu
     dateFrom: priceRow.date_from || null,
     dateUntil: priceRow.date_until || null,
     lastUpdated: priceRow.last_updated || null,
-    sampleData: Boolean(priceRow.sample_data),
     advisoryNote: 'Comparable prices are guidance and do not automatically change supplier prices.',
   };
 

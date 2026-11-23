@@ -689,13 +689,7 @@ export default function BuyerOverviewPage() {
               <p className="ym11-card-sub">Smarter sourcing with market information.</p>
             </div>
           </div>
-          <StatusBadge
-            status={
-              insights.demandForecast.sampleData || insights.marketPriceInsights.sampleData
-                ? 'Demo insights'
-                : 'Advisory'
-            }
-          />
+          <StatusBadge status="Active" />
         </div>
 
         <div className="ym11-insights-grid">
@@ -713,17 +707,17 @@ export default function BuyerOverviewPage() {
                 </h4>
                 <p className="ym11-card-sub">Projected daily buyer demand</p>
               </div>
-              {insights.demandForecast.available && (
-                <StatusBadge
-                  status={
-                    insights.demandForecast.trend === 'upward'
+              <StatusBadge
+                status={
+                  insights.demandForecast.available
+                    ? insights.demandForecast.trend === 'upward'
                       ? 'Active'
                       : insights.demandForecast.trend === 'downward'
                         ? 'Pending'
                         : 'Scheduled'
-                  }
-                />
-              )}
+                    : 'Scheduled'
+                }
+              />
             </div>
 
             <div className="ym11-filter-row">
@@ -756,7 +750,7 @@ export default function BuyerOverviewPage() {
               <div className="ym11-note-box">
                 <strong style={{ color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <TrendingUp size={14} aria-hidden="true" />
-                  Awaiting forecast data
+                  AI Forecasting API pending
                 </strong>
                 {insights.demandForecast.explanation}
               </div>
@@ -809,8 +803,16 @@ export default function BuyerOverviewPage() {
 
             <div className="ym11-kv-list">
               <div className="ym11-kv-row">
-                <span>Method</span>
-                <strong>{insights.marketPriceInsights.method}</strong>
+                <span>Source</span>
+                <strong>{insights.marketPriceInsights.source || insights.marketPriceInsights.method}</strong>
+              </div>
+              <div className="ym11-kv-row">
+                <span>Date window</span>
+                <strong>
+                  {insights.marketPriceInsights.dateFrom && insights.marketPriceInsights.dateUntil
+                    ? `${formatColomboShortDate(insights.marketPriceInsights.dateFrom)} – ${formatColomboShortDate(insights.marketPriceInsights.dateUntil)}`
+                    : '—'}
+                </strong>
               </div>
               <div className="ym11-kv-row">
                 <span>Observations</span>

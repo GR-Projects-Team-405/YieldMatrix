@@ -107,7 +107,7 @@ export interface ForecastPoint {
 
 export interface DemandForecast {
   available: boolean;
-  status: 'available' | 'insufficient_data' | 'stale' | 'failed';
+  status: 'available' | 'insufficient_data' | 'stale' | 'failed' | 'pending_api';
   cropId: string | null;
   cropName: string | null;
   district: string | null;
@@ -120,7 +120,7 @@ export interface DemandForecast {
   baselineMaeKg: number | null;
   trend: 'upward' | 'downward' | 'flat';
   explanation: string;
-  sampleData: boolean;
+  aiServiceConfigured?: boolean;
   generatedAt: string | null;
   series: ForecastPoint[];
 }
@@ -128,6 +128,7 @@ export interface DemandForecast {
 export interface MarketPriceInsights {
   available: boolean;
   method: string;
+  source?: string | null;
   observationCount: number;
   minPriceCents: number | null;
   maxPriceCents: number | null;
@@ -135,7 +136,6 @@ export interface MarketPriceInsights {
   dateFrom: string | null;
   dateUntil: string | null;
   lastUpdated: string | null;
-  sampleData: boolean;
   advisoryNote: string;
 }
 
