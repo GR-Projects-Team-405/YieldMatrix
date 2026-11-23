@@ -3,8 +3,9 @@ import { Alert } from '../../../components/Alert';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { Table, TableRow } from '../../../components/Table';
 import { Button } from '../../../components/Button';
-import { formatLKR } from '../mockData';
+import { formatLKR, formatLKRIfKnown } from '../mockData';
 import { usePayoutState } from '../payoutState';
+import { DataModeBanner } from '../DataModeBanner';
 
 // ── SVG icons (inline to avoid new dependencies) ─────────────────────────────
 
@@ -55,7 +56,8 @@ function ShieldIcon() {
 
 // ── Helper: format date ──────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return 'Not recorded';
   const d = new Date(iso);
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -76,6 +78,8 @@ export default function WalletDashboard() {
     payouts,
     payoutsLoading,
     payoutsError,
+    dataMode,
+    payoutSubmissionEnabled,
   } = usePayoutState();
   const summary = wallet?.summary;
   const recentTransactions = (transactions ?? []).slice(0, 3);
@@ -86,13 +90,7 @@ export default function WalletDashboard() {
 
   return (
     <div>
-      {/* ── Demo banner ──────────────────────────────────────────────── */}
-      <div className="ym27-demo-banner">
-        <Alert type="warning">
-          Demo data – Simulated wallet and payouts. No real money movement.
-        </Alert>
-        <span className="ym27-demo-tag">YM27</span>
-      </div>
+      <DataModeBanner mode={dataMode} />
 
       {/* ── Tab navigation ───────────────────────────────────────────── */}
       <nav className="ym27-tabs" aria-label="Wallet sections">
@@ -140,9 +138,11 @@ export default function WalletDashboard() {
             <span className="ym27-balance-icon"><ClockIcon /></span>
             Pending settlements
           </span>
-          <span className="ym27-balance-value">{summary ? formatLKR(summary.pendingSettlements) : '—'}</span>
+          <span className="ym27-balance-value">{summary ? formatLKRIfKnown(summary.pendingSettlements) : '—'}</span>
           <span className="ym27-balance-sub">
-            {settlements ? settlements.filter((s) => s.status === 'pending').length : '—'} pending settlement{settlements?.filter((s) => s.status === 'pending').length !== 1 ? 's' : ''}
+            {summary?.pendingSettlements === null
+              ? 'Pending settlement total is not defined by the database schema.'
+              : `${settlements ? settlements.filter((s) => s.status === 'pending').length : '—'} pending settlement${settlements?.filter((s) => s.status === 'pending').length !== 1 ? 's' : ''}`}
           </span>
         </div>
 
@@ -152,9 +152,9 @@ export default function WalletDashboard() {
             <span className="ym27-balance-icon"><ArrowUpIcon /></span>
             Total received
           </span>
-          <span className="ym27-balance-value">{summary ? formatLKR(summary.totalEarned) : '—'}</span>
+          <span className="ym27-balance-value">{summary ? formatLKRIfKnown(summary.totalEarned) : '—'}</span>
           <span className="ym27-balance-sub">
-            {settlements ? settlements.filter((s) => s.status === 'confirmed').length : '—'} confirmed settlements · All time
+            {settlements ? settlements.filter((s) => s.status === 'confirmed').length : '—'} recorded confirmed settlements
           </span>
         </div>
 
@@ -176,7 +176,9 @@ export default function WalletDashboard() {
         <div className="ym27-section-header">
           <div>
             <h2>Recent transactions</h2>
-            <p>The latest credits and debits in your simulated wallet.</p>
+            <p>{dataMode === 'database'
+              ? 'The latest credits and debits recorded in your wallet ledger.'
+              : 'The latest credits and debits in your simulated wallet.'}</p>
           </div>
           <Link to="/farmer/wallet/transactions" className="ym27-view-all">
             View all transactions →
@@ -231,13 +233,13 @@ export default function WalletDashboard() {
               <div className="ym27-settlement-row">
                 <div>
                   <span className="ym27-settlement-produce">
-                    {nextSettlement.produce} · Grade A · {nextSettlement.quantityKg} kg
+                    {nextSettlement.produce ?? 'Produce not recorded'} · {nextSettlement.quantityKg ?? 'Quantity not recorded'} kg
                   </span>
                   <div className="ym27-settlement-meta">
-                    {nextSettlement.orderId} · {formatDate(nextSettlement.date)}
+                    {nextSettlement.orderId ?? 'Order not recorded'} · {formatDate(nextSettlement.date)}
                   </div>
                 </div>
-                <span className="ym27-settlement-amount">{formatLKR(nextSettlement.grossAmount)}</span>
+                <span className="ym27-settlement-amount">{formatLKRIfKnown(nextSettlement.grossAmount)}</span>
               </div>
             </div>
           ) : settlements && (
@@ -252,7 +254,11 @@ export default function WalletDashboard() {
             A safe place to try payouts
           </h3>
           <p className="ym27-info-note">
-            New payout requests stay pending for this session and do not change this balance.
+            {dataMode === 'database'
+              ? payoutSubmissionEnabled
+                ? 'Persistent simulated payout requests are enabled. No real payment is made.'
+                : 'Payout request creation is disabled for this database process.'
+              : 'New payout requests stay pending for this session and do not change this balance.'}
           </p>
         </div>
       </div>

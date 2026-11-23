@@ -4,10 +4,12 @@ import { Alert } from '../../../components/Alert';
 import { EmptyState } from '../../../components/EmptyState';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { Table, TableRow } from '../../../components/Table';
-import { formatLKR, type Settlement } from '../mockData';
-import { fetchSettlement, getYm27ErrorMessage } from '../api';
+import { formatLKRIfKnown, type Settlement } from '../mockData';
+import { fetchSettlement, getYm27ErrorMessage, getYm27ResponseMode, type Ym27DataMode } from '../api';
+import { DataModeBanner } from '../DataModeBanner';
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return 'Not recorded';
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
@@ -38,6 +40,7 @@ function outcomeCopy(status: string): string {
 export default function SettlementBreakdown() {
   const { settlementId } = useParams();
   const [settlement, setSettlement] = useState<Settlement | null>(null);
+  const [dataMode, setDataMode] = useState<Ym27DataMode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,15 +50,22 @@ export default function SettlementBreakdown() {
     setError(null);
     if (!settlementId) {
       setSettlement(null);
+      setDataMode(null);
       setLoading(false);
       return () => { active = false; };
     }
     fetchSettlement(settlementId)
       .then((result) => {
-        if (active) setSettlement(result);
+        if (active) {
+          setSettlement(result.settlement);
+          setDataMode(result.mode);
+        }
       })
       .catch((requestError: unknown) => {
-        if (active) setError(getYm27ErrorMessage(requestError));
+        if (active) {
+          setDataMode(getYm27ResponseMode(requestError));
+          setError(getYm27ErrorMessage(requestError));
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -63,15 +73,17 @@ export default function SettlementBreakdown() {
     return () => { active = false; };
   }, [settlementId]);
 
-  const unitCents = settlement && settlement.quantityKg > 0 ? settlement.grossAmount / settlement.quantityKg : null;
+  const unitCents = settlement
+    && settlement.quantityKg !== null
+    && settlement.quantityKg > 0
+    && settlement.grossAmount !== null
+    ? settlement.grossAmount / settlement.quantityKg
+    : null;
   const unitIsExact = unitCents !== null && Number.isInteger(unitCents);
 
   return (
     <div>
-      <div className="ym27-demo-banner">
-        <Alert type="warning">Demo data – Simulated wallet and payouts. No real money movement.</Alert>
-        <span className="ym27-demo-tag">YM27</span>
-      </div>
+      <DataModeBanner mode={dataMode} />
 
       <WalletTabs />
 
@@ -82,7 +94,9 @@ export default function SettlementBreakdown() {
       {!loading && !error && !settlement ? (
         <EmptyState
           title="Settlement not found"
-          description="That settlement id is not in the simulated wallet records."
+          description={dataMode === 'database'
+            ? 'That settlement id is not in the approved farmer wallet records.'
+            : 'That settlement id is not in the simulated wallet records.'}
           action={<Link to="/farmer/wallet/transactions" className="ym27-inline-link">Return to transactions</Link>}
         />
       ) : !loading && !error && settlement && (
@@ -90,7 +104,7 @@ export default function SettlementBreakdown() {
           <div className="ym27-page-header">
             <div>
               <h1>Settlement breakdown</h1>
-              <p>{settlement.id.toUpperCase()} · A read-only view of this simulated settlement.</p>
+              <p>{settlement.id.toUpperCase()} · A read-only view of this recorded settlement.</p>
             </div>
             <StatusBadge status={settlement.status} />
           </div>
@@ -100,7 +114,7 @@ export default function SettlementBreakdown() {
               <h2>Order information</h2>
               <dl className="ym27-kv">
                 <dt>Order</dt>
-                <dd>{settlement.orderId}</dd>
+                <dd>{settlement.orderId ?? 'Not recorded'}</dd>
                 <dt>Settlement date</dt>
                 <dd>{formatDate(settlement.date)}</dd>
                 <dt>Buyer</dt>
@@ -112,14 +126,22 @@ export default function SettlementBreakdown() {
               <h2>Settlement summary</h2>
               <dl className="ym27-kv">
                 <dt>Gross amount</dt>
-                <dd>{formatLKR(settlement.grossAmount)}</dd>
+                <dd>{formatLKRIfKnown(settlement.grossAmount)}</dd>
                 <dt>Platform fee</dt>
-                <dd>{formatLKR(settlement.platformFee)}</dd>
+                <dd>{formatLKRIfKnown(settlement.platformFee)}</dd>
+                {settlement.journalAmount !== undefined && settlement.journalAmount !== null && (
+                  <>
+                    <dt>Posted journal amount</dt>
+                    <dd>{formatLKRIfKnown(settlement.journalAmount)}</dd>
+                  </>
+                )}
               </dl>
               <div className="ym27-net-block">
                 <span>Net credited amount</span>
-                <strong>{formatLKR(settlement.netPaid)}</strong>
-                <p>{outcomeCopy(settlement.status)}</p>
+                <strong>{formatLKRIfKnown(settlement.netPaid)}</strong>
+                <p>{dataMode === 'database'
+                  ? 'Posted amount is available above; gross amount, fees, and net allocation are not defined by the current schema.'
+                  : outcomeCopy(settlement.status)}</p>
               </div>
             </section>
           </div>
@@ -128,10 +150,10 @@ export default function SettlementBreakdown() {
             <h2>Accepted produce</h2>
             <Table headers={['Produce', 'Accepted', unitIsExact ? 'LKR/kg' : 'LKR/kg', 'Gross (LKR)']}>
               <TableRow>
-                <td>{settlement.produce}</td>
-                <td>{settlement.quantityKg} kg</td>
-                <td>{unitIsExact && unitCents !== null ? formatLKR(unitCents) : 'Not stored'}</td>
-                <td>{formatLKR(settlement.grossAmount)}</td>
+                <td>{settlement.produce ?? 'Not recorded'}</td>
+                <td>{settlement.quantityKg === null ? 'Not recorded' : `${settlement.quantityKg} kg`}</td>
+                <td>{unitIsExact && unitCents !== null ? formatLKRIfKnown(unitCents) : 'Not stored'}</td>
+                <td>{formatLKRIfKnown(settlement.grossAmount)}</td>
               </TableRow>
             </Table>
           </section>

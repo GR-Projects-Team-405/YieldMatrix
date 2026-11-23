@@ -7,6 +7,7 @@ import { StatusBadge } from '../../../components/StatusBadge';
 import { Table, TableRow } from '../../../components/Table';
 import { formatLKR, type PayoutRecord, type PayoutStatus } from '../mockData';
 import { usePayoutState } from '../payoutState';
+import { DataModeBanner } from '../DataModeBanner';
 
 const PAGE_SIZE = 4;
 
@@ -33,7 +34,7 @@ function WalletTabs() {
 }
 
 export default function PayoutHistory() {
-  const { payouts: payoutData, payoutsLoading, payoutsError, refreshPayouts } = usePayoutState();
+  const { payouts: payoutData, payoutsLoading, payoutsError, refreshPayouts, dataMode } = usePayoutState();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [status, setStatus] = useState<'all' | PayoutStatus>('all');
@@ -75,24 +76,29 @@ export default function PayoutHistory() {
 
   return (
     <div>
-      <div className="ym27-demo-banner">
-        <Alert type="warning">Demo data – Simulated wallet and payouts. No real money movement.</Alert>
-        <span className="ym27-demo-tag">YM27</span>
-      </div>
+      <DataModeBanner mode={dataMode} />
 
       <WalletTabs />
 
       <div className="ym27-page-header">
         <div>
           <h1>Payout history</h1>
-          <p>Track every simulated payout request and its current status.</p>
+          <p>{dataMode === 'database'
+            ? 'Track payout requests recorded for your approved farmer wallet.'
+            : 'Track every simulated payout request and its current status.'}</p>
         </div>
-        <Link to="/farmer/wallet/payout/request" className="ym27-header-action">Request simulated payout</Link>
+        <Link to="/farmer/wallet/payout/request" className="ym27-header-action">
+          {dataMode === 'database' ? 'Payout request options' : 'Request simulated payout'}
+        </Link>
       </div>
 
-      <Alert type="info">
-        Pending requests stay in temporary server memory for this browser session. They may expire after inactivity or be cleared when the server restarts.
-      </Alert>
+      {dataMode === 'database' ? (
+        <Alert type="info">Payout destinations are not stored in the database. Existing requests are displayed read-only.</Alert>
+      ) : (
+        <Alert type="info">
+          Pending requests stay in temporary server memory for this browser session. They may expire after inactivity or be cleared when the server restarts.
+        </Alert>
+      )}
       {payoutsLoading && <p role="status">Loading payout history…</p>}
       {payoutsError && <Alert type="error">{payoutsError}</Alert>}
 
@@ -100,7 +106,9 @@ export default function PayoutHistory() {
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">Total paid out</span>
           <span className="ym27-balance-value">{payoutData ? formatLKR(paidOut) : '—'}</span>
-          <span className="ym27-balance-sub">{payoutData ? confirmedCount : '—'} confirmed simulated {confirmedCount === 1 ? 'request' : 'requests'}</span>
+          <span className="ym27-balance-sub">
+            {payoutData ? confirmedCount : '—'} confirmed {dataMode === 'database' ? 'requests' : 'simulated requests'}
+          </span>
         </div>
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">In progress</span>
@@ -110,7 +118,9 @@ export default function PayoutHistory() {
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">Latest destination</span>
           <span className="ym27-balance-value ym27-balance-value--small">{payoutData ? latest?.bankLabel ?? '—' : '—'}</span>
-          <span className="ym27-balance-sub">Masked simulated label. No full account number is stored.</span>
+          <span className="ym27-balance-sub">
+            {dataMode === 'database' ? 'Destination details are not stored in the database.' : 'Masked simulated label. No full account number is stored.'}
+          </span>
         </div>
       </div>
 
@@ -154,7 +164,11 @@ export default function PayoutHistory() {
                 <td>{formatDate(payout.date)}</td>
                 <td>
                   {payout.reference}
-                  <div className="ym27-cell-meta">{payout.status === 'pending' ? 'Simulated request, this session only' : 'Simulated payout'}</div>
+                  <div className="ym27-cell-meta">
+                    {dataMode === 'database'
+                      ? 'Database record · read-only'
+                      : payout.status === 'pending' ? 'Simulated request, this session only' : 'Simulated payout'}
+                  </div>
                 </td>
                 <td>{formatLKR(payout.amount)}</td>
                 <td>{payout.bankLabel}</td>

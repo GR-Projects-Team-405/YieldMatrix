@@ -7,7 +7,9 @@ import {
   fetchTransactions,
   fetchWallet,
   getYm27ErrorMessage,
+  getYm27ResponseMode,
   type PayoutsResponse,
+  type Ym27DataMode,
   type WalletResponse,
 } from './api';
 import type { BankAccount, PayoutRecord, Settlement, Transaction } from './mockData';
@@ -33,9 +35,11 @@ interface PayoutStateValue {
   settlementsLoading: boolean;
   settlementsError: string | null;
   payoutOptions: BankAccount[] | null;
+  payoutSubmissionEnabled: boolean;
   payoutOptionsLoading: boolean;
   payoutOptionsError: string | null;
   payouts: PayoutsResponse | null;
+  dataMode: Ym27DataMode | null;
   payoutsLoading: boolean;
   payoutsError: string | null;
   refreshWallet: () => Promise<void>;
@@ -49,10 +53,12 @@ interface PayoutStateValue {
 const PayoutStateContext = createContext<PayoutStateValue | undefined>(undefined);
 
 export function PayoutStateProvider({ children }: { children: ReactNode }) {
+  const [dataMode, setDataMode] = useState<Ym27DataMode | null>(null);
   const [wallet, setWallet] = useState<Resource<WalletResponse>>(initialResource);
   const [transactions, setTransactions] = useState<Resource<Transaction[]>>(initialResource);
   const [settlements, setSettlements] = useState<Resource<Settlement[]>>(initialResource);
   const [payoutOptions, setPayoutOptions] = useState<Resource<BankAccount[]>>(initialResource);
+  const [payoutSubmissionEnabled, setPayoutSubmissionEnabled] = useState(false);
   const [payouts, setPayouts] = useState<Resource<PayoutsResponse>>(initialResource);
   const walletRequestVersion = useRef(0);
   const payoutsRequestVersion = useRef(0);
@@ -62,9 +68,14 @@ export function PayoutStateProvider({ children }: { children: ReactNode }) {
     setWallet((current) => ({ ...current, loading: true, error: null }));
     try {
       const data = await fetchWallet();
-      if (requestVersion === walletRequestVersion.current) setWallet({ data, loading: false, error: null });
+      if (requestVersion === walletRequestVersion.current) {
+        setDataMode(data.mode);
+        setWallet({ data, loading: false, error: null });
+      }
     } catch (error) {
       if (requestVersion === walletRequestVersion.current) {
+        const responseMode = getYm27ResponseMode(error);
+        if (responseMode) setDataMode(responseMode);
         setWallet({ data: null, loading: false, error: getYm27ErrorMessage(error) });
       }
     }
@@ -72,24 +83,37 @@ export function PayoutStateProvider({ children }: { children: ReactNode }) {
   const refreshTransactions = useCallback(async () => {
     setTransactions((current) => ({ ...current, loading: true, error: null }));
     try {
-      setTransactions({ data: await fetchTransactions(), loading: false, error: null });
+      const response = await fetchTransactions();
+      setDataMode(response.mode);
+      setTransactions({ data: response.transactions, loading: false, error: null });
     } catch (error) {
+      const responseMode = getYm27ResponseMode(error);
+      if (responseMode) setDataMode(responseMode);
       setTransactions({ data: null, loading: false, error: getYm27ErrorMessage(error) });
     }
   }, []);
   const refreshSettlements = useCallback(async () => {
     setSettlements((current) => ({ ...current, loading: true, error: null }));
     try {
-      setSettlements({ data: await fetchSettlements(), loading: false, error: null });
+      const response = await fetchSettlements();
+      setDataMode(response.mode);
+      setSettlements({ data: response.settlements, loading: false, error: null });
     } catch (error) {
+      const responseMode = getYm27ResponseMode(error);
+      if (responseMode) setDataMode(responseMode);
       setSettlements({ data: null, loading: false, error: getYm27ErrorMessage(error) });
     }
   }, []);
   const refreshPayoutOptions = useCallback(async () => {
     setPayoutOptions((current) => ({ ...current, loading: true, error: null }));
     try {
-      setPayoutOptions({ data: await fetchPayoutOptions(), loading: false, error: null });
+      const response = await fetchPayoutOptions();
+      setDataMode(response.mode);
+      setPayoutSubmissionEnabled(response.payoutSubmissionEnabled);
+      setPayoutOptions({ data: response.payoutOptions, loading: false, error: null });
     } catch (error) {
+      const responseMode = getYm27ResponseMode(error);
+      if (responseMode) setDataMode(responseMode);
       setPayoutOptions({ data: null, loading: false, error: getYm27ErrorMessage(error) });
     }
   }, []);
@@ -99,6 +123,7 @@ export function PayoutStateProvider({ children }: { children: ReactNode }) {
     try {
       const data = await fetchPayouts();
       if (requestVersion === payoutsRequestVersion.current) {
+        setDataMode(data.mode);
         setPayouts({ data, loading: false, error: null });
         setWallet((current) => current.data
           ? { ...current, data: { ...current.data, remainingRequestable: data.remainingRequestable } }
@@ -106,6 +131,8 @@ export function PayoutStateProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       if (requestVersion === payoutsRequestVersion.current) {
+        const responseMode = getYm27ResponseMode(error);
+        if (responseMode) setDataMode(responseMode);
         setPayouts({ data: null, loading: false, error: getYm27ErrorMessage(error) });
       }
     }
@@ -126,19 +153,36 @@ export function PayoutStateProvider({ children }: { children: ReactNode }) {
     bankValue: string,
     idempotencyKey: string,
   ): Promise<PayoutRecord> => {
-    const response = await createPayout(amountCents, bankValue, idempotencyKey);
+    if (dataMode === 'database' && !payoutSubmissionEnabled) {
+      throw new Error('Payout submission is disabled in database read-only mode.');
+    }
+    const mode = dataMode ?? 'mock';
+    const response = await createPayout(amountCents, bankValue, idempotencyKey, mode);
     payoutsRequestVersion.current += 1;
     walletRequestVersion.current += 1;
+    setDataMode(response.mode);
+    if (response.mode === 'database') {
+      await Promise.all([refreshWallet(), refreshPayouts(), refreshTransactions()]);
+      return response.payout;
+    }
+    const remainingRequestable = response.remainingRequestable;
+    if (!response.payouts || remainingRequestable === undefined) {
+      throw new TypeError('Mock payout response is incomplete.');
+    }
     setPayouts({
-      data: { payouts: response.payouts, remainingRequestable: response.remainingRequestable },
+      data: {
+        mode: response.mode,
+        payouts: response.payouts,
+        remainingRequestable,
+      },
       loading: false,
       error: null,
     });
     setWallet((current) => current.data
-      ? { ...current, data: { ...current.data, remainingRequestable: response.remainingRequestable } }
+      ? { ...current, data: { ...current.data, remainingRequestable } }
       : current);
     return response.payout;
-  }, []);
+  }, [dataMode, payoutSubmissionEnabled, refreshWallet, refreshPayouts, refreshTransactions]);
 
   const value = useMemo(() => ({
     wallet: wallet.data,
@@ -151,9 +195,11 @@ export function PayoutStateProvider({ children }: { children: ReactNode }) {
     settlementsLoading: settlements.loading,
     settlementsError: settlements.error,
     payoutOptions: payoutOptions.data,
+    payoutSubmissionEnabled,
     payoutOptionsLoading: payoutOptions.loading,
     payoutOptionsError: payoutOptions.error,
     payouts: payouts.data,
+    dataMode,
     payoutsLoading: payouts.loading,
     payoutsError: payouts.error,
     refreshWallet,
@@ -163,7 +209,7 @@ export function PayoutStateProvider({ children }: { children: ReactNode }) {
     refreshPayouts,
     submitPayout,
   }), [
-    wallet, transactions, settlements, payoutOptions, payouts,
+    wallet, transactions, settlements, payoutOptions, payouts, dataMode, payoutSubmissionEnabled,
     refreshWallet, refreshTransactions, refreshSettlements, refreshPayoutOptions, refreshPayouts, submitPayout,
   ]);
 

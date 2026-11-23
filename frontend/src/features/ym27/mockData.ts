@@ -10,15 +10,21 @@ export function formatLKR(cents: number): string {
   return 'LKR ' + (cents / 100).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+export function formatLKRIfKnown(cents: number | null | undefined): string {
+  return cents === null || cents === undefined ? 'Not available' : formatLKR(cents);
+}
+
 // ── Wallet summary ────────────────────────────────────────────────────────────
 
 export interface WalletSummary {
-  /** Available balance in LKR cents. SIMULATED. */
+  /** Available balance in LKR cents. */
   availableBalance: number;
-  /** Pending settlement amount in LKR cents. SIMULATED. */
-  pendingSettlements: number;
-  /** Cumulative total earned in LKR cents. SIMULATED. */
-  totalEarned: number;
+  /** Pending payout reservations in LKR cents when available from the database. */
+  pendingPayout?: number | null;
+  /** Null when the database schema does not define a pending-settlement total. */
+  pendingSettlements: number | null;
+  /** Null when the database schema does not define an all-time earnings total. */
+  totalEarned: number | null;
 }
 
 export const MOCK_WALLET_SUMMARY: WalletSummary = {
@@ -34,6 +40,9 @@ export type TransactionStatus = 'confirmed' | 'pending' | 'failed';
 
 export interface Transaction {
   id: string;
+  journalEntryId?: string;
+  eventType?: string;
+  bucket?: 'available' | 'held' | 'pending_payout' | 'simulation_equity';
   date: string;           // ISO date string
   description: string;
   type: TransactionType;
@@ -61,17 +70,16 @@ export const MOCK_TRANSACTIONS: Transaction[] = [
 
 export interface Settlement {
   id: string;
-  orderId: string;
-  date: string;
-  /** Gross produce value in LKR cents. SIMULATED. */
-  grossAmount: number;
-  /** Platform fee in LKR cents. SIMULATED. */
-  platformFee: number;
-  /** Net amount paid to farmer in LKR cents. SIMULATED. */
-  netPaid: number;
+  orderId: string | null;
+  date: string | null;
+  grossAmount: number | null;
+  platformFee: number | null;
+  netPaid: number | null;
+  /** Journal amount in LKR cents when only the posted ledger amount is known. */
+  journalAmount?: number | null;
   status: TransactionStatus;
-  produce: string;
-  quantityKg: number;
+  produce: string | null;
+  quantityKg: number | null;
 }
 
 export const MOCK_SETTLEMENTS: Settlement[] = [

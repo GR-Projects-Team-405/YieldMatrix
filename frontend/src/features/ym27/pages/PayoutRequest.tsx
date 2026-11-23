@@ -9,6 +9,7 @@ import { Toast } from '../../../components/Toast';
 import { formatLKR } from '../mockData';
 import { usePayoutState } from '../payoutState';
 import { getYm27ErrorMessage } from '../api';
+import { DataModeBanner } from '../DataModeBanner';
 
 function parseLkrToCents(value: string): { cents: number } | { error: string } {
   const trimmed = value.trim();
@@ -51,11 +52,13 @@ export default function PayoutRequest() {
     walletLoading,
     walletError,
     payoutOptions,
+    payoutSubmissionEnabled,
     payoutOptionsLoading,
     payoutOptionsError,
     submitPayout,
     refreshWallet,
     refreshPayoutOptions,
+    dataMode,
   } = usePayoutState();
   const [amount, setAmount] = useState('');
   const [bankValue, setBankValue] = useState('');
@@ -68,13 +71,19 @@ export default function PayoutRequest() {
   const submittingRef = useRef(false);
   const idempotencyRef = useRef<{ key: string; amountCents: number; bankValue: string } | null>(null);
 
-  const remainingRequestable = wallet?.remainingRequestable ?? 0;
+  const databaseMode = dataMode === 'database';
+  const databaseReadOnly = databaseMode && !payoutSubmissionEnabled;
+  const remainingRequestable = wallet?.remainingRequestable ?? null;
   const bankOptions = payoutOptions ?? [];
   const bank = bankOptions.find((account) => account.value === bankValue);
   const parsed = parseLkrToCents(amount);
   const previewCents = 'cents' in parsed ? parsed.cents : null;
-  const withinBalance = previewCents !== null && previewCents <= remainingRequestable;
-  const remainingAfter = previewCents !== null && withinBalance ? remainingRequestable - previewCents : null;
+  const withinBalance = previewCents !== null
+    && remainingRequestable !== null
+    && previewCents <= remainingRequestable;
+  const remainingAfter = previewCents !== null && withinBalance && remainingRequestable !== null
+    ? remainingRequestable - previewCents
+    : null;
 
   useEffect(() => {
     if (!bankValue && bankOptions.length > 0) setBankValue(bankOptions[0].value);
@@ -92,10 +101,14 @@ export default function PayoutRequest() {
   }, [refreshWallet, refreshPayoutOptions]);
 
   function validate(): { cents: number } | { error: string } {
+    if (databaseReadOnly) return { error: 'Payout submission is disabled in database read-only mode.' };
     const result = parseLkrToCents(amount);
     if ('error' in result) return result;
     if (!wallet) return { error: 'The simulated wallet balance is not available yet.' };
-    if (!bank) return { error: 'Choose one of the simulated destinations.' };
+    if (!databaseMode && !bank) return { error: 'Choose one of the simulated destinations.' };
+    if (remainingRequestable === null) {
+      return { error: 'The available payout limit is not known.' };
+    }
     if (result.cents > remainingRequestable) {
       return { error: `The most you can request in this session is ${formatLKR(remainingRequestable)}.` };
     }
@@ -145,24 +158,35 @@ export default function PayoutRequest() {
 
   return (
     <div>
-      <div className="ym27-demo-banner">
-        <Alert type="warning">Demo data – Simulated wallet and payouts. No real money movement.</Alert>
-        <span className="ym27-demo-tag">YM27</span>
-      </div>
+      <DataModeBanner mode={dataMode} />
 
       <WalletTabs />
 
       <div className="ym27-page-header">
         <div>
-          <h1>Request a simulated payout</h1>
-          <p>Choose an amount and review your demo payout before submitting.</p>
+          <h1>{databaseReadOnly ? 'Payout request options' : 'Request a simulated payout'}</h1>
+          <p>{databaseReadOnly
+            ? 'Payout submission is disabled while wallet data is read-only.'
+            : databaseMode
+              ? 'Choose an amount to reserve from your simulated wallet as a pending request.'
+              : 'Choose an amount and review your demo payout before submitting.'}</p>
         </div>
-        <span className="ym27-sim-pill">Simulated only</span>
+        {!databaseReadOnly && <span className="ym27-sim-pill">Simulated only</span>}
       </div>
 
-      <Alert type="info">
-        Pending requests stay in temporary server memory for this browser session. They may expire after inactivity or be cleared when the server restarts; the displayed wallet balance remains unchanged.
-      </Alert>
+      {databaseReadOnly ? (
+        <Alert type="info">
+          Database payout creation is disabled for this backend process.
+        </Alert>
+      ) : databaseMode ? (
+        <Alert type="info">
+          Requests are saved persistently and reserve simulated wallet funds while pending. Destination details are not stored, and no real payment is made.
+        </Alert>
+      ) : (
+        <Alert type="info">
+          Pending requests stay in temporary server memory for this browser session. They may expire after inactivity or be cleared when the server restarts; the displayed wallet balance remains unchanged.
+        </Alert>
+      )}
       {walletLoading && <p role="status">Loading wallet balance…</p>}
       {payoutOptionsLoading && <p role="status">Loading simulated destinations…</p>}
       {walletError && <Alert type="error">{walletError}</Alert>}
@@ -171,7 +195,9 @@ export default function PayoutRequest() {
       <div className="ym27-split ym27-section-gap">
         <form className="ym27-info-card" onSubmit={(event) => { event.preventDefault(); requestConfirmation(); }}>
           <h2>Payout amount</h2>
-          <p className="ym27-cell-meta">Available to request now: {wallet ? formatLKR(remainingRequestable) : '—'}</p>
+          <p className="ym27-cell-meta">
+            Available to request now: {wallet && remainingRequestable !== null ? formatLKR(remainingRequestable) : 'Not available'}
+          </p>
           <div className="ym27-amount-row">
             <InputField
               label="Amount"
@@ -181,37 +207,49 @@ export default function PayoutRequest() {
               placeholder="0.00"
               value={amount}
               error={fieldError}
+              disabled={databaseReadOnly}
               onChange={(event) => { setAmount(event.target.value); setFieldError(''); setFormError(''); }}
             />
             <button
               type="button"
               className="ym27-text-button"
-              disabled={remainingRequestable <= 0}
-              onClick={() => { setAmount(centsToInput(remainingRequestable)); setFieldError(''); setFormError(''); }}
+              disabled={databaseReadOnly || remainingRequestable === null || remainingRequestable <= 0}
+              onClick={() => {
+                if (remainingRequestable === null) return;
+                setAmount(centsToInput(remainingRequestable));
+                setFieldError('');
+                setFormError('');
+              }}
             >
               Use max
             </button>
           </div>
-          <p className="ym27-cell-meta">Enter an amount greater than LKR 0.00 and no more than the remaining simulated balance. Amounts use two decimal places.</p>
+          <p className="ym27-cell-meta">Enter an amount greater than LKR 0.00 and no more than the available simulated balance. Amounts use two decimal places.</p>
 
-          <div className="ym27-destination">
-            <h2>Demo destination</h2>
-            <SelectField
-              label="Simulated account"
-              value={bankValue}
-              options={bankOptions.map((account) => ({ value: account.value, label: account.label }))}
-              onChange={(event) => setBankValue(event.target.value)}
-            />
-            <p className="ym27-cell-meta">Masked demo labels only. No account number is collected or stored.</p>
-          </div>
+          {databaseMode ? (
+            <p className="ym27-cell-meta">
+              Payout destination details are not collected or stored.
+            </p>
+          ) : (
+            <div className="ym27-destination">
+              <h2>Demo destination</h2>
+              <SelectField
+                label="Simulated account"
+                value={bankValue}
+                options={bankOptions.map((account) => ({ value: account.value, label: account.label }))}
+                onChange={(event) => setBankValue(event.target.value)}
+              />
+              <p className="ym27-cell-meta">Masked demo labels only. No account number is collected or stored.</p>
+            </div>
+          )}
 
-          {payoutOptions?.length === 0 && <p role="status">No simulated payout destinations are available.</p>}
+          {!databaseMode && payoutOptions?.length === 0 && <p role="status">No simulated payout destinations are available.</p>}
 
           {formError && <div className="ym27-section-gap"><Alert type="error">{formError}</Alert></div>}
 
           <div className="ym27-form-actions">
-            <Button type="submit" disabled={!wallet || !payoutOptions?.length || payoutOptionsLoading || remainingRequestable <= 0 || submitting}>
-              {submitting ? 'Recording simulated request…' : 'Submit simulated payout'}
+            <Button type="submit" disabled={databaseReadOnly || !wallet || (!databaseMode && !payoutOptions?.length) || payoutOptionsLoading || remainingRequestable === null || remainingRequestable <= 0 || submitting}>
+              {databaseReadOnly ? 'Payout submission disabled' : submitting ? 'Recording simulated request…' : 'Submit simulated payout'}
             </Button>
             <Link to="/farmer/wallet/payout/history" className="ym27-inline-link">View payout history</Link>
           </div>
@@ -224,11 +262,11 @@ export default function PayoutRequest() {
             <dt>Original available balance</dt>
             <dd>{wallet ? formatLKR(wallet.summary.availableBalance) : '—'}</dd>
             <dt>Remaining before this request</dt>
-            <dd>{formatLKR(remainingRequestable)}</dd>
+            <dd>{remainingRequestable === null ? 'Not available' : formatLKR(remainingRequestable)}</dd>
             <dt>Remaining if recorded</dt>
             <dd>{remainingAfter === null ? '—' : formatLKR(remainingAfter)}</dd>
             <dt>Destination</dt>
-            <dd>{bank?.label ?? '—'}</dd>
+            <dd>{databaseMode ? 'Not stored' : bank?.label ?? '—'}</dd>
             <dt>Status if recorded</dt>
             <dd>Pending</dd>
           </dl>
@@ -238,13 +276,25 @@ export default function PayoutRequest() {
       <ConfirmDialog
         open={confirmOpen}
         title="Record this simulated payout request?"
-        description={pendingCents === null ? 'No amount is selected.' : `Record ${formatLKR(pendingCents)} to ${bank?.label ?? 'the selected demo destination'} as pending. No bank is contacted and no funds move.`}
-        simulationNote="The displayed balance stays unchanged. This temporary request may expire after inactivity or a server restart."
+        description={pendingCents === null
+          ? 'No amount is selected.'
+          : databaseMode
+            ? `Reserve ${formatLKR(pendingCents)} from the simulated wallet as a pending payout request. No bank is contacted.`
+            : `Record ${formatLKR(pendingCents)} to ${bank?.label ?? 'the selected demo destination'} as pending. No bank is contacted and no funds move.`}
+        simulationNote={databaseMode
+          ? 'The pending request and simulated balance reservation are saved in the configured database. No real payment is made.'
+          : 'The displayed balance stays unchanged. This temporary request may expire after inactivity or a server restart.'}
         confirmLabel="Record simulated request"
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => { void confirmRequest(); }}
       />
-      <Toast open={toastOpen} message="Simulated payout request recorded as pending. No funds were transferred." onClose={() => setToastOpen(false)} />
+      <Toast
+        open={toastOpen}
+        message={databaseMode
+          ? 'Simulated payout request saved as pending. No real payment was made.'
+          : 'Simulated payout request recorded as pending. No funds were transferred.'}
+        onClose={() => setToastOpen(false)}
+      />
     </div>
   );
 }

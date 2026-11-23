@@ -8,21 +8,46 @@ import type {
   WalletSummary,
 } from './mockData';
 
+export type Ym27DataMode = 'mock' | 'database';
+
 const SESSION_STORAGE_KEY = 'ym27_wallet_session';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface WalletResponse {
+  mode: Ym27DataMode;
   summary: WalletSummary;
-  remainingRequestable: number;
+  remainingRequestable: number | null;
 }
 
 export interface PayoutsResponse {
+  mode: Ym27DataMode;
   payouts: PayoutRecord[];
-  remainingRequestable: number;
+  remainingRequestable: number | null;
 }
 
-export interface PayoutSubmissionResponse extends PayoutsResponse {
+export interface PayoutSubmissionResponse {
+  mode: Ym27DataMode;
   payout: PayoutRecord;
+  replayed?: boolean;
+  payouts?: PayoutRecord[];
+  remainingRequestable?: number | null;
+}
+
+export interface TransactionsResponse {
+  mode: Ym27DataMode;
+  transactions: Transaction[];
+}
+
+export interface SettlementsResponse {
+  mode: Ym27DataMode;
+  settlements: Settlement[];
+}
+
+export interface PayoutOptionsResponse {
+  mode: Ym27DataMode;
+  destinationSource: 'simulated' | 'not-stored';
+  payoutOptions: BankAccount[];
+  payoutSubmissionEnabled: boolean;
 }
 
 function sessionHeaders(): Record<string, string> {
@@ -43,36 +68,51 @@ export function getYm27ErrorMessage(error: unknown): string {
   return 'The wallet service could not be reached. Please try again.';
 }
 
+export function getYm27ResponseMode(error: unknown): Ym27DataMode | null {
+  if (!axios.isAxiosError<{ mode?: string }>(error)) return null;
+  const mode = error.response?.data?.mode;
+  return mode === 'mock' || mode === 'database' ? mode : null;
+}
+
 export async function fetchWallet(): Promise<WalletResponse> {
   const response = await api.get<WalletResponse>('/ym27/wallet', { headers: sessionHeaders() });
   return response.data;
 }
 
-export async function fetchTransactions(): Promise<Transaction[]> {
-  const response = await api.get<{ transactions: Transaction[] }>('/ym27/wallet/transactions');
-  return response.data.transactions;
+export async function fetchTransactions(): Promise<TransactionsResponse> {
+  const response = await api.get<TransactionsResponse>('/ym27/wallet/transactions');
+  return response.data;
 }
 
-export async function fetchSettlements(): Promise<Settlement[]> {
-  const response = await api.get<{ settlements: Settlement[] }>('/ym27/wallet/settlements');
-  return response.data.settlements;
+export async function fetchSettlements(): Promise<SettlementsResponse> {
+  const response = await api.get<SettlementsResponse>('/ym27/wallet/settlements');
+  return response.data;
 }
 
-export async function fetchSettlement(settlementId: string): Promise<Settlement | null> {
+export async function fetchSettlement(settlementId: string): Promise<{
+  settlement: Settlement | null;
+  mode: Ym27DataMode | null;
+}> {
   try {
-    const response = await api.get<{ settlement: Settlement }>(
+    const response = await api.get<{ settlement: Settlement; mode: Ym27DataMode }>(
       `/ym27/wallet/settlements/${encodeURIComponent(settlementId)}`,
     );
-    return response.data.settlement;
+    return response.data;
   } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 404) return null;
+    if (axios.isAxiosError<{ mode?: string }>(error) && error.response?.status === 404) {
+      const mode = error.response.data?.mode;
+      return {
+        settlement: null,
+        mode: mode === 'mock' || mode === 'database' ? mode : null,
+      };
+    }
     throw error;
   }
 }
 
-export async function fetchPayoutOptions(): Promise<BankAccount[]> {
-  const response = await api.get<{ payoutOptions: BankAccount[] }>('/ym27/payout-options');
-  return response.data.payoutOptions;
+export async function fetchPayoutOptions(): Promise<PayoutOptionsResponse> {
+  const response = await api.get<PayoutOptionsResponse>('/ym27/payout-options');
+  return response.data;
 }
 
 export async function fetchPayouts(): Promise<PayoutsResponse> {
@@ -86,13 +126,14 @@ export async function createPayout(
   amountCents: number,
   bankValue: string,
   idempotencyKey: string,
+  mode: Ym27DataMode,
 ): Promise<PayoutSubmissionResponse> {
   const response = await api.post<PayoutSubmissionResponse>(
     '/ym27/wallet/payouts',
-    { amountCents, bankValue },
+    mode === 'database' ? { amountCents } : { amountCents, bankValue },
     {
       headers: {
-        ...sessionHeaders(),
+        ...(mode === 'mock' ? sessionHeaders() : {}),
         'Idempotency-Key': idempotencyKey,
       },
     },

@@ -14,6 +14,7 @@ import {
   type TransactionType,
 } from '../mockData';
 import { usePayoutState } from '../payoutState';
+import { DataModeBanner } from '../DataModeBanner';
 
 const PAGE_SIZE = 5;
 
@@ -74,6 +75,7 @@ export default function WalletTransactions() {
     payouts,
     payoutsLoading,
     payoutsError,
+    dataMode,
   } = usePayoutState();
   const [query, setQuery] = useState('');
   const [from, setFrom] = useState('');
@@ -122,19 +124,20 @@ export default function WalletTransactions() {
 
   return (
     <div>
-      <div className="ym27-demo-banner">
-        <Alert type="warning">Demo data – Simulated wallet and payouts. No real money movement.</Alert>
-        <span className="ym27-demo-tag">YM27</span>
-      </div>
+      <DataModeBanner mode={dataMode} />
 
       <WalletTabs current="transactions" />
 
       <div className="ym27-page-header">
         <div>
           <h1>Wallet transactions</h1>
-          <p>A complete record of your simulated settlement credits and payout debits.</p>
+          <p>{dataMode === 'database'
+            ? 'A record of settlement credits and payout debits stored in your wallet ledger.'
+            : 'A complete record of your simulated settlement credits and payout debits.'}</p>
         </div>
-        <Link to="/farmer/wallet/payout/request" className="ym27-header-action">Request simulated payout</Link>
+        <Link to="/farmer/wallet/payout/request" className="ym27-header-action">
+          {dataMode === 'database' ? 'Payout request options' : 'Request simulated payout'}
+        </Link>
       </div>
 
       {walletLoading && <p role="status">Loading wallet summary…</p>}
@@ -148,7 +151,9 @@ export default function WalletTransactions() {
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">Total credits</span>
           <span className="ym27-balance-value">{transactions ? formatLKR(totalCredits) : '—'}</span>
-          <span className="ym27-balance-sub">Sum of the {transactions ? transactions.filter((txn) => txn.type === 'credit').length : '—'} simulated credit rows</span>
+          <span className="ym27-balance-sub">
+            Sum of the {transactions ? transactions.filter((txn) => txn.type === 'credit').length : '—'} {dataMode === 'database' ? 'recorded credit rows' : 'simulated credit rows'}
+          </span>
         </div>
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">Total paid out</span>
@@ -158,7 +163,11 @@ export default function WalletTransactions() {
         <div className="ym27-balance-card">
           <span className="ym27-balance-label">Available balance</span>
           <span className="ym27-balance-value">{wallet ? formatLKR(wallet.summary.availableBalance) : '—'}</span>
-          <span className="ym27-balance-sub">Original simulated balance. Pending requests are not deducted here.</span>
+          <span className="ym27-balance-sub">
+            {dataMode === 'database'
+              ? 'Available balance from the approved simulated wallet.'
+              : 'Original simulated balance. Pending requests are not deducted here.'}
+          </span>
         </div>
       </div>
 
@@ -212,7 +221,11 @@ export default function WalletTransactions() {
                     {txn.settlementId ? (
                       <Link to={`/farmer/wallet/settlement/${txn.settlementId}`} className="ym27-inline-link">{txn.description}</Link>
                     ) : txn.description}
-                    {settlement && <div className="ym27-cell-meta">{settlement.produce} · {settlement.quantityKg} kg</div>}
+                    {settlement && (
+                      <div className="ym27-cell-meta">
+                        {settlement.produce ?? 'Produce not recorded'} · {settlement.quantityKg ?? 'Quantity not recorded'} kg
+                      </div>
+                    )}
                   </td>
                   <td className="ym27-cell-meta">{referenceFor(txn, payoutRows)}</td>
                   <td className="ym27-capitalize">{txn.type}</td>
