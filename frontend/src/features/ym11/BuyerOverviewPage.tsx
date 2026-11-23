@@ -260,18 +260,27 @@ export default function BuyerOverviewPage() {
           params,
           signal: options?.signal,
         });
+        if (options?.signal?.aborted) return;
         setDashboard(data);
         setActivityRange(data.procurementActivity.range);
       } catch (err) {
-        if ((err as { name?: string })?.name === 'CanceledError') return;
+        if (
+          options?.signal?.aborted ||
+          (err as { code?: string })?.code === 'ERR_CANCELED' ||
+          (err as { name?: string })?.name === 'CanceledError'
+        ) {
+          return;
+        }
         if (silent) {
           setSectionError('Live refresh failed — showing last loaded data.');
         } else {
           setError('Could not load your Buyer Overview dashboard. Please check your connection and try again.');
         }
       } finally {
-        if (silent) setRefreshing(false);
-        else setLoading(false);
+        if (!options?.signal?.aborted) {
+          if (silent) setRefreshing(false);
+          else setLoading(false);
+        }
       }
     },
     [activityRange, selectedCropId, selectedDistrict]

@@ -139,6 +139,7 @@ export default function HarvestAvailabilityPage() {
           '/ym11/marketplace/harvest-availability',
           { params, signal }
         );
+        if (signal?.aborted) return;
         setData(response.data);
 
         const datesWithItems = Object.keys(response.data.calendarDays).sort();
@@ -147,10 +148,18 @@ export default function HarvestAvailabilityPage() {
           return datesWithItems[0] || response.data.monthStart;
         });
       } catch (err) {
-        if ((err as { name?: string })?.name === 'CanceledError') return;
+        if (
+          signal?.aborted ||
+          (err as { code?: string })?.code === 'ERR_CANCELED' ||
+          (err as { name?: string })?.name === 'CanceledError'
+        ) {
+          return;
+        }
         setError('Could not load harvest availability data. Please try again.');
       } finally {
-        setLoading(false);
+        if (!signal?.aborted) {
+          setLoading(false);
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

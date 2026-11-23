@@ -103,12 +103,21 @@ export default function MarketplacePage() {
     setError('');
     try {
       const response = await api.get<MarketplaceOverviewResponse>('/ym11/marketplace', { signal });
+      if (signal?.aborted) return;
       setData(response.data);
     } catch (err) {
-      if ((err as { name?: string })?.name === 'CanceledError') return;
+      if (
+        signal?.aborted ||
+        (err as { code?: string })?.code === 'ERR_CANCELED' ||
+        (err as { name?: string })?.name === 'CanceledError'
+      ) {
+        return;
+      }
       setError('Could not load the marketplace right now. Please try again.');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -150,14 +159,23 @@ export default function MarketplacePage() {
         signal: controller.signal,
       })
       .then((res) => {
+        if (controller.signal.aborted) return;
         setFilteredItems(res.data.items);
       })
       .catch((err) => {
-        if ((err as { name?: string })?.name === 'CanceledError') return;
+        if (
+          controller.signal.aborted ||
+          (err as { code?: string })?.code === 'ERR_CANCELED' ||
+          (err as { name?: string })?.name === 'CanceledError'
+        ) {
+          return;
+        }
         setFilterError('Could not apply filters right now. Please try again.');
       })
       .finally(() => {
-        setFilterLoading(false);
+        if (!controller.signal.aborted) {
+          setFilterLoading(false);
+        }
       });
 
     return () => controller.abort();

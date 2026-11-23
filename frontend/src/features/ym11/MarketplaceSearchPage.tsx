@@ -93,12 +93,21 @@ export default function MarketplaceSearchPage() {
           params,
           signal,
         });
+        if (signal?.aborted) return;
         setResult(data);
       } catch (err) {
-        if ((err as { name?: string })?.name === 'CanceledError') return;
+        if (
+          signal?.aborted ||
+          (err as { code?: string })?.code === 'ERR_CANCELED' ||
+          (err as { name?: string })?.name === 'CanceledError'
+        ) {
+          return;
+        }
         setError('Could not load search results. Check your filters and try again.');
       } finally {
-        setLoading(false);
+        if (!signal?.aborted) {
+          setLoading(false);
+        }
       }
     },
     [paramsKey]
