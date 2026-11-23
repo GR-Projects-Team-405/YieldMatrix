@@ -152,3 +152,85 @@ export interface OrderTimelineResponse {
   deliveryInfo: DeliveryInfo;
   requestId: string;
 }
+
+export interface DeliveryCheckpoint {
+  id: string;
+  step: number;
+  name: string;
+  location: string;
+  latitude: number;
+  longitude: number;
+  status: 'completed' | 'current' | 'pending';
+  timestamp: string | null;
+  date: string | null;
+  description: string;
+}
+
+export interface DeliveryCarrier {
+  driverName: string;
+  driverPhone: string;
+  company: string;
+  vehicleNumber: string;
+  vehicleType: string;
+  cargoCondition?: string;
+  isSimulated: boolean;
+}
+
+export interface DeliveryLocation {
+  farmName?: string;
+  address: string;
+  district: string;
+  latitude: number;
+  longitude: number;
+  farmerName?: string;
+  recipientName?: string;
+  specialInstructions?: string;
+}
+
+export interface DeliveryTrackingInfo {
+  deliveryStatus: 'in_transit' | 'delivered' | 'processing' | 'pending' | 'cancelled';
+  statusLabel: string;
+  estimatedArrival: string | null;
+  progressPercentage: number;
+  distanceRemainingKm: number | null;
+  totalDistanceKm: number;
+  currentPosition: {
+    latitude: number;
+    longitude: number;
+    locationName: string;
+  } | null;
+  isSimulatedGPS: boolean;
+  simulationNotice: string;
+}
+
+export interface DeliveryTrackingApiResponse {
+  order: {
+    id: string;
+    orderCode: string;
+    operationKey: string;
+    productName: string;
+    quantityKg: number;
+    totalPriceLkr: number;
+    formattedTotalPrice: string;
+    displayStatus: OrderDisplayStatus;
+    rawStatus: string;
+    orderDate: string;
+    createdAt: string;
+    deliveryDate: string;
+    destination: string;
+    destinationDistrict: string;
+    cancellationReason?: string | null;
+  };
+  tracking: DeliveryTrackingInfo;
+  pickup: DeliveryLocation;
+  destination: DeliveryLocation;
+  carrier: DeliveryCarrier | null;
+  routeCheckpoints: DeliveryCheckpoint[];
+  hasLocationData: boolean;
+  supportContact: {
+    phone: string;
+    email: string;
+    operatingHours: string;
+  };
+  requestId: string;
+}

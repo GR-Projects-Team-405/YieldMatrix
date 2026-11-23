@@ -1,7 +1,5 @@
 import pool from '../../config/db.js';
 
-// YM18 · Nipuni Thakshila · Buyer orders
-
 /** Maps raw PostgreSQL order status to user-facing status */
 export function mapOrderStatus(status) {
   switch (status) {
@@ -32,13 +30,13 @@ export function formatOrderDate(dateInput) {
   const day = d.getUTCDate();
   const month = months[d.getUTCMonth()];
   const year = d.getUTCFullYear();
-  
+
   let hours = d.getUTCHours();
   const minutes = d.getUTCMinutes().toString().padStart(2, '0');
   const ampm = hours >= 12 ? 'PM' : 'AM';
   hours = hours % 12;
   hours = hours ? hours : 12; // 0 becomes 12
-  
+
   return `${day} ${month} ${year} - ${hours}.${minutes} ${ampm}`;
 }
 
@@ -588,7 +586,7 @@ export async function getOrderTimeline(req, res, next) {
         status: stage2Status,
         timestamp: stage2Time ? stage2Time.toISOString() : null,
         formattedTimestamp: stage2Time ? formatOrderDate(stage2Time) : null,
-        description: status === 'cancelled' 
+        description: status === 'cancelled'
           ? `Order cancelled before final farmer confirmation. Reason: ${row.cancellation_reason || 'Buyer cancelled'}`
           : 'Cooperative farmer partners accepted harvest quantity and agreed price.',
         actor: items[0]?.farmer_name || 'Regional Farmer Cooperative',
@@ -674,6 +672,294 @@ export async function getOrderTimeline(req, res, next) {
           vehicleNumber: rawTrips[0].vehicle_reg,
           status: rawTrips[0].trip_status,
         } : null,
+      },
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /api/ym18/orders/:id/delivery
+ * Retrieves live delivery logistics, carrier information, route checkpoints and simulated GPS tracking
+ */
+export async function getOrderDelivery(req, res, next) {
+  try {
+    const buyerId = req.user.id;
+    const orderIdentifier = req.params.id;
+
+    const deliveryQuery = `
+      SELECT 
+        o.id,
+        o.operation_key,
+        o.destination,
+        o.destination_district,
+        o.destination_latitude,
+        o.destination_longitude,
+        o.delivery_date,
+        o.agreed_total_cents,
+        o.status,
+        o.cancellation_reason,
+        o.created_at,
+        o.updated_at,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'crop_name', c.name,
+              'agreed_kg', a.agreed_kg,
+              'farmer_name', u.name,
+              'farm_name', f.name,
+              'farm_district', f.district,
+              'pickup_address', f.pickup_address,
+              'farm_latitude', f.latitude,
+              'farm_longitude', f.longitude
+            )
+          ) FILTER (WHERE a.id IS NOT NULL), '[]'::jsonb
+        ) as items,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'trip_id', t.id,
+              'driver_id', d.id,
+              'driver_name', d.name,
+              'driver_email', d.email,
+              'vehicle_id', v.id,
+              'vehicle_reg', v.registration,
+              'vehicle_type', v.vehicle_type,
+              'trip_status', t.status,
+              'scheduled_start', t.scheduled_start,
+              'scheduled_end', t.scheduled_end,
+              'route_notes', t.route_notes
+            )
+          ) FILTER (WHERE t.id IS NOT NULL), '[]'::jsonb
+        ) as trips
+      FROM orders o
+      LEFT JOIN allocations a ON a.order_id = o.id
+      LEFT JOIN users u ON u.id = a.farmer_id
+      LEFT JOIN harvest_batches hb ON hb.id = a.batch_id
+      LEFT JOIN crops c ON c.id = hb.crop_id
+      LEFT JOIN farms f ON f.id = hb.farm_id
+      LEFT JOIN trips t ON t.order_id = o.id
+      LEFT JOIN users d ON d.id = t.driver_id
+      LEFT JOIN vehicles v ON v.id = t.vehicle_id
+      WHERE (o.id::text = $1 OR o.operation_key ILIKE '%' || $1 || '%') AND o.buyer_id = $2
+      GROUP BY o.id
+    `;
+
+    const { rows } = await pool.query(deliveryQuery, [orderIdentifier, buyerId]);
+    if (!rows[0]) {
+      return res.status(404).json({ error: 'Order not found', requestId: req.requestId });
+    }
+
+    const row = rows[0];
+    const items = Array.isArray(row.items) ? row.items : [];
+    const rawTrips = Array.isArray(row.trips) ? row.trips : [];
+    const totalAmountLkr = Number(row.agreed_total_cents) / 100;
+    const totalKg = items.reduce((acc, it) => acc + (Number(it.agreed_kg) || 0), 0);
+    const primaryCrop = items[0]?.crop_name || 'Agricultural Produce';
+
+    const firstItem = items[0];
+    const rawStatus = row.status;
+    const isCancelled = rawStatus === 'cancelled';
+    const isDelivered = rawStatus === 'delivered' || rawStatus === 'closed';
+    const isInTransit = rawStatus === 'in_fulfilment';
+    const isConfirmed = rawStatus === 'confirmed' || rawStatus === 'ready_to_confirm';
+
+    // Location coordinates
+    const destLat = row.destination_latitude ? Number(row.destination_latitude) : 6.9271;
+    const destLng = row.destination_longitude ? Number(row.destination_longitude) : 79.8612;
+    const pickupLat = firstItem?.farm_latitude ? Number(firstItem.farm_latitude) : 6.9497;
+    const pickupLng = firstItem?.farm_longitude ? Number(firstItem.farm_longitude) : 80.7891;
+
+    // Has valid location coordinates
+    const hasCoordinates = !!(destLat && destLng && pickupLat && pickupLng);
+    // If cancelled or draft without allocations, location tracking is not active
+    const hasLocationData = hasCoordinates && rawStatus !== 'cancelled' && rawStatus !== 'draft';
+
+    // Route checkpoints
+    const checkpoints = [
+      {
+        id: 'cp-1',
+        step: 1,
+        name: 'Farm Collection Point',
+        location: `${firstItem?.farm_name || 'Green Valley Farm'}, ${firstItem?.farm_district || 'Nuwara Eliya'}`,
+        latitude: pickupLat,
+        longitude: pickupLng,
+        status: isDelivered || isInTransit ? 'completed' : (isConfirmed ? 'current' : 'pending'),
+        timestamp: '09:30 AM',
+        date: formatOrderDate(row.created_at).split(' - ')[0],
+        description: 'Batch loaded & cold storage seal applied by farm manager'
+      },
+      {
+        id: 'cp-2',
+        step: 2,
+        name: 'Highlands Transit Station',
+        location: 'Hatton Junction, Central Province',
+        latitude: 6.8967,
+        longitude: 80.5983,
+        status: isDelivered || isInTransit ? 'completed' : 'pending',
+        timestamp: isDelivered || isInTransit ? '11:15 AM' : null,
+        date: isDelivered || isInTransit ? formatOrderDate(row.created_at).split(' - ')[0] : null,
+        description: 'Weight verification, cargo temperature check: 11.5°C'
+      },
+      {
+        id: 'cp-3',
+        step: 3,
+        name: 'Avissawella Logistics Hub',
+        location: 'Avissawella, Western Province',
+        latitude: 6.9536,
+        longitude: 80.2106,
+        status: isDelivered || isInTransit ? 'completed' : 'pending',
+        timestamp: isDelivered || isInTransit ? '01:45 PM' : null,
+        date: isDelivered || isInTransit ? formatOrderDate(row.created_at).split(' - ')[0] : null,
+        description: 'Expressway transit clearance and telemetry ping logged'
+      },
+      {
+        id: 'cp-4',
+        step: 4,
+        name: 'Kadawatha Expressway Interchange',
+        location: 'Kadawatha, Gampaha District',
+        latitude: 6.9972,
+        longitude: 79.9536,
+        status: isDelivered ? 'completed' : (isInTransit ? 'current' : 'pending'),
+        timestamp: isDelivered ? '02:50 PM' : (isInTransit ? '03:10 PM' : null),
+        date: isDelivered || isInTransit ? formatOrderDate(row.created_at).split(' - ')[0] : null,
+        description: 'Carrier approaching Colombo metropolitan ring'
+      },
+      {
+        id: 'cp-5',
+        step: 5,
+        name: 'Buyer Delivery Destination',
+        location: `${row.destination}, ${row.destination_district}`,
+        latitude: destLat,
+        longitude: destLng,
+        status: isDelivered ? 'completed' : 'pending',
+        timestamp: isDelivered ? '03:45 PM' : 'Est. 03:30 PM',
+        date: row.delivery_date ? formatOrderDate(row.delivery_date).split(' - ')[0] : 'Today',
+        description: 'Produce handover, digital delivery note signing and escrow release'
+      }
+    ];
+
+    // Estimated arrival and progress
+    let estimatedArrival = 'Pending Dispatch';
+    let progressPercentage = 0;
+    let distanceRemainingKm = 148.0;
+    let currentPosition = {
+      latitude: pickupLat,
+      longitude: pickupLng,
+      locationName: `${firstItem?.farm_name || 'Green Valley Farm'}, ${firstItem?.farm_district || 'Nuwara Eliya'}`
+    };
+
+    if (isDelivered) {
+      estimatedArrival = 'Delivered at 03:45 PM';
+      progressPercentage = 100;
+      distanceRemainingKm = 0;
+      currentPosition = {
+        latitude: destLat,
+        longitude: destLng,
+        locationName: `${row.destination}, ${row.destination_district}`
+      };
+    } else if (isInTransit) {
+      estimatedArrival = 'Today, 03:30 PM';
+      progressPercentage = 78;
+      distanceRemainingKm = 34.2;
+      currentPosition = {
+        latitude: 6.9972,
+        longitude: 79.9536,
+        locationName: 'A1 Highway near Kadawatha (34 km to destination)'
+      };
+    } else if (isConfirmed) {
+      estimatedArrival = 'Tomorrow Morning (Est. 10:00 AM)';
+      progressPercentage = 25;
+      distanceRemainingKm = 148.0;
+      currentPosition = {
+        latitude: pickupLat,
+        longitude: pickupLng,
+        locationName: 'Farm Hub Packing Bay'
+      };
+    } else if (isCancelled) {
+      estimatedArrival = 'Shipment Cancelled';
+      progressPercentage = 0;
+      distanceRemainingKm = 0;
+    }
+
+    // Driver & Vehicle Carrier Details
+    let carrierInfo = null;
+    if (rawTrips.length > 0 && rawTrips[0]?.driver_name) {
+      carrierInfo = {
+        driverName: rawTrips[0].driver_name,
+        driverPhone: '+94 77 123 4567',
+        company: 'YieldMatrix Partner Carrier',
+        vehicleNumber: rawTrips[0].vehicle_reg || 'WP-CAB-4589',
+        vehicleType: rawTrips[0].vehicle_type || 'Refrigerated 4T Truck',
+        cargoCondition: 'Chilled • 12°C Nominal',
+        isSimulated: false
+      };
+    } else if (!isCancelled && rawStatus !== 'draft') {
+      carrierInfo = {
+        driverName: 'Kasun Bandara',
+        driverPhone: '+94 77 123 4567',
+        company: 'YieldMatrix ColdChain Express',
+        vehicleNumber: 'WP-CAB-4589',
+        vehicleType: 'Refrigerated 4T Truck',
+        cargoCondition: 'Chilled • 12°C Nominal',
+        isSimulated: true
+      };
+    }
+
+    return res.json({
+      order: {
+        id: row.id,
+        orderCode: formatOrderCode(row.operation_key, row.id),
+        operationKey: row.operation_key,
+        productName: primaryCrop,
+        quantityKg: totalKg,
+        totalPriceLkr: totalAmountLkr,
+        formattedTotalPrice: `LKR ${totalAmountLkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        displayStatus: mapOrderStatus(row.status),
+        rawStatus: row.status,
+        orderDate: formatOrderDate(row.created_at),
+        createdAt: row.created_at,
+        deliveryDate: row.delivery_date ? formatOrderDate(row.delivery_date).split(' - ')[0] : 'Scheduled',
+        destination: row.destination,
+        destinationDistrict: row.destination_district,
+        cancellationReason: row.cancellation_reason,
+      },
+      tracking: {
+        deliveryStatus: isInTransit ? 'in_transit' : (isDelivered ? 'delivered' : (isConfirmed ? 'processing' : (isCancelled ? 'cancelled' : 'pending'))),
+        statusLabel: isInTransit ? 'In Transit' : (isDelivered ? 'Delivered' : (isConfirmed ? 'Preparing Dispatch' : (isCancelled ? 'Order Cancelled' : 'Pending Allocation'))),
+        estimatedArrival,
+        progressPercentage,
+        distanceRemainingKm,
+        totalDistanceKm: 148.0,
+        currentPosition,
+        isSimulatedGPS: true,
+        simulationNotice: 'Simulated tracking data: carrier telematics simulated for local testing and demonstration.',
+      },
+      pickup: {
+        farmName: firstItem?.farm_name || 'Green Valley Farm',
+        district: firstItem?.farm_district || 'Nuwara Eliya',
+        address: firstItem?.pickup_address || 'Demo pickup location, Nuwara Eliya',
+        latitude: pickupLat,
+        longitude: pickupLng,
+        farmerName: firstItem?.farmer_name || 'Saman Perera',
+      },
+      destination: {
+        address: row.destination || 'Buyer Destination',
+        district: row.destination_district || 'Colombo',
+        latitude: destLat,
+        longitude: destLng,
+        recipientName: req.user.name || 'Verified Buyer Partner',
+        specialInstructions: 'Unload at Warehouse Bay 3. Verify digital seal and temperature log before signing.',
+      },
+      carrier: carrierInfo,
+      routeCheckpoints: checkpoints,
+      hasLocationData,
+      supportContact: {
+        phone: '+94 11 234 5678',
+        email: 'logistics@yieldmatrix.lk',
+        operatingHours: '24/7 Agro-Logistics Command Center',
       },
       requestId: req.requestId,
     });
