@@ -8,20 +8,22 @@ export interface AuthSplitLayoutProps {
   label: string;
   headline: string;
   body: string;
-  /** Optional chip under the body text. */
-  chip?: string;
+  /** Optional note pinned to the bottom of the brand panel. */
+  note?: string;
   /** The form card shown on the right side. */
   children: ReactNode;
 }
 
-export default function AuthSplitLayout({ label, headline, body, chip, children }: AuthSplitLayoutProps) {
+export default function AuthSplitLayout({ label, headline, body, note, children }: AuthSplitLayoutProps) {
   return (
     <div className="ym02-auth">
       <aside className="ym02-auth__brand" style={{ backgroundImage: `url(${lineArt})` }}>
-        <p className="ym02-auth__label">{label}</p>
-        <h1 className="ym02-auth__headline">{headline}</h1>
-        <p className="ym02-auth__body">{body}</p>
-        {chip && <span className="ym02-auth__chip">{chip}</span>}
+        <div className="ym02-auth__copy">
+          <p className="ym02-auth__label">{label}</p>
+          <h1 className="ym02-auth__headline">{headline}</h1>
+          <p className="ym02-auth__body">{body}</p>
+        </div>
+        {note && <p className="ym02-auth__note">{note}</p>}
       </aside>
 
       <main className="ym02-auth__main">

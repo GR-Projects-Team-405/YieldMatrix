@@ -55,40 +55,44 @@ export default function AdminLoginPage() {
     }
   }
 
-  return (
+    return (
     <AuthSplitLayout
       label="Admin access"
-      headline="Manage YieldMatrix with confidence"
-      body="Sign in to review accounts, approvals and platform activity."
-      chip="Authorised administrators only"
+      headline="Manage the YieldMatrix network."
+      body="Sign in to oversee farmers, buyers and drivers in one place."
+      note="Admin access is provisioned internally."
     >
-      <ContentCard title="Admin Login" subtitle="Sign in with your administrator account.">
+      <ContentCard title="Admin Login" subtitle="Sign in with your email and password">
         <form className="ym02-form" onSubmit={handleSubmit} noValidate>
           {formError && <Alert type="error">{formError}</Alert>}
-          <InputField
-            id="admin-email"
-            label="Email"
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            error={errors.email}
-          />
-          <InputField
-            id="admin-password"
-            label="Password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            error={errors.password}
-          />
-          <div className="ym02-links">
-            <Link className="ym02-link" to="/account/forgot-password">Forgot password?</Link>
+          <div className="ym02-field-box">
+            <InputField
+              id="admin-email"
+              label="Email address"
+              type="email"
+              placeholder="Enter your email address"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              error={errors.email}
+            />
+          </div>
+          <div className="ym02-field-box">
+            <InputField
+              id="admin-password"
+              label="Password"
+              type="password"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              error={errors.password}
+            />
           </div>
           <Button type="submit" variant="primary" disabled={submitting}>
             {submitting ? 'Logging in…' : 'Log in'}
           </Button>
+          <Link className="ym02-link ym02-link--center" to="/account/forgot-password">Forgot password?</Link>
         </form>
       </ContentCard>
     </AuthSplitLayout>
