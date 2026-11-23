@@ -200,8 +200,8 @@ export function ProduceCard({ listing }: ProduceCardProps) {
           </strong>
         </div>
 
-        {/* Action Menu (Disabled upcoming actions) */}
-        <ProduceActionMenu produceName={listing.cropName} />
+        {/* Action Menu */}
+        <ProduceActionMenu produceName={listing.cropName} listingId={listing.id} />
       </div>
     </article>
   );

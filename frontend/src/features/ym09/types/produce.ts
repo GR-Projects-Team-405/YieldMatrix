@@ -117,3 +117,96 @@ export interface ProduceApiResponse {
   /** Explicitly flags whether the returned data is development sample data */
   isSampleData?: boolean;
 }
+
+/**
+ * Harvest batch candidate for produce listing creation.
+ * Reflects schema.sql table harvest_batches with computed available sellable stock:
+ * availableStockKg = sellable_kg - (activeReservedKg + committedKg)
+ */
+export interface HarvestBatchOption {
+  /** Harvest batch UUID from harvest_batches.id */
+  id: string;
+  /** Human-readable batch identifier / code, e.g. "HB-2026-001 (Tomato)" */
+  batchNumber: string;
+  /** Farm UUID from harvest_batches.farm_id */
+  farmId: string;
+  /** Farm name from farms.name */
+  farmName: string;
+  /** Crop UUID from harvest_batches.crop_id */
+  cropId: string;
+  /** Crop name from crops.name */
+  cropName: string;
+  /** Presentation category mapped from crop name */
+  category: Exclude<ProduceCategory, 'All'>;
+  /** Grade UUID from harvest_batches.grade_id */
+  gradeId: string;
+  /** Grade name from grades.name, e.g. "Grade A" */
+  gradeName: string;
+  /** Batch lifecycle status from harvest_batches.status */
+  status: 'planned' | 'ready' | 'harvested' | 'depleted' | 'cancelled';
+  /** Total harvested weight in kg from harvest_batches.actual_kg */
+  actualKg: number;
+  /** Net sellable weight in kg after grading/spoilage from harvest_batches.sellable_kg */
+  sellableKg: number;
+  /** Weight held in active reservations from reservations.held_kg */
+  activeReservedKg: number;
+  /** Weight committed to accepted buyer contracts from allocations.committed_kg */
+  committedKg: number;
+  /** Available unencumbered weight: sellableKg - (activeReservedKg + committedKg) */
+  availableStockKg: number;
+  /** Flag indicating if the batch already has an active trade listing (one_active_listing_per_batch) */
+  hasActiveListing?: boolean;
+}
+
+/** The 5 agricultural placeholder visual categories */
+export type ProducePlaceholderKey = 'vegetables' | 'fruits' | 'grains' | 'fresh-produce' | 'spices';
+
+/** Information describing a placeholder image asset */
+export interface ProducePlaceholderItem {
+  key: ProducePlaceholderKey;
+  label: string;
+  category: Exclude<ProduceCategory, 'All'>;
+  imageUrl: string;
+}
+
+/**
+ * State of the Produce Listing form (shared between Add and Edit modes).
+ * Captures all user inputs across Sections 1 to 4 and the live preview.
+ */
+export interface AddProduceFormState {
+  listingId?: string;
+  farmId: string;
+  farmName: string;
+  cropId: string;
+  cropName: string;
+  category: Exclude<ProduceCategory, 'All'>;
+  batchId: string;
+  batchNumber: string;
+  gradeId: string;
+  gradeName: string;
+  totalQuantity: number | '';
+  unitPrice: number | ''; // In LKR per kg (e.g. 320)
+  availableFrom: string; // YYYY-MM-DD
+  availableUntil: string; // YYYY-MM-DD
+  productTags: string[];
+  selectedImageKey: ProducePlaceholderKey;
+  status?: ListingStatus;
+}
+
+/** Type alias for shared form state in create and edit modes */
+export type ProduceListingFormState = AddProduceFormState;
+
+/** Field-level validation error messages */
+export interface AddProduceValidationErrors {
+  farmId?: string;
+  cropId?: string;
+  batchId?: string;
+  gradeId?: string;
+  totalQuantity?: string;
+  unitPrice?: string;
+  availableFrom?: string;
+  availableUntil?: string;
+}
+
+/** Type alias for shared validation errors */
+export type ProduceListingValidationErrors = AddProduceValidationErrors;

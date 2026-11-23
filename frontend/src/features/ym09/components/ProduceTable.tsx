@@ -144,7 +144,7 @@ export function ProduceTable({ listings, loading = false, onResetFilters }: Prod
 
               {/* 9. Actions */}
               <td style={{ textAlign: 'right' }}>
-                <ProduceActionMenu produceName={listing.cropName} />
+                <ProduceActionMenu produceName={listing.cropName} listingId={listing.id} />
               </td>
             </TableRow>
           );

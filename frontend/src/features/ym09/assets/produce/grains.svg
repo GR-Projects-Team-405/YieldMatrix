@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320" width="100%" height="100%">
+  <defs>
+    <linearGradient id="grainBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D7CCC8"/>
+      <stop offset="50%" stop-color="#BCAAA4"/>
+      <stop offset="100%" stop-color="#8D6E63"/>
+    </linearGradient>
+    <linearGradient id="stalkGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8D6E63"/>
+      <stop offset="50%" stop-color="#D4AF37"/>
+      <stop offset="100%" stop-color="#FDD835"/>
+    </linearGradient>
+    <linearGradient id="goldGrain" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF9C4"/>
+      <stop offset="50%" stop-color="#FBC02D"/>
+      <stop offset="100%" stop-color="#F57F17"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="320" rx="16" fill="url(#grainBg)"/>
+
+  <!-- Warm Golden Glow -->
+  <circle cx="200" cy="160" r="130" fill="#FFF59D" opacity="0.25"/>
+
+  <!-- Left Stalk Arch -->
+  <path d="M 120 280 Q 150 180 180 100 Q 190 70 170 60" stroke="#8D6E63" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- Left Stalk Grains -->
+  <ellipse cx="185" cy="80" rx="12" ry="7" fill="url(#goldGrain)" transform="rotate(-30 185 80)"/>
+  <ellipse cx="170" cy="95" rx="12" ry="7" fill="url(#goldGrain)" transform="rotate(40 170 95)"/>
+  <ellipse cx="178" cy="115" rx="13" ry="7" fill="url(#goldGrain)" transform="rotate(-25 178 115)"/>
+  <ellipse cx="160" cy="130" rx="13" ry="7" fill="url(#goldGrain)" transform="rotate(35 160 130)"/>
+  <ellipse cx="168" cy="150" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(-20 168 150)"/>
+  <ellipse cx="150" cy="165" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(30 150 165)"/>
+  <ellipse cx="155" cy="185" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(-15 155 185)"/>
+  <ellipse cx="140" cy="200" rx="13" ry="8" fill="url(#goldGrain)" transform="rotate(25 140 200)"/>
+
+  <!-- Center Stalk -->
+  <path d="M 200 290 Q 200 170 200 80 Q 200 50 205 45" stroke="#795548" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+  <!-- Center Stalk Grains -->
+  <ellipse cx="203" cy="55" rx="13" ry="7" fill="url(#goldGrain)" transform="rotate(0 203 55)"/>
+  <ellipse cx="214" cy="75" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(35 214 75)"/>
+  <ellipse cx="188" cy="85" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(-35 188 85)"/>
+  <ellipse cx="215" cy="105" rx="15" ry="8.5" fill="url(#goldGrain)" transform="rotate(30 215 105)"/>
+  <ellipse cx="186" cy="115" rx="15" ry="8.5" fill="url(#goldGrain)" transform="rotate(-30 186 115)"/>
+  <ellipse cx="216" cy="138" rx="15" ry="8.5" fill="url(#goldGrain)" transform="rotate(25 216 138)"/>
+  <ellipse cx="185" cy="148" rx="15" ry="8.5" fill="url(#goldGrain)" transform="rotate(-25 185 148)"/>
+  <ellipse cx="214" cy="170" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(20 214 170)"/>
+  <ellipse cx="187" cy="180" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(-20 187 180)"/>
+
+  <!-- Right Stalk Arch -->
+  <path d="M 280 280 Q 250 180 220 100 Q 210 70 230 60" stroke="#8D6E63" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- Right Stalk Grains -->
+  <ellipse cx="215" cy="80" rx="12" ry="7" fill="url(#goldGrain)" transform="rotate(30 215 80)"/>
+  <ellipse cx="230" cy="95" rx="12" ry="7" fill="url(#goldGrain)" transform="rotate(-40 230 95)"/>
+  <ellipse cx="222" cy="115" rx="13" ry="7" fill="url(#goldGrain)" transform="rotate(25 222 115)"/>
+  <ellipse cx="240" cy="130" rx="13" ry="7" fill="url(#goldGrain)" transform="rotate(-35 240 130)"/>
+  <ellipse cx="232" cy="150" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(20 232 150)"/>
+  <ellipse cx="250" cy="165" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(-30 250 165)"/>
+  <ellipse cx="245" cy="185" rx="14" ry="8" fill="url(#goldGrain)" transform="rotate(15 245 185)"/>
+  <ellipse cx="260" cy="200" rx="13" ry="8" fill="url(#goldGrain)" transform="rotate(-25 260 200)"/>
+</svg>

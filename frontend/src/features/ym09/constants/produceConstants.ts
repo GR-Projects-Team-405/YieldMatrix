@@ -1,4 +1,18 @@
-import type { ProduceCategory, ProduceListingView, ProducePageSummary } from '../types/produce';
+import type {
+  HarvestBatchOption,
+  ProduceCategory,
+  ProduceListingView,
+  ProducePageSummary,
+  ProducePlaceholderItem,
+  ProducePlaceholderKey,
+} from '../types/produce';
+
+// Local verified agricultural SVG assets for each produce category
+import vegSvg from '../assets/produce/vegetables.svg';
+import fruitSvg from '../assets/produce/fruits.svg';
+import grainSvg from '../assets/produce/grains.svg';
+import freshSvg from '../assets/produce/fresh-produce.svg';
+import spiceSvg from '../assets/produce/spices.svg';
 
 /**
  * EXPLICIT DEVELOPMENT SAMPLE DATA FLAG
@@ -41,6 +55,288 @@ export const CATEGORY_DEFINITIONS: Array<{
 ];
 
 /**
+ * The 5 verified local placeholder images representing diverse agricultural produce.
+ * As requested, these provide deterministic, stable visual assets without external upload dependencies.
+ */
+export const PRODUCE_PLACEHOLDERS: Record<ProducePlaceholderKey, ProducePlaceholderItem> = {
+  vegetables: {
+    key: 'vegetables',
+    label: 'Vegetables (Tomato)',
+    category: 'Vegetables',
+    imageUrl: vegSvg,
+  },
+  fruits: {
+    key: 'fruits',
+    label: 'Tropical Fruits',
+    category: 'Fruits',
+    imageUrl: fruitSvg,
+  },
+  grains: {
+    key: 'grains',
+    label: 'Rice & Grains',
+    category: 'Grains',
+    imageUrl: grainSvg,
+  },
+  'fresh-produce': {
+    key: 'fresh-produce',
+    label: 'Fresh Produce',
+    category: 'Vegetables',
+    imageUrl: freshSvg,
+  },
+  spices: {
+    key: 'spices',
+    label: 'Spices & Herbs',
+    category: 'Spices',
+    imageUrl: spiceSvg,
+  },
+};
+
+/**
+ * Returns a stable local placeholder image URL for a given category.
+ */
+export function getPlaceholderImageForCategory(category: ProduceCategory | string): string {
+  switch (category) {
+    case 'Vegetables':
+      return vegSvg;
+    case 'Fruits':
+      return fruitSvg;
+    case 'Grains':
+      return grainSvg;
+    case 'Spices':
+      return spiceSvg;
+    case 'Others':
+      return freshSvg;
+    default:
+      return vegSvg;
+  }
+}
+
+/** Default marketplace tags populated on new listings */
+export const DEFAULT_PRODUCT_TAGS: string[] = ['Organic', 'Freshly harvested', 'Locally grown', 'Grade A'];
+
+/**
+ * Sample harvested batches from certified farmer holdings.
+ * Reflects schema.sql table `harvest_batches`:
+ * - Only batches with status === 'harvested' and actual_kg > 0 are eligible for listing.
+ * - availableStockKg is strictly computed: sellableKg - (activeReservedKg + committedKg).
+ * - Batches with existing active listings (hasActiveListing: true) are flagged to enforce one_active_listing_per_batch.
+ */
+export const SAMPLE_HARVEST_BATCHES: HarvestBatchOption[] = [
+  // Farm 1: GreenField Farm (Nuwara Eliya)
+  {
+    id: 'batch-001',
+    batchNumber: 'HB-2026-001 (Tomato)',
+    farmId: 'farm-001',
+    farmName: 'GreenField Farm',
+    cropId: 'crop-001',
+    cropName: 'Tomato',
+    category: 'Vegetables',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 150,
+    sellableKg: 120,
+    activeReservedKg: 10,
+    committedKg: 10,
+    availableStockKg: 100, // 120 - (10 + 10) = 100 kg
+  },
+  {
+    id: 'batch-002',
+    batchNumber: 'HB-2026-002 (Carrot)',
+    farmId: 'farm-001',
+    farmName: 'GreenField Farm',
+    cropId: 'crop-002',
+    cropName: 'Carrot',
+    category: 'Vegetables',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 90,
+    sellableKg: 80,
+    activeReservedKg: 10,
+    committedKg: 0,
+    availableStockKg: 70, // 80 - 10 = 70 kg
+  },
+  {
+    id: 'batch-003',
+    batchNumber: 'HB-2026-003 (Bell Pepper)',
+    farmId: 'farm-001',
+    farmName: 'GreenField Farm',
+    cropId: 'crop-006',
+    cropName: 'Bell Pepper',
+    category: 'Vegetables',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 65,
+    sellableKg: 55,
+    activeReservedKg: 5,
+    committedKg: 0,
+    availableStockKg: 50, // 55 - 5 = 50 kg
+  },
+  {
+    id: 'batch-004-unharvested',
+    batchNumber: 'HB-2026-004 (Cabbage - Ready)',
+    farmId: 'farm-001',
+    farmName: 'GreenField Farm',
+    cropId: 'crop-005',
+    cropName: 'Cabbage',
+    category: 'Vegetables',
+    gradeId: 'grade-002',
+    gradeName: 'Grade B',
+    status: 'ready', // Demonstrates status filter: not harvested yet
+    actualKg: 0,
+    sellableKg: 0,
+    activeReservedKg: 0,
+    committedKg: 0,
+    availableStockKg: 0,
+  },
+  {
+    id: 'batch-005-active',
+    batchNumber: 'HB-2026-005 (Tomato - Already Listed)',
+    farmId: 'farm-001',
+    farmName: 'GreenField Farm',
+    cropId: 'crop-001',
+    cropName: 'Tomato',
+    category: 'Vegetables',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 120,
+    sellableKg: 100,
+    activeReservedKg: 40,
+    committedKg: 0,
+    availableStockKg: 60,
+    hasActiveListing: true, // Demonstrates duplicate listing constraint
+  },
+
+  // Farm 2: Riverside Farm (Kandy)
+  {
+    id: 'batch-006',
+    batchNumber: 'HB-2026-006 (Banana Kolikuttu)',
+    farmId: 'farm-002',
+    farmName: 'Riverside Farm',
+    cropId: 'crop-003',
+    cropName: 'Banana (Kolikuttu)',
+    category: 'Fruits',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 110,
+    sellableKg: 100,
+    activeReservedKg: 15,
+    committedKg: 0,
+    availableStockKg: 85, // 100 - 15 = 85 kg
+  },
+  {
+    id: 'batch-007',
+    batchNumber: 'HB-2026-007 (Papaya Red Lady)',
+    farmId: 'farm-002',
+    farmName: 'Riverside Farm',
+    cropId: 'crop-009',
+    cropName: 'Papaya (Red Lady)',
+    category: 'Fruits',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 80,
+    sellableKg: 70,
+    activeReservedKg: 10,
+    committedKg: 0,
+    availableStockKg: 60, // 70 - 10 = 60 kg
+  },
+  {
+    id: 'batch-008',
+    batchNumber: 'HB-2026-008 (Black Pepper)',
+    farmId: 'farm-002',
+    farmName: 'Riverside Farm',
+    cropId: 'crop-014',
+    cropName: 'Black Pepper',
+    category: 'Spices',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 30,
+    sellableKg: 28,
+    activeReservedKg: 3,
+    committedKg: 0,
+    availableStockKg: 25, // 28 - 3 = 25 kg
+  },
+
+  // Farm 3: Hillview Farm (Anuradhapura)
+  {
+    id: 'batch-009',
+    batchNumber: 'HB-2026-009 (Paddy Samba)',
+    farmId: 'farm-003',
+    farmName: 'Hillview Farm',
+    cropId: 'crop-004',
+    cropName: 'Paddy (Samba)',
+    category: 'Grains',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 250,
+    sellableKg: 240,
+    activeReservedKg: 40,
+    committedKg: 0,
+    availableStockKg: 200, // 240 - 40 = 200 kg
+  },
+  {
+    id: 'batch-010',
+    batchNumber: 'HB-2026-010 (Finger Millet)',
+    farmId: 'farm-003',
+    farmName: 'Hillview Farm',
+    cropId: 'crop-013',
+    cropName: 'Finger Millet (Kurakkan)',
+    category: 'Grains',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 140,
+    sellableKg: 130,
+    activeReservedKg: 10,
+    committedKg: 0,
+    availableStockKg: 120, // 130 - 10 = 120 kg
+  },
+
+  // Farm 4: Green Valley Farm (Badulla)
+  {
+    id: 'batch-011',
+    batchNumber: 'HB-2026-011 (Green Beans)',
+    farmId: 'farm-004',
+    farmName: 'Green Valley Farm',
+    cropId: 'crop-007',
+    cropName: 'Green Beans',
+    category: 'Vegetables',
+    gradeId: 'grade-001',
+    gradeName: 'Grade A',
+    status: 'harvested',
+    actualKg: 60,
+    sellableKg: 55,
+    activeReservedKg: 10,
+    committedKg: 0,
+    availableStockKg: 45, // 55 - 10 = 45 kg
+  },
+  {
+    id: 'batch-012',
+    batchNumber: 'HB-2026-012 (Sweet Potato)',
+    farmId: 'farm-004',
+    farmName: 'Green Valley Farm',
+    cropId: 'crop-016',
+    cropName: 'Sweet Potato',
+    category: 'Others',
+    gradeId: 'grade-002',
+    gradeName: 'Grade B',
+    status: 'harvested',
+    actualKg: 100,
+    sellableKg: 95,
+    activeReservedKg: 5,
+    committedKg: 0,
+    availableStockKg: 90, // 95 - 5 = 90 kg
+  },
+];
+
+/**
  * 18 Sample produce listings reproducing the exact visual reference:
  * - 6 Vegetables
  * - 4 Fruits
@@ -72,7 +368,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 40,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80',
+    imageUrl: vegSvg,
     validFrom: '2026-11-15T00:00:00Z',
     validUntil: '2026-11-30T23:59:59Z',
     createdAt: '2026-11-15T08:30:00Z',
@@ -93,12 +389,12 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 20,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5c317?auto=format&fit=crop&w=600&q=80',
+    imageUrl: freshSvg,
     validFrom: '2026-11-14T00:00:00Z',
     validUntil: '2026-11-28T23:59:59Z',
     createdAt: '2026-11-14T09:15:00Z',
   },
-  // 3. Banana (Kolikuttu) (Screenshot item 3)
+  // 3. Banana (Kolikuttu) (Screenshot item 3 - Active with active commitments)
   {
     id: 'prod-003',
     batchId: 'batch-003',
@@ -108,18 +404,18 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     farmId: 'farm-002',
     farmName: 'Riverside Farm',
     district: 'Kandy',
-    unitPriceCents: 42000, // LKR 420 / kg (70 kg * 420 = LKR 29,400)
+    unitPriceCents: 42000, // LKR 420 / kg (80 kg * 420 = LKR 33,600)
     offeredKg: 100,
-    availableKg: 70,
-    reservedKg: 30,
-    committedKg: 0,
+    availableKg: 80,
+    reservedKg: 0,
+    committedKg: 20, // 20 kg in active commitments to test commitment lock
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=600&q=80',
+    imageUrl: fruitSvg,
     validFrom: '2026-11-16T00:00:00Z',
     validUntil: '2026-11-26T23:59:59Z',
     createdAt: '2026-11-16T07:45:00Z',
   },
-  // 4. Paddy (Samba) (Screenshot item 4 - Draft status)
+  // 4. Paddy (Samba) (Screenshot item 4 - Draft status with 0 holds)
   {
     id: 'prod-004',
     batchId: 'batch-004',
@@ -131,11 +427,11 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     district: 'Anuradhapura',
     unitPriceCents: 15500, // LKR 155 / kg
     offeredKg: 80,
-    availableKg: 60,
-    reservedKg: 20,
-    committedKg: 0,
+    availableKg: 80,
+    reservedKg: 0, // 0 kg reserved
+    committedKg: 0, // 0 kg committed (eligible for safe reassignment)
     status: 'draft',
-    imageUrl: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80',
+    imageUrl: grainSvg,
     validFrom: '2026-11-18T00:00:00Z',
     validUntil: '2026-12-18T23:59:59Z',
     createdAt: '2026-11-18T10:00:00Z',
@@ -156,7 +452,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 5,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?auto=format&fit=crop&w=600&q=80',
+    imageUrl: vegSvg,
     validFrom: '2026-11-12T00:00:00Z',
     validUntil: '2026-11-26T23:59:59Z',
     createdAt: '2026-11-12T11:20:00Z',
@@ -177,7 +473,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 4,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?auto=format&fit=crop&w=600&q=80',
+    imageUrl: freshSvg,
     validFrom: '2026-11-13T00:00:00Z',
     validUntil: '2026-11-27T23:59:59Z',
     createdAt: '2026-11-13T14:10:00Z',
@@ -198,7 +494,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 4,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1551462147-37885acc36f1?auto=format&fit=crop&w=600&q=80',
+    imageUrl: freshSvg,
     validFrom: '2026-11-15T00:00:00Z',
     validUntil: '2026-11-29T23:59:59Z',
     createdAt: '2026-11-15T16:00:00Z',
@@ -219,7 +515,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 3,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&q=80',
+    imageUrl: vegSvg,
     validFrom: '2026-11-16T00:00:00Z',
     validUntil: '2026-11-30T23:59:59Z',
     createdAt: '2026-11-16T08:00:00Z',
@@ -240,7 +536,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 5,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1517282009859-f000ec3b26fe?auto=format&fit=crop&w=600&q=80',
+    imageUrl: fruitSvg,
     validFrom: '2026-11-10T00:00:00Z',
     validUntil: '2026-11-24T23:59:59Z',
     createdAt: '2026-11-10T12:00:00Z',
@@ -261,7 +557,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 4,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?auto=format&fit=crop&w=600&q=80',
+    imageUrl: fruitSvg,
     validFrom: '2026-11-11T00:00:00Z',
     validUntil: '2026-11-25T23:59:59Z',
     createdAt: '2026-11-11T13:40:00Z',
@@ -282,7 +578,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 3,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&w=600&q=80',
+    imageUrl: fruitSvg,
     validFrom: '2026-11-12T00:00:00Z',
     validUntil: '2026-11-26T23:59:59Z',
     createdAt: '2026-11-12T15:20:00Z',
@@ -303,7 +599,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 5,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80',
+    imageUrl: grainSvg,
     validFrom: '2026-11-13T00:00:00Z',
     validUntil: '2026-12-13T23:59:59Z',
     createdAt: '2026-11-13T09:00:00Z',
@@ -324,7 +620,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 3,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80',
+    imageUrl: grainSvg,
     validFrom: '2026-11-14T00:00:00Z',
     validUntil: '2026-12-14T23:59:59Z',
     createdAt: '2026-11-14T11:00:00Z',
@@ -345,7 +641,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 4,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1599940824399-b87987ceb72a?auto=format&fit=crop&w=600&q=80',
+    imageUrl: spiceSvg,
     validFrom: '2026-11-15T00:00:00Z',
     validUntil: '2026-12-30T23:59:59Z',
     createdAt: '2026-11-15T14:30:00Z',
@@ -366,7 +662,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 4,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=600&q=80',
+    imageUrl: spiceSvg,
     validFrom: '2026-11-16T00:00:00Z',
     validUntil: '2026-12-31T23:59:59Z',
     createdAt: '2026-11-16T15:00:00Z',
@@ -387,7 +683,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 2,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80',
+    imageUrl: freshSvg,
     validFrom: '2026-11-14T00:00:00Z',
     validUntil: '2026-11-28T23:59:59Z',
     createdAt: '2026-11-14T17:00:00Z',
@@ -408,7 +704,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 2,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1596040033282-588bb3e85e1e?auto=format&fit=crop&w=600&q=80',
+    imageUrl: freshSvg,
     validFrom: '2026-11-15T00:00:00Z',
     validUntil: '2026-11-29T23:59:59Z',
     createdAt: '2026-11-15T18:00:00Z',
@@ -429,7 +725,7 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     reservedKg: 2,
     committedKg: 0,
     status: 'active',
-    imageUrl: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
+    imageUrl: freshSvg,
     validFrom: '2026-11-16T00:00:00Z',
     validUntil: '2026-11-30T23:59:59Z',
     createdAt: '2026-11-16T19:00:00Z',

@@ -1,21 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Eye, MoreHorizontal, PauseCircle, Pencil, Trash2 } from 'lucide-react';
 
 interface ProduceActionMenuProps {
   produceName: string;
+  listingId: string;
 }
 
 /**
  * Context action menu for produce cards and table rows.
  *
- * In accordance with Phase 2 instructions, all action workflows
- * (View Details, Edit, Pause, Archive) are explicitly non-functional
- * and marked as disabled with helper text indicating they belong to
- * subsequent development stages.
+ * Provides contextual actions for individual produce listings:
+ * - Edit listing: Active (navigates to /farmer/produce/:id/edit)
+ * - View details, Pause, Archive: Non-functional in current stage
  */
-export function ProduceActionMenu({ produceName }: ProduceActionMenuProps) {
+export function ProduceActionMenu({ produceName, listingId }: ProduceActionMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -110,8 +112,10 @@ export function ProduceActionMenu({ produceName }: ProduceActionMenuProps) {
           <button
             type="button"
             role="menuitem"
-            disabled
-            title="Edit Produce Listing is assigned for a future development stage"
+            onClick={() => {
+              setOpen(false);
+              navigate(`/farmer/produce/${listingId}/edit`);
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -119,17 +123,24 @@ export function ProduceActionMenu({ produceName }: ProduceActionMenuProps) {
               padding: '8px 10px',
               borderRadius: '8px',
               fontSize: '13px',
-              color: 'var(--muted)',
+              color: 'var(--text)',
               background: 'none',
               border: 'none',
               width: '100%',
               textAlign: 'left',
-              cursor: 'not-allowed',
-              opacity: 0.7,
+              cursor: 'pointer',
+              opacity: 1,
+              transition: 'background-color 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(0, 0, 0, 0.04))';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
             <Pencil size={14} aria-hidden="true" />
-            <span>Edit listing <small style={{ fontSize: '10px', color: 'var(--muted)' }}>(Stage YM09-03)</small></span>
+            <span>Edit listing</span>
           </button>
 
           <button
