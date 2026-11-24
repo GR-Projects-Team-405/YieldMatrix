@@ -11,6 +11,10 @@ import {
   TrendingUp,
   Truck,
 } from 'lucide-react';
+import {
+  registerFarmer,
+  getRegistrationError,
+} from '../services/registrationApi';
 
 type AuthMode = 'signup' | 'login';
 
@@ -84,6 +88,7 @@ export default function FarmerAuthPage() {
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const passwordValid =
     password.length >= 15 && password.length <= 128;
@@ -97,8 +102,13 @@ export default function FarmerAuthPage() {
     setMessage('');
   }
 
-  function handleSignup(event: FormEvent<HTMLFormElement>) {
+  async function handleSignup(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
+    if (isSubmitting) return;
+
+    setMessage('');
 
     if (!passwordValid) {
       setMessage('Password must contain 15–128 characters.');
@@ -115,11 +125,57 @@ export default function FarmerAuthPage() {
       return;
     }
 
-    // Backend integration will be added in a later commit.
-    // Do not store the password or fake account creation.
-    setMessage(
-      'Form validation passed. Registration is not yet connected to the backend.'
-    );
+    if (!pickupAddress.trim()) {
+      setMessage('Farm pickup address is required.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const result = await registerFarmer({
+        role: 'farmer',
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        district,
+        password,
+        farmName: farmName.trim(),
+        pickupAddress: pickupAddress.trim(),
+      });
+
+      // This branch will only run when the backend
+      // implements real registration successfully.
+      if (
+        result.registrationId &&
+        result.approvalStatus === 'pending'
+      ) {
+        setMessage(
+          'Registration submitted successfully. ' +
+          'Your account is pending approval.'
+        );
+        setPassword('');
+        setConfirmPassword('');
+      } else {
+        setMessage(
+          'The server returned an unexpected registration response.'
+        );
+      }
+    } catch (error) {
+      const registrationError = getRegistrationError(error);
+
+      const fieldMessages = registrationError.fields
+        ? Object.values(registrationError.fields).join(' ')
+        : '';
+
+      setMessage(
+        fieldMessages
+          ? `${registrationError.message} ${fieldMessages}`
+          : registrationError.message
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -386,9 +442,13 @@ export default function FarmerAuthPage() {
                   <button
                     type="submit"
                     className="ym03-farmer-submit"
+                    disabled={isSubmitting}
                   >
-                    Create Farmer Account
-                    <ArrowRight size={18} />
+                    {isSubmitting
+                      ? 'Submitting Registration...'
+                      : 'Create Farmer Account'}
+
+                    {!isSubmitting && <ArrowRight size={18} />}
                   </button>
 
                   <p className="ym03-farmer-switch">
