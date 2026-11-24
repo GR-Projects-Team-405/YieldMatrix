@@ -4,6 +4,7 @@ import {
   getStatus,
   getProduceListings,
   getProduceListingById,
+  getProduceListingDetails,
   updateProduceListing,
 } from './controller.js';
 
@@ -12,6 +13,7 @@ const router = Router();
 
 router.get('/status', verifyToken, authorizeRoles('farmer'), getStatus);
 router.get('/produce', verifyToken, authorizeRoles('farmer'), getProduceListings);
+router.get('/produce/:id/details', verifyToken, authorizeRoles('farmer'), getProduceListingDetails);
 router.get('/produce/:id', verifyToken, authorizeRoles('farmer'), getProduceListingById);
 router.put('/produce/:id', verifyToken, authorizeRoles('farmer'), updateProduceListing);
 
