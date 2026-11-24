@@ -23,6 +23,7 @@ export interface SupplierProfile {
   id: string;
   name: string;
   farmName: string;
+  estate?: string;
   location: string;
   rating: number;
   completedTrades: number;

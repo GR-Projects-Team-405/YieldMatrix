@@ -1,0 +1,681 @@
+/* YM14: Offers & Commitments Custom Styles */
+
+.ym14-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Discreet navigation banner for direct screen testing and evaluation */
+.ym14-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.ym14-nav-bar span.label {
+  font-weight: 600;
+  color: var(--muted);
+  margin-right: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ym14-nav-pill {
+  padding: 6px 14px;
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--canvas);
+  text-decoration: none;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.ym14-nav-pill:hover {
+  background: var(--soft);
+  color: var(--accent-text);
+}
+
+.ym14-nav-pill.active {
+  background: var(--green);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Responsive Button Normalization for YM14 */
+/* Prevents long button text from overflowing/floating out of fixed 48px heights on narrow screens */
+.ym14-container .ym-button,
+.ym14-modal .ym-button,
+.ym-confirm-dialog .ym-button {
+  height: auto !important;
+  min-height: 48px;
+  padding: 10px 18px !important;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal !important;
+  word-break: normal;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Page Top Header */
+.ym14-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.ym14-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.ym14-breadcrumb a {
+  color: var(--accent-text);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.ym14-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.ym14-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ym14-title-row h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+/* Expiry Timer Pill */
+.ym14-timer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff8eb;
+  border: 1px solid #f9d8a6;
+  color: #854500;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+[data-theme='dark'] .ym14-timer-pill {
+  background: #2b1d0c;
+  border-color: #5c3b12;
+  color: #f7a24c;
+}
+
+/* Linked Demand Summary Bar */
+.ym14-summary-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 24px;
+  margin-bottom: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 20px;
+}
+
+.ym14-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ym14-summary-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ym14-summary-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ym14-summary-value a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.ym14-summary-value a:hover {
+  text-decoration: underline;
+}
+
+/* Main 2-Column Grid Layout */
+.ym14-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+@media (min-width: 1024px) {
+  .ym14-grid-2col {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+.ym14-column-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ym14-column-side {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Section Header Inside Cards */
+.ym14-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 36px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ym14-card-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.ym14-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--soft);
+  border: 1px solid #c0d8bd;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ym14-verified-badge svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.ym14-header-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--canvas);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* 2x2 Specs Grid */
+.ym14-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.ym14-spec-box {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ym14-spec-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ym14-spec-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.ym14-spec-subtext {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ym14-spec-subtext.warning {
+  color: #b42318;
+}
+
+.ym14-spec-subtext.success {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+/* Tags / Pills */
+.ym14-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ym14-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.ym14-tag-pill.green {
+  background: var(--soft);
+  color: var(--accent-text);
+  border-color: #c0d8bd;
+}
+
+.ym14-tag-pill.orange {
+  background: #fff4ea;
+  color: #854500;
+  border-color: #f7d2b2;
+}
+
+[data-theme='dark'] .ym14-tag-pill.orange {
+  background: #3a2211;
+  color: #f7a24c;
+  border-color: #633b1e;
+}
+
+/* Quality Checklist */
+.ym14-prose {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+
+.ym14-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ym14-checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.ym14-checklist-icon {
+  color: var(--accent-text);
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Supplier Profile Summary */
+.ym14-supplier-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ym14-supplier-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ym14-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #315A42;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ym14-supplier-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ym14-supplier-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ym14-supplier-estate {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ym14-supplier-stats {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ym14-star {
+  color: #e7a06c;
+}
+
+.ym14-notice-box {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Escrow Card */
+.ym14-escrow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ym14-escrow-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-text);
+}
+
+.ym14-escrow-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Actions Box */
+.ym14-actions-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ym14-callout-note {
+  background: #fff8eb;
+  border: 1px solid #f9d8a6;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #854500;
+}
+
+[data-theme='dark'] .ym14-callout-note {
+  background: #2b1d0c;
+  border-color: #5c3b12;
+  color: #f7a24c;
+}
+
+.ym14-actions-card .ym-button {
+  width: 100%;
+}
+
+.ym14-decline-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: #b42318;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 44px;
+  height: auto;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  word-break: normal;
+}
+
+.ym14-decline-btn:hover {
+  background: #fcebea;
+}
+
+[data-theme='dark'] .ym14-decline-btn:hover {
+  background: #3b1715;
+}
+
+.ym14-footnote {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* Modal Dialog Styles */
+.ym14-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 32, 23, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+  backdrop-filter: blur(2px);
+}
+
+.ym14-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  animation: ym14ModalFade 0.2s ease;
+}
+
+@keyframes ym14ModalFade {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ym14-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ym14-modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.ym14-modal-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.ym14-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ym14-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--canvas);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Mobile Responsiveness Fine-Tuning */
+@media (max-width: 640px) {
+  .ym14-title-row h1 {
+    font-size: 20px;
+  }
+
+  .ym14-timer-pill {
+    width: 100%;
+    justify-content: center;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+
+  .ym14-summary-bar {
+    padding: 14px;
+    gap: 14px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ym14-summary-item {
+    gap: 4px;
+  }
+
+  .ym14-summary-label {
+    font-size: 10px;
+  }
+
+  .ym14-summary-value {
+    font-size: 13px;
+  }
+
+  .ym14-specs-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .ym14-spec-box {
+    padding: 12px;
+  }
+
+  .ym14-spec-value {
+    font-size: 20px;
+  }
+
+  .ym14-card-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ym14-supplier-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ym14-modal {
+    margin: 8px;
+  }
+
+  .ym14-modal-header,
+  .ym14-modal-body,
+  .ym14-modal-footer {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ym-dialog-actions,
+  .ym14-modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .ym-dialog-actions .ym-button,
+  .ym14-modal-footer .ym-button {
+    width: 100%;
+  }
+}
