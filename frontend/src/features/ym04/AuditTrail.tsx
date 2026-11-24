@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Sprout,
   FileText,
@@ -16,184 +16,14 @@ import {
   BarChart2,
   Zap,
   ArrowRight,
-  Eye,
   Info,
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
 import { Toast } from '../../components/Toast';
+import { AuditEventItem, GENERATED_AUDIT_EVENTS } from './auditMockData';
 
-export interface AuditEventItem {
-  id: string;
-  actor: string;
-  actorAvatar: string;
-  action: 'Created' | 'Updated' | 'Deactivated';
-  target: string;
-  targetType: 'Crop' | 'Grade' | 'System';
-  dateTime: string;
-  timestamp: number; // for accurate date filtering
-  status: 'Success' | 'Failed';
-  details?: {
-    category?: string;
-    description?: string;
-    changes?: string[];
-    ipAddress?: string;
-    clientSession?: string;
-  };
-}
-
-// 245 realistic audit records matching the Figma design metrics
-// Total Events: 245 | Today Events: 12 | Reference Changes: 68 | Admin Actions: 74
-const GENERATED_AUDIT_EVENTS: AuditEventItem[] = (() => {
-  const events: AuditEventItem[] = [
-    // Exact 5 rows from Figma screenshot
-    {
-      id: 'AU001',
-      actor: 'Admin',
-      actorAvatar: 'A',
-      action: 'Created',
-      target: 'Tomato',
-      targetType: 'Crop',
-      dateTime: '05 Nov 2026, 14:30',
-      timestamp: new Date('2026-11-05T14:30:00').getTime(),
-      status: 'Success',
-      details: {
-        category: 'Vegetable',
-        description: 'New produce profile registered for Solanum lycopersicum with cold-chain specifications.',
-        changes: ['Initial status set to Active', 'Standard cold storage assigned (10-12°C, 85-90% RH)'],
-        ipAddress: '192.168.1.42',
-        clientSession: 'Admin Portal (Chrome / Windows)'
-      }
-    },
-    {
-      id: 'AU002',
-      actor: 'Admin',
-      actorAvatar: 'A',
-      action: 'Updated',
-      target: 'Grade A',
-      targetType: 'Grade',
-      dateTime: '05 Nov 2026, 13:15',
-      timestamp: new Date('2026-11-05T13:15:00').getTime(),
-      status: 'Success',
-      details: {
-        category: 'Quality Grade',
-        description: 'Inspection criteria updated to require >= 95% compliance score for export certification.',
-        changes: ['Inspection threshold: 90% -> 95%', 'Zero defect tolerance parameter reinforced'],
-        ipAddress: '192.168.1.42',
-        clientSession: 'Admin Portal (Chrome / Windows)'
-      }
-    },
-    {
-      id: 'AU003',
-      actor: 'Admin',
-      actorAvatar: 'A',
-      action: 'Deactivated',
-      target: 'Carrot',
-      targetType: 'Crop',
-      dateTime: '04 Nov 2026, 17:20',
-      timestamp: new Date('2026-11-04T17:20:00').getTime(),
-      status: 'Success',
-      details: {
-        category: 'Vegetable',
-        description: 'Carrot crop listing paused pending seasonal variety reclassification and nursery testing.',
-        changes: ['Status: Active -> Inactive', 'Procurement bidding suspended temporarily'],
-        ipAddress: '192.168.1.42',
-        clientSession: 'Admin Portal (Chrome / Windows)'
-      }
-    },
-    {
-      id: 'AU004',
-      actor: 'Admin',
-      actorAvatar: 'A',
-      action: 'Created',
-      target: 'Grade B',
-      targetType: 'Grade',
-      dateTime: '04 Nov 2026, 16:45',
-      timestamp: new Date('2026-11-04T16:45:00').getTime(),
-      status: 'Success',
-      details: {
-        category: 'Quality Grade',
-        description: 'Standard wholesale tier configured with tolerance for minor superficial skin variations.',
-        changes: ['Inspection threshold: >= 80% compliance', 'Standard wholesale spec assigned'],
-        ipAddress: '192.168.1.42',
-        clientSession: 'Admin Portal (Chrome / Windows)'
-      }
-    },
-    {
-      id: 'AU005',
-      actor: 'Admin',
-      actorAvatar: 'A',
-      action: 'Updated',
-      target: 'Cabbage',
-      targetType: 'Crop',
-      dateTime: '03 Nov 2026, 11:10',
-      timestamp: new Date('2026-11-03T11:10:00').getTime(),
-      status: 'Success',
-      details: {
-        category: 'Vegetable',
-        description: 'Storage guidelines revised for highland cool chamber transport logistics.',
-        changes: ['Storage Condition: 0-2°C high humidity requirement verified'],
-        ipAddress: '192.168.1.42',
-        clientSession: 'Admin Portal (Chrome / Windows)'
-      }
-    }
-  ];
-
-  // Realistic seed pool for the remaining 240 audit events
-  const actions: ('Created' | 'Updated' | 'Deactivated')[] = ['Updated', 'Created', 'Updated', 'Deactivated'];
-  const targets: { name: string; type: 'Crop' | 'Grade' | 'System'; cat: string }[] = [
-    { name: 'Potato', type: 'Crop', cat: 'Vegetable' },
-    { name: 'Grade Premium', type: 'Grade', cat: 'Quality Grade' },
-    { name: 'Big Onion', type: 'Crop', cat: 'Vegetable' },
-    { name: 'Rice', type: 'Crop', cat: 'Cereal' },
-    { name: 'Grade Export', type: 'Grade', cat: 'Quality Grade' },
-    { name: 'Maize', type: 'Crop', cat: 'Cereal' },
-    { name: 'Green Chilli', type: 'Crop', cat: 'Vegetable' },
-    { name: 'Grade C', type: 'Grade', cat: 'Quality Grade' },
-    { name: 'Pumpkin', type: 'Crop', cat: 'Vegetable' },
-    { name: 'Grade Processing', type: 'Grade', cat: 'Quality Grade' },
-    { name: 'Bitter Gourd', type: 'Crop', cat: 'Vegetable' },
-    { name: 'Grade Substandard', type: 'Grade', cat: 'Quality Grade' },
-    { name: 'Banana', type: 'Crop', cat: 'Fruit' },
-    { name: 'Papaya', type: 'Crop', cat: 'Fruit' },
-    { name: 'System Parameters', type: 'System', cat: 'Configuration' }
-  ];
-
-  const actors = ['Admin', 'Admin', 'Admin', 'System', 'Agri Officer'];
-
-  // Fill up to exactly 245 total events
-  for (let i = 6; i <= 245; i++) {
-    const padId = `AU${String(i).padStart(3, '0')}`;
-    const targetChoice = targets[(i - 6) % targets.length];
-    const actionChoice = actions[(i - 6) % actions.length];
-    const actorChoice = actors[(i - 6) % actors.length];
-    const day = Math.max(1, 5 - Math.floor(i / 50));
-    const hour = 8 + (i % 10);
-    const minute = (i * 7) % 60;
-    const dateStr = `0${day} Nov 2026, ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-
-    events.push({
-      id: padId,
-      actor: actorChoice,
-      actorAvatar: actorChoice.charAt(0),
-      action: actionChoice,
-      target: targetChoice.name,
-      targetType: targetChoice.type,
-      dateTime: dateStr,
-      timestamp: new Date(`2026-11-0${day}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`).getTime(),
-      status: 'Success',
-      details: {
-        category: targetChoice.cat,
-        description: `${actionChoice} operation executed on ${targetChoice.name} reference metadata.`,
-        changes: [`Audit signature verified by ${actorChoice}`, `Version revision hash generated: 0x${(i * 12345).toString(16).slice(0, 6)}`],
-        ipAddress: actorChoice === 'System' ? '127.0.0.1 (Internal Service)' : '192.168.1.42',
-        clientSession: `${actorChoice} Session · YieldMatrix Core`
-      }
-    });
-  }
-
-  return events;
-})();
+export type { AuditEventItem };
 
 function getPaginationItems(current: number, total: number): (number | string)[] {
   if (total <= 5) {
@@ -210,6 +40,7 @@ function getPaginationItems(current: number, total: number): (number | string)[]
 
 export default function AuditTrail() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -222,7 +53,6 @@ export default function AuditTrail() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5; // 5 items per page to match the exact 1-5 of 245 in the Figma screenshot
-  const [selectedEvent, setSelectedEvent] = useState<AuditEventItem | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Filtered dataset
@@ -309,10 +139,13 @@ export default function AuditTrail() {
     }, 600);
   };
 
-  // Handle View Details
+  // Handle View Details - navigates cleanly to Page 5: Audit Event Details
   const handleViewDetails = (item: AuditEventItem) => {
-    setSelectedEvent(item);
-    setToastMessage(`Viewing details for audit event ${item.id}...`);
+    if (location.pathname.startsWith('/admin/audit-trail')) {
+      navigate(`/admin/audit-trail/${item.id}`);
+    } else {
+      navigate(`/admin/reference-data/audit-trail/${item.id}`);
+    }
   };
 
   return (
@@ -602,7 +435,14 @@ export default function AuditTrail() {
                 paginatedEvents.map((item) => (
                   <tr key={item.id}>
                     {/* Event ID */}
-                    <td className="ym04-cell-event-id">{item.id}</td>
+                    <td
+                      className="ym04-cell-event-id"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleViewDetails(item)}
+                      title={`View event ${item.id} details`}
+                    >
+                      {item.id}
+                    </td>
 
                     {/* Actor */}
                     <td>
@@ -790,143 +630,6 @@ export default function AuditTrail() {
           </button>
         </div>
       </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Modal / Preview: Event Details (Prepares Page 5 cleanly)            */}
-      {/* ------------------------------------------------------------------ */}
-      {selectedEvent && (
-        <div
-          className="ym04-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="audit-modal-title"
-        >
-          <div className="ym04-modal-dialog">
-            <div className="ym04-modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div
-                  className="ym04-audit-header-icon"
-                  style={{ width: 34, height: 34, borderRadius: 8, margin: 0 }}
-                  aria-hidden="true"
-                >
-                  <Eye size={18} />
-                </div>
-                <div>
-                  <h3 id="audit-modal-title" className="ym04-modal-title">
-                    Audit Event Details · {selectedEvent.id}
-                  </h3>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {selectedEvent.dateTime}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="ym04-modal-close"
-                onClick={() => setSelectedEvent(null)}
-                aria-label="Close dialog"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="ym04-detail-grid">
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Event ID</span>
-                <span className="ym04-detail-value">{selectedEvent.id}</span>
-              </div>
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Status</span>
-                <span className="ym04-detail-value" style={{ color: '#16a34a' }}>
-                  ● {selectedEvent.status}
-                </span>
-              </div>
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Actor</span>
-                <span className="ym04-detail-value">
-                  {selectedEvent.actor} (Session ID: {selectedEvent.actorAvatar})
-                </span>
-              </div>
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Action Taken</span>
-                <span className="ym04-detail-value">
-                  <span
-                    className={`ym04-badge-action ym04-badge-action--${selectedEvent.action.toLowerCase()}`}
-                  >
-                    {selectedEvent.action}
-                  </span>
-                </span>
-              </div>
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Target Entity</span>
-                <span className="ym04-detail-value">
-                  {selectedEvent.target} ({selectedEvent.targetType})
-                </span>
-              </div>
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Recorded Timestamp</span>
-                <span className="ym04-detail-value">{selectedEvent.dateTime}</span>
-              </div>
-            </div>
-
-            {selectedEvent.details && (
-              <div
-                style={{
-                  background: 'var(--canvas)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: 14,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                  fontSize: 13
-                }}
-              >
-                <div>
-                  <strong style={{ display: 'block', color: 'var(--text)', marginBottom: 2 }}>
-                    Activity Summary:
-                  </strong>
-                  <p style={{ margin: 0, color: 'var(--muted)', lineHeight: 1.4 }}>
-                    {selectedEvent.details.description}
-                  </p>
-                </div>
-
-                {selectedEvent.details.changes && (
-                  <div>
-                    <strong style={{ display: 'block', color: 'var(--text)', margin: '6px 0 4px 0' }}>
-                      Audit Log Diffs / Modifications:
-                    </strong>
-                    <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--muted)', lineHeight: 1.5 }}>
-                      {selectedEvent.details.changes.map((change, i) => (
-                        <li key={i}>{change}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--muted)' }}>
-                  <span>Origin: {selectedEvent.details.ipAddress}</span> · <span>{selectedEvent.details.clientSession}</span>
-                </div>
-              </div>
-            )}
-
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#166534', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Info size={16} flex-shrink="0" />
-              <span>Full dedicated Page 5 view (<code>AuditEventDetails.tsx</code>) will expand this audit entry into complete cryptographic hash verification and historical timeline graphs.</span>
-            </div>
-
-            <div className="ym04-modal-footer">
-              <button
-                type="button"
-                className="ym04-panel-btn-cancel"
-                onClick={() => setSelectedEvent(null)}
-              >
-                Close Preview
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Toast Notification */}
       {toastMessage && (

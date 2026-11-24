@@ -3,6 +3,7 @@ import ReferenceDataOverview from './ReferenceDataOverview';
 import CropManagement from './CropManagement';
 import GradeManagement from './GradeManagement';
 import AuditTrail from './AuditTrail';
+import AuditEventDetails from './AuditEventDetails';
 import './ym04.css';
 
 // YM04 · Chamasha Saminidi Stuwart · Reference data & audit
@@ -13,7 +14,7 @@ import './ym04.css';
 // 2. Crop management (Implemented - Page 2)
 // 3. Grade management (Implemented - Page 3)
 // 4. Audit trail (Implemented - Page 4 - Active at /admin/audit-trail & /admin/reference-data/audit-trail)
-// 5. Audit event details (Page 5 - Coming next)
+// 5. Audit event details (Implemented - Page 5 - Active at /admin/audit-trail/:eventId & /admin/reference-data/audit-trail/:eventId)
 
 export default function YM04() {
   const location = useLocation();
@@ -26,8 +27,9 @@ export default function YM04() {
         <Route index element={<AuditTrail />} />
         <Route path="audit-trail" element={<AuditTrail />} />
 
-        {/* Page 5: Audit Event Details (Placeholder route for Page 5, e.g. :eventId) */}
-        {/* <Route path=":eventId" element={<AuditEventDetails />} /> */}
+        {/* Page 5: Audit Event Details */}
+        <Route path=":eventId" element={<AuditEventDetails />} />
+        <Route path="audit-trail/:eventId" element={<AuditEventDetails />} />
 
         {/* Fallback to Audit Trail within the audit-trail workspace route */}
         <Route path="*" element={<AuditTrail />} />
@@ -52,13 +54,12 @@ export default function YM04() {
       <Route path="audit-trail" element={<AuditTrail />} />
       <Route path="audit" element={<AuditTrail />} />
 
-      {/* Page 5: Audit Event Details (Placeholder route for Page 5 under /admin/reference-data, e.g. :eventId) */}
-      {/* <Route path="audit-trail/:eventId" element={<AuditEventDetails />} /> */}
-      {/* <Route path="audit/:eventId" element={<AuditEventDetails />} /> */}
+      {/* Page 5: Audit Event Details (Nested route under /admin/reference-data) */}
+      <Route path="audit-trail/:eventId" element={<AuditEventDetails />} />
+      <Route path="audit/:eventId" element={<AuditEventDetails />} />
 
       {/* Catch-all fallback routes back to Reference Data Overview */}
       <Route path="*" element={<ReferenceDataOverview />} />
     </Routes>
   );
 }
-
