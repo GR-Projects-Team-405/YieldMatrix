@@ -13,6 +13,10 @@ import {
   Store,
   UserRound,
 } from 'lucide-react';
+import {
+  registerBuyer,
+  getRegistrationError,
+} from '../services/registrationApi';
 
 type AuthMode = 'signup' | 'login';
 type BuyerType = 'individual' | 'commercial';
@@ -86,46 +90,72 @@ export default function BuyerAuthPage() {
   const [rememberMe, setRememberMe] = useState(false);
 
   const [feedback, setFeedback] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function changeMode(nextMode: AuthMode) {
     setMode(nextMode);
     setFeedback('');
   }
 
-  function handleSignup(event: FormEvent<HTMLFormElement>) {
+  async function handleSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback('');
 
+    if (isSubmitting) return;
+
+    const normalizedPhone = mobile.replace(/[\s()-]/g, '');
+
     if (buyerType === 'commercial' && !businessName.trim()) {
-      setFeedback('Business / Shop Name is required.');
+      setFeedback('Please enter your business name.');
       return;
     }
 
     if (password.length < 15 || password.length > 128) {
-      setFeedback('Password must contain 15–128 characters.');
+      setFeedback('Password must contain between 15 and 128 characters.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setFeedback('Password and Confirm Password do not match.');
-      return;
-    }
-
-    const normalizedMobile = mobile.replace(/[\s()-]/g, '');
-
-    if (!/^(?:\+94|0)?7\d{8}$/.test(normalizedMobile)) {
-      setFeedback('Enter a valid Sri Lankan mobile number.');
+      setFeedback('Passwords do not match.');
       return;
     }
 
     if (!termsAccepted) {
-      setFeedback('Please accept the Terms of Service.');
+      setFeedback('Please accept the terms and conditions.');
       return;
     }
 
-    setFeedback(
-      'Form validation passed. Buyer registration API integration is pending.'
-    );
+    setIsSubmitting(true);
+
+    try {
+      const result = await registerBuyer({
+        role: 'buyer',
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        phone: normalizedPhone,
+        district,
+        password,
+        buyerType,
+        businessName:
+          buyerType === 'commercial' ? businessName.trim() : '',
+      });
+
+      if (result.approvalStatus === 'pending') {
+        setFeedback(
+          'Your Buyer registration has been submitted successfully and is pending approval.'
+        );
+      }
+    } catch (error) {
+      const registrationError = getRegistrationError(error);
+
+      const fieldMessage = registrationError.fields
+        ? Object.values(registrationError.fields)[0]
+        : undefined;
+
+      setFeedback(fieldMessage ?? registrationError.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -426,9 +456,10 @@ export default function BuyerAuthPage() {
                   <button
                     type="submit"
                     className="ym03-buyer-submit"
+                    disabled={isSubmitting}
                   >
-                    Create Buyer Account
-                    <ArrowRight size={18} />
+                    {isSubmitting ? 'Submitting...' : 'Create Buyer Account'}
+                    {!isSubmitting && <ArrowRight size={18} />}
                   </button>
 
                   <p className="ym03-buyer-switch">

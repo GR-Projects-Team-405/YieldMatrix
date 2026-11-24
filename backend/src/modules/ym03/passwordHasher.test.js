@@ -57,3 +57,50 @@ test('rejects malformed stored hashes', async () => {
     false
   );
 });
+
+test('uses the YM-02 compatible password format', async () => {
+  const hash = await hashPassword('ExamplePassword2026!');
+  const parts = hash.split('$');
+
+  assert.equal(parts.length, 6);
+  assert.equal(parts[0], 'scrypt');
+  assert.equal(parts[1], '32768');
+  assert.equal(parts[2], '8');
+  assert.equal(parts[3], '3');
+
+  assert.equal(
+    Buffer.from(parts[4], 'base64').length,
+    16
+  );
+
+  assert.equal(
+    Buffer.from(parts[5], 'base64').length,
+    64
+  );
+});
+
+test('normalizes passwords with NFKC', async () => {
+  const hash = await hashPassword(
+    'ExamplePassword2026!'
+  );
+
+  assert.equal(
+    await verifyPassword(
+      'ExamplePassword2026!',
+      hash
+    ),
+    true
+  );
+});
+
+test('verifies NFKC equivalent passwords', async () => {
+  const password = 'SecurePassword2026！';
+  const normalized = 'SecurePassword2026!';
+
+  const hash = await hashPassword(password);
+
+  assert.equal(
+    await verifyPassword(normalized, hash),
+    true
+  );
+});

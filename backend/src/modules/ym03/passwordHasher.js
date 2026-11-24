@@ -8,11 +8,20 @@ import { promisify } from 'node:util';
 
 const scrypt = promisify(scryptCallback);
 
-const N = 16384;
-const R = 8;
-const P = 1;
+// Compatible with the supplied YM-02 password format.
+const PARAMS = {
+  N: 2 ** 15,
+  r: 8,
+  p: 3,
+  maxmem: 128 * 1024 * 1024,
+};
+
 const KEY_LENGTH = 64;
 const SALT_LENGTH = 16;
+
+function normalize(password) {
+  return password.normalize('NFKC');
+}
 
 export async function hashPassword(password) {
   if (
@@ -26,19 +35,19 @@ export async function hashPassword(password) {
   const salt = randomBytes(SALT_LENGTH);
 
   const derivedKey = await scrypt(
-    password,
+    normalize(password),
     salt,
     KEY_LENGTH,
-    { N, r: R, p: P, maxmem: 64 * 1024 * 1024 }
+    PARAMS
   );
 
   return [
     'scrypt',
-    N,
-    R,
-    P,
-    salt.toString('hex'),
-    derivedKey.toString('hex'),
+    PARAMS.N,
+    PARAMS.r,
+    PARAMS.p,
+    salt.toString('base64'),
+    derivedKey.toString('base64'),
   ].join('$');
 }
 
@@ -52,31 +61,32 @@ export async function verifyPassword(password, storedHash) {
 
   const parts = storedHash.split('$');
 
-  if (parts.length !== 6) return false;
+  if (parts.length !== 6 || parts[0] !== 'scrypt') {
+    return false;
+  }
 
-  const [algorithm, cost, blockSize, parallelism, saltHex, hashHex] =
-    parts;
+  const [, n, r, p, saltBase64, hashBase64] = parts;
 
+  // Only accept the agreed YM-02 parameters.
   if (
-    algorithm !== 'scrypt' ||
-    cost !== String(N) ||
-    blockSize !== String(R) ||
-    parallelism !== String(P) ||
-    !/^[a-f0-9]{32}$/.test(saltHex) ||
-    !/^[a-f0-9]{128}$/.test(hashHex)
+    n !== String(PARAMS.N) ||
+    r !== String(PARAMS.r) ||
+    p !== String(PARAMS.p) ||
+    !/^[A-Za-z0-9+/]{22}==$/.test(saltBase64) ||
+    !/^[A-Za-z0-9+/]{86}==$/.test(hashBase64)
   ) {
     return false;
   }
 
-  const salt = Buffer.from(saltHex, 'hex');
-  const original = Buffer.from(hashHex, 'hex');
+  const salt = Buffer.from(saltBase64, 'base64');
+  const expected = Buffer.from(hashBase64, 'base64');
 
   const calculated = await scrypt(
-    password,
+    normalize(password),
     salt,
     KEY_LENGTH,
-    { N, r: R, p: P, maxmem: 64 * 1024 * 1024 }
+    PARAMS
   );
 
-  return timingSafeEqual(original, calculated);
+  return timingSafeEqual(expected, calculated);
 }

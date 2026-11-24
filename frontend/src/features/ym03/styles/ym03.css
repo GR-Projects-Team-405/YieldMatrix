@@ -1406,6 +1406,11 @@
   background: #19422c;
 }
 
+.ym03-buyer-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .ym03-buyer-switch {
   margin: 5px 0 0;
   color: #6b776f;
@@ -1949,6 +1954,11 @@
 
 .ym03-driver-submit:hover {
   background: #19422c;
+}
+
+.ym03-driver-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .ym03-driver-back {

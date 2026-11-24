@@ -72,14 +72,16 @@ export function getRegistrationError(
 
     if (
       status === 501 &&
-      data?.code === 'REGISTRATION_NOT_IMPLEMENTED'
+      (
+        data?.code === 'REGISTRATION_NOT_IMPLEMENTED' ||
+        data?.code === 'ROLE_REGISTRATION_NOT_IMPLEMENTED'
+      )
     ) {
       return {
         message:
-          'Your form is valid, but account registration is ' +
-          'not available yet. No account has been created.',
+          'Your form is valid, but account registration is not available yet. No account has been created.',
         status,
-        requestId: data.requestId,
+        requestId: data?.requestId,
       };
     }
 
@@ -103,4 +105,51 @@ export function getRegistrationError(
   return {
     message: 'An unexpected error occurred.',
   };
+}
+
+export interface BuyerRegistrationPayload {
+  role: 'buyer';
+  fullName: string;
+  email: string;
+  phone: string;
+  district: string;
+  password: string;
+  buyerType: 'individual' | 'commercial';
+  businessName: string;
+}
+
+export interface DriverRegistrationPayload {
+  role: 'driver';
+  fullName: string;
+  email: string;
+  phone: string;
+  district: string;
+  password: string;
+  operatingArea: string;
+  vehicleType: string;
+  registrationNumber: string;
+  licenceNumber: string;
+  capacityKg: number;
+}
+
+export async function registerBuyer(
+  payload: BuyerRegistrationPayload
+): Promise<RegistrationSuccess> {
+  const response = await api.post<RegistrationSuccess>(
+    '/ym03/register',
+    payload
+  );
+
+  return response.data;
+}
+
+export async function registerDriver(
+  payload: DriverRegistrationPayload
+): Promise<RegistrationSuccess> {
+  const response = await api.post<RegistrationSuccess>(
+    '/ym03/register',
+    payload
+  );
+
+  return response.data;
 }

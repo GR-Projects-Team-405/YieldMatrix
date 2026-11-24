@@ -18,9 +18,18 @@ import {
   UserRound,
   Weight,
 } from 'lucide-react';
+import {
+  registerDriver,
+  getRegistrationError,
+} from '../services/registrationApi';
 
 type AuthMode = 'register' | 'login';
 type RegistrationStep = 1 | 2;
+type DriverVehicleType =
+  | 'lgv'
+  | 'mini_lorry'
+  | 'refrigerated'
+  | 'heavy_flatbed';
 
 const operatingAreas = [
   'Kandy & Central Province',
@@ -99,7 +108,8 @@ export default function DriverAuthPage() {
   const [operatingArea, setOperatingArea] =
     useState(operatingAreas[0]);
 
-  const [vehicleType, setVehicleType] = useState('mini_lorry');
+  const [vehicleType, setVehicleType] =
+    useState<DriverVehicleType>('mini_lorry');
   const [capacityKg, setCapacityKg] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [licenceNumber, setLicenceNumber] = useState('');
@@ -110,6 +120,7 @@ export default function DriverAuthPage() {
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
@@ -137,9 +148,11 @@ export default function DriverAuthPage() {
     setStep(2);
   }
 
-  function handleRegister(event: FormEvent<HTMLFormElement>) {
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback('');
+
+    if (isSubmitting) return;
 
     const capacity = Number(capacityKg);
 
@@ -182,9 +195,40 @@ export default function DriverAuthPage() {
       return;
     }
 
-    setFeedback(
-      'Driver form validation passed. Registration API integration is pending.'
-    );
+    setIsSubmitting(true);
+
+    try {
+      const district = operatingArea.split(' & ')[0];
+      const result = await registerDriver({
+        role: 'driver',
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        phone: mobile.replace(/[\s()-]/g, ''),
+        district,
+        password,
+        operatingArea: operatingArea.trim(),
+        vehicleType,
+        registrationNumber: registrationNumber.trim(),
+        licenceNumber: licenceNumber.trim(),
+        capacityKg: capacity,
+      });
+
+      if (result.approvalStatus === 'pending') {
+        setFeedback(
+          'Your Driver registration has been submitted successfully and is pending approval.'
+        );
+      }
+    } catch (error) {
+      const registrationError = getRegistrationError(error);
+
+      const fieldMessage = registrationError.fields
+        ? Object.values(registrationError.fields)[0]
+        : undefined;
+
+      setFeedback(fieldMessage ?? registrationError.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -440,7 +484,7 @@ export default function DriverAuthPage() {
                         id="ym03-vehicle-type"
                         value={vehicleType}
                         onChange={(e) =>
-                          setVehicleType(e.target.value)
+                          setVehicleType(e.target.value as DriverVehicleType)
                         }
                         required
                       >
@@ -555,9 +599,10 @@ export default function DriverAuthPage() {
                     <button
                       type="submit"
                       className="ym03-driver-submit"
+                      disabled={isSubmitting}
                     >
-                      Create Driver Account
-                      <ShieldCheck size={18} />
+                      {isSubmitting ? 'Submitting...' : 'Create Driver Account'}
+                      {!isSubmitting && <ShieldCheck size={18} />}
                     </button>
 
                     <button
