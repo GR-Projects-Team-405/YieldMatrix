@@ -272,9 +272,9 @@ export default function ReferenceDataOverview() {
           className="ym04-stat-card cursor-pointer"
           role="button"
           tabIndex={0}
-          onClick={() => setToastMessage('Total registered crop types: 24')}
-          onKeyDown={(e) => e.key === 'Enter' && setToastMessage('Total registered crop types: 24')}
-          title="View all registered crops"
+          onClick={() => navigate('/admin/reference-data/crops')}
+          onKeyDown={(e) => e.key === 'Enter' && navigate('/admin/reference-data/crops')}
+          title="Manage registered crops in Crop Management"
         >
           <div className="ym04-stat-left">
             <div className="ym04-stat-icon-wrap ym04-stat-icon--sprout" aria-hidden="true">
@@ -296,9 +296,9 @@ export default function ReferenceDataOverview() {
           className="ym04-stat-card cursor-pointer"
           role="button"
           tabIndex={0}
-          onClick={() => setToastMessage('Currently available active crops: 20')}
-          onKeyDown={(e) => e.key === 'Enter' && setToastMessage('Currently available active crops: 20')}
-          title="View active crops"
+          onClick={() => navigate('/admin/reference-data/crops')}
+          onKeyDown={(e) => e.key === 'Enter' && navigate('/admin/reference-data/crops')}
+          title="View active crops in Crop Management"
         >
           <div className="ym04-stat-left">
             <div className="ym04-stat-icon-wrap ym04-stat-icon--active-crops" aria-hidden="true">
@@ -320,9 +320,9 @@ export default function ReferenceDataOverview() {
           className="ym04-stat-card cursor-pointer"
           role="button"
           tabIndex={0}
-          onClick={() => setToastMessage('All registered produce grades: 08')}
-          onKeyDown={(e) => e.key === 'Enter' && setToastMessage('All registered produce grades: 08')}
-          title="View all produce grades"
+          onClick={() => navigate('/admin/reference-data/grades')}
+          onKeyDown={(e) => e.key === 'Enter' && navigate('/admin/reference-data/grades')}
+          title="Manage produce grades in Grade Management"
         >
           <div className="ym04-stat-left">
             <div className="ym04-stat-icon-wrap ym04-stat-icon--grades" aria-hidden="true">
@@ -344,9 +344,9 @@ export default function ReferenceDataOverview() {
           className="ym04-stat-card cursor-pointer"
           role="button"
           tabIndex={0}
-          onClick={() => setToastMessage('Currently available produce grades: 06')}
-          onKeyDown={(e) => e.key === 'Enter' && setToastMessage('Currently available produce grades: 06')}
-          title="View active grades"
+          onClick={() => navigate('/admin/reference-data/grades')}
+          onKeyDown={(e) => e.key === 'Enter' && navigate('/admin/reference-data/grades')}
+          title="View active produce grades in Grade Management"
         >
           <div className="ym04-stat-left">
             <div className="ym04-stat-icon-wrap ym04-stat-icon--active-grades" aria-hidden="true">
@@ -453,6 +453,18 @@ export default function ReferenceDataOverview() {
                             >
                               <Eye size={14} />
                               <span>View Details</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="ym04-dropdown-item"
+                              role="menuitem"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                navigate('/admin/reference-data/crops');
+                              }}
+                            >
+                              <Sprout size={14} />
+                              <span>Manage Crops</span>
                             </button>
                             <button
                               type="button"
@@ -565,6 +577,18 @@ export default function ReferenceDataOverview() {
                               type="button"
                               className="ym04-dropdown-item"
                               role="menuitem"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                navigate('/admin/reference-data/grades');
+                              }}
+                            >
+                              <Award size={14} />
+                              <span>Manage Grades</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="ym04-dropdown-item"
+                              role="menuitem"
                               onClick={() => handleToggleGradeStatus(grade.id)}
                             >
                               <RefreshCw size={14} />
@@ -600,8 +624,7 @@ export default function ReferenceDataOverview() {
             type="button"
             className="ym04-qa-btn ym04-qa-btn--green"
             onClick={() => {
-              setToastMessage('Navigating to Crop Management (Page 2)...');
-              navigate('crops');
+              navigate('/admin/reference-data/crops');
             }}
           >
             <Sprout size={16} aria-hidden="true" />
@@ -614,8 +637,7 @@ export default function ReferenceDataOverview() {
             type="button"
             className="ym04-qa-btn ym04-qa-btn--orange"
             onClick={() => {
-              setToastMessage('Navigating to Grade Management (Page 3)...');
-              navigate('grades');
+              navigate('/admin/reference-data/grades');
             }}
           >
             <Award size={16} aria-hidden="true" />
