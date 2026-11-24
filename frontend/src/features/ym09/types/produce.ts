@@ -45,11 +45,11 @@ export interface ProduceListingView {
   unitPriceCents: number;
   /** Total offered weight in kg from listings.offered_kg */
   offeredKg: number;
-  /** Available unreserved sellable weight in kg (DR-01: sellable_kg - active holds - commitments) */
+  /** Available unreserved sellable weight in kg (DR-01: Math.max(0, offeredKg - reservedKg)) */
   availableKg: number;
-  /** Active reserved weight in kg from reservations.held_kg WHERE status = 'active' */
+  /** Total active encumbered weight in kg (held + supplier_accepted + uncollected committed/disputed) */
   reservedKg: number;
-  /** Committed weight in kg from allocations.committed_kg */
+  /** Subset of committed weight in kg from allocations WHERE status = 'committed' (already included in reservedKg while uncollected) */
   committedKg: number;
   /** Listing status from listings.status */
   status: ListingStatus;
@@ -188,7 +188,6 @@ export interface AddProduceFormState {
   unitPrice: number | ''; // In LKR per kg (e.g. 320)
   availableFrom: string; // YYYY-MM-DD
   availableUntil: string; // YYYY-MM-DD
-  productTags: string[];
   selectedImageKey: ProducePlaceholderKey;
   status?: ListingStatus;
 }
@@ -210,3 +209,87 @@ export interface AddProduceValidationErrors {
 
 /** Type alias for shared validation errors */
 export type ProduceListingValidationErrors = AddProduceValidationErrors;
+
+/** Available tabs on the Produce Listing Details page */
+export type ListingDetailsTabId = 'overview' | 'allocations' | 'price-history' | 'activity';
+
+/**
+ * Itemized buyer allocation record linked to a produce listing's harvest batch.
+ * Reflects schema.sql table allocations JOIN orders JOIN users.
+ */
+export interface ListingAllocationRecord {
+  id: string; // e.g. "AL-2026-014"
+  orderId: string; // e.g. "ORD-2026-009"
+  buyerName: string; // e.g. "FreshMart Shop"
+  buyerShopType?: string;
+  allocatedKg: number;
+  agreedUnitPriceCents: number;
+  agreedValueCents: number;
+  status: 'held' | 'supplier_accepted' | 'committed' | 'picked_up' | 'handed_over' | 'accepted' | 'partially_accepted' | 'disputed' | 'resolved' | 'declined' | 'expired' | 'cancelled';
+  displayStatus: 'Confirmed' | 'Pending' | 'Committed' | 'Completed' | 'Disputed' | 'Declined';
+  allocatedOn: string; // ISO UTC string
+}
+
+/**
+ * Confirmed purchase order linked to the produce listing.
+ * Reflects schema.sql table orders JOIN allocations JOIN users.
+ */
+export interface ListingOrderRecord {
+  id: string; // e.g. "ORD-2026-009"
+  buyerName: string; // e.g. "FreshMart Shop"
+  orderKg: number;
+  orderValueCents: number | null;
+  status: string;
+  displayStatus: 'Completed' | 'Processing' | 'Confirmed' | 'Delivered' | 'Cancelled';
+  orderDate: string; // ISO UTC string
+}
+
+/**
+ * Data point for the SVG price history trend chart.
+ */
+export interface PriceTrendPoint {
+  timestamp: string;
+  unitPriceCents: number;
+  dateLabel: string; // e.g. "05 Nov"
+}
+
+/**
+ * Change record for the Price Change History table.
+ * Corresponds to audit_logs safe_changes diffs for target_type = 'listing'.
+ */
+export interface PriceChangeRecord {
+  id: string;
+  timestamp: string; // ISO UTC string
+  unitPriceCents: number;
+  previousUnitPriceCents?: number;
+  deltaCents?: number;
+  reason?: string;
+}
+
+/**
+ * Chronological timeline event for the Activity tab.
+ * Sourced from persisted audit_logs, allocations, and orders records.
+ */
+export interface ActivityEventRecord {
+  id: string;
+  eventType: 'price_update' | 'allocation_confirmed' | 'allocation_created' | 'order_completed' | 'order_placed' | 'listing_updated' | 'listing_created' | 'status_change';
+  title: string;
+  description: string;
+  timestamp: string; // ISO UTC string
+  actorName?: string;
+}
+
+/**
+ * Comprehensive view model for the Produce Listing Details page.
+ * Combines listing summary, stock invariants, and tab-specific collections.
+ */
+export interface ProduceListingDetailView extends ProduceListingView {
+  batchNumber: string;
+  description?: string;
+  updatedAt?: string;
+  allocations: ListingAllocationRecord[];
+  orders: ListingOrderRecord[];
+  priceHistory: PriceChangeRecord[];
+  priceTrend: PriceTrendPoint[];
+  activityLog: ActivityEventRecord[];
+}

@@ -30,6 +30,9 @@ export const ENABLE_DEV_SAMPLE_DATA = true;
 /** Default number of items per page (matches screenshot: "Showing 1 - 8 of 18 products") */
 export const DEFAULT_PAGE_SIZE = 8;
 
+/** Default debounce delay (ms) for My Produce search input */
+export const SEARCH_DEBOUNCE_MS = 350;
+
 /** Status filter options for the SelectField dropdown */
 export const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'Status: All' },
@@ -110,9 +113,6 @@ export function getPlaceholderImageForCategory(category: ProduceCategory | strin
       return vegSvg;
   }
 }
-
-/** Default marketplace tags populated on new listings */
-export const DEFAULT_PRODUCT_TAGS: string[] = ['Organic', 'Freshly harvested', 'Locally grown', 'Grade A'];
 
 /**
  * Sample harvested batches from certified farmer holdings.
@@ -407,8 +407,8 @@ export const DEV_SAMPLE_PRODUCE: ProduceListingView[] = [
     unitPriceCents: 42000, // LKR 420 / kg (80 kg * 420 = LKR 33,600)
     offeredKg: 100,
     availableKg: 80,
-    reservedKg: 0,
-    committedKg: 20, // 20 kg in active commitments to test commitment lock
+    reservedKg: 20, // Matches live backend DR-01 contract: reservedKg includes uncollected commitments
+    committedKg: 20, // Subset: 20 kg in active commitments to test commitment lock
     status: 'active',
     imageUrl: fruitSvg,
     validFrom: '2026-11-16T00:00:00Z',

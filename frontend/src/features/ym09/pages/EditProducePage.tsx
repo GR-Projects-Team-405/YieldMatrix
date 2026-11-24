@@ -1,29 +1,21 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
 import { ProduceListingForm } from '../components/add-produce/ProduceListingForm';
 import { getProduceListingById } from '../services/produceApi';
+import { mapListingToFormState } from '../utils/produceFormDefaults';
 import {
-  DEFAULT_PRODUCT_TAGS,
   DEV_SAMPLE_PRODUCE,
   ENABLE_DEV_SAMPLE_DATA,
   SAMPLE_HARVEST_BATCHES,
 } from '../constants/produceConstants';
-import {
-  getTodayDateInputString,
-  getFutureDateInputString,
-} from '../utils/produceFormatters';
-import type {
-  ProduceListingFormState,
-  ProduceListingView,
-  ProducePlaceholderKey,
-} from '../types/produce';
+import type { ProduceListingView } from '../types/produce';
 
 /**
  * Edit Produce Listing Page (/farmer/produce/:id/edit)
- * Loads an existing produce listing, locks harvest source fields,
- * and allows updating permitted parameters (Quantity, Pricing, Dates, Tags, Image).
+ * Loads an existing produce listing, locks harvest source fields when active holds exist,
+ * and allows updating permitted parameters (Quantity, Pricing, Dates, Image).
  */
 export function EditProducePage() {
   const { id } = useParams<{ id: string }>();
@@ -49,30 +41,50 @@ export function EditProducePage() {
   });
 
   const [loading, setLoading] = useState<boolean>(() => !listing && !error);
+  const loadedIdRef = useRef<string | null>(
+    ENABLE_DEV_SAMPLE_DATA && id ? id : null
+  );
 
   useEffect(() => {
     let active = true;
 
-    async function loadListing() {
-      if (listing || error) {
-        setLoading(false);
-        return;
-      }
+    if (!id) {
+      loadedIdRef.current = null;
+      setListing(null);
+      setError('No produce listing ID provided');
+      setLoading(false);
+      return;
+    }
+
+    if (loadedIdRef.current === id) {
+      setLoading(false);
+      return;
+    }
+
+    if (ENABLE_DEV_SAMPLE_DATA) {
+      const found = DEV_SAMPLE_PRODUCE.find((item) => item.id === id);
+      loadedIdRef.current = id;
+      setListing(found ? { ...found } : null);
+      setError(found ? null : `Produce listing with ID "${id}" was not found.`);
+      setLoading(false);
+      return;
+    }
+
+    async function loadListing(listingId: string) {
       setLoading(true);
       setError(null);
       try {
-        if (!id) {
-          throw new Error('No produce listing ID provided');
-        }
-        const found = await getProduceListingById(id);
+        const found = await getProduceListingById(listingId);
         if (!found) {
-          throw new Error(`Produce listing with ID "${id}" was not found.`);
+          throw new Error(`Produce listing with ID "${listingId}" was not found.`);
         }
         if (active) {
+          loadedIdRef.current = listingId;
           setListing(found);
         }
       } catch (err: unknown) {
         if (active) {
+          loadedIdRef.current = null;
           const message = err instanceof Error ? err.message : 'Failed to load listing';
           setError(message);
         }
@@ -83,53 +95,23 @@ export function EditProducePage() {
       }
     }
 
-    loadListing();
+    loadListing(id);
     return () => {
       active = false;
     };
-  }, [id, listing]);
+  }, [id]);
 
-  // Map loaded listing to ProduceListingFormState
-  const initialFormData = useMemo<ProduceListingFormState | undefined>(() => {
-    if (!listing) return undefined;
-
-    // Find batch details from SAMPLE_HARVEST_BATCHES
-    const batch = SAMPLE_HARVEST_BATCHES.find((b) => b.id === listing.batchId);
-
-    // Determine placeholder image key based on category
-    let imageKey: ProducePlaceholderKey = 'vegetables';
-    if (listing.category === 'Fruits') imageKey = 'fruits';
-    else if (listing.category === 'Grains') imageKey = 'grains';
-    else if (listing.category === 'Spices') imageKey = 'spices';
-    else if (listing.category === 'Others') imageKey = 'fresh-produce';
-
-    const fromDate = listing.validFrom ? listing.validFrom.split('T')[0] : getTodayDateInputString();
-    const untilDate = listing.validUntil ? listing.validUntil.split('T')[0] : getFutureDateInputString(15);
-
-    return {
-      listingId: listing.id,
-      farmId: listing.farmId,
-      farmName: listing.farmName,
-      cropId: batch ? batch.cropId : 'crop-001',
-      cropName: listing.cropName,
-      category: listing.category,
-      batchId: listing.batchId,
-      batchNumber: batch ? batch.batchNumber : `HB-${listing.id} (${listing.cropName})`,
-      gradeId: batch ? batch.gradeId : 'grade-001',
-      gradeName: listing.gradeName,
-      totalQuantity: listing.offeredKg,
-      unitPrice: Math.round(listing.unitPriceCents / 100),
-      availableFrom: fromDate,
-      availableUntil: untilDate,
-      productTags: [...DEFAULT_PRODUCT_TAGS],
-      selectedImageKey: imageKey,
-      status: listing.status,
-    };
-  }, [listing]);
+  const initialFormData = listing
+    ? mapListingToFormState(listing, SAMPLE_HARVEST_BATCHES)
+    : undefined;
 
   if (loading) {
     return (
-      <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--muted)' }}>
+      <div
+        role="status"
+        aria-live="polite"
+        style={{ padding: '48px 0', textAlign: 'center', color: 'var(--muted)' }}
+      >
         <p style={{ fontSize: '15px' }}>Loading produce listing details…</p>
       </div>
     );

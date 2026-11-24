@@ -1,9 +1,14 @@
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { Table, TableRow } from '../../../components/Table';
 import type { ProduceListingView } from '../types/produce';
-import { formatKg, formatLkrPrice } from '../utils/produceFormatters';
+import {
+  formatDisplayDateColombo,
+  formatKg,
+  formatLkrPrice,
+} from '../utils/produceFormatters';
 import { ProduceActionMenu } from './ProduceActionMenu';
 
 interface ProduceTableProps {
@@ -14,12 +19,26 @@ interface ProduceTableProps {
 
 /**
  * Alternate semantic table view for produce listings.
- * Reuses the shared Table and TableRow components.
+ * Keeps standard table row semantics (no role="button" on <tr>) while providing
+ * keyboard-accessible Link and ProduceActionMenu controls plus row pointer click navigation.
  */
 export function ProduceTable({ listings, loading = false, onResetFilters }: ProduceTableProps) {
+  const navigate = useNavigate();
+
+  const handleRowClick = (e: React.MouseEvent, listingId: string) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea, [role="menu"], [role="menuitem"]')) {
+      return;
+    }
+    if (typeof window !== 'undefined' && window.getSelection()?.toString()) {
+      return;
+    }
+    navigate(`/farmer/produce/${listingId}`);
+  };
+
   if (loading) {
     return (
-      <div style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)' }} role="status">
+      <div className="ym09-table-loading" role="status">
         Loading produce table...
       </div>
     );
@@ -52,103 +71,87 @@ export function ProduceTable({ listings, loading = false, onResetFilters }: Prod
   ];
 
   return (
-    <div style={{ background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+    <div className="ym09-table-card">
       <Table headers={headers}>
-        {listings.map((listing) => {
-          const formattedDate = new Date(listing.validUntil).toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          });
-
-          return (
-            <TableRow key={listing.id}>
-              {/* 1. Produce (Thumbnail + Name + Grade) */}
-              <td>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {listing.imageUrl ? (
-                    <img
-                      src={listing.imageUrl}
-                      alt=""
-                      style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '8px',
-                        objectFit: 'cover',
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '8px',
-                        background: 'var(--soft)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--accent-text)',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {listing.cropName.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div>
-                    <strong style={{ display: 'block', color: 'var(--text)', fontSize: '14px' }}>
-                      {listing.cropName}
-                    </strong>
-                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                      {listing.gradeName}
-                    </span>
+        {listings.map((listing) => (
+          <TableRow
+            key={listing.id}
+            className="ym09-table-row-interactive"
+            onClick={(e) => handleRowClick(e, listing.id)}
+          >
+            {/* 1. Produce (Thumbnail + Name Link + Grade) */}
+            <td>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {listing.imageUrl ? (
+                  <img
+                    src={listing.imageUrl}
+                    alt=""
+                    className="ym09-table-thumb"
+                  />
+                ) : (
+                  <div className="ym09-table-thumb-fallback" aria-hidden="true">
+                    {listing.cropName.slice(0, 2).toUpperCase()}
                   </div>
+                )}
+                <div>
+                  <strong style={{ display: 'block', fontSize: '14px' }}>
+                    <Link
+                      to={`/farmer/produce/${listing.id}`}
+                      className="ym09-produce-link"
+                      aria-label={`View details for ${listing.cropName}`}
+                    >
+                      {listing.cropName}
+                    </Link>
+                  </strong>
+                  <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                    {listing.gradeName}
+                  </span>
                 </div>
-              </td>
+              </div>
+            </td>
 
-              {/* 2. Category */}
-              <td style={{ color: 'var(--text)', fontSize: '13px' }}>{listing.category}</td>
+            {/* 2. Category */}
+            <td style={{ color: 'var(--text)', fontSize: '13px' }}>{listing.category}</td>
 
-              {/* 3. Farm & District */}
-              <td>
-                <span style={{ display: 'block', color: 'var(--text)', fontSize: '13px', fontWeight: 500 }}>
-                  {listing.farmName}
-                </span>
-                <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{listing.district}</span>
-              </td>
+            {/* 3. Farm & District */}
+            <td>
+              <span style={{ display: 'block', color: 'var(--text)', fontSize: '13px', fontWeight: 500 }}>
+                {listing.farmName}
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{listing.district}</span>
+            </td>
 
-              {/* 4. Status */}
-              <td>
-                <StatusBadge status={listing.status} />
-              </td>
+            {/* 4. Status */}
+            <td>
+              <StatusBadge status={listing.status} />
+            </td>
 
-              {/* 5. Price */}
-              <td style={{ fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>
-                {formatLkrPrice(listing.unitPriceCents)}
-              </td>
+            {/* 5. Price */}
+            <td style={{ fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>
+              {formatLkrPrice(listing.unitPriceCents)}
+            </td>
 
-              {/* 6. Available */}
-              <td style={{ color: 'var(--text)', whiteSpace: 'nowrap' }}>
-                <strong>{formatKg(listing.availableKg)}</strong>
-              </td>
+            {/* 6. Available */}
+            <td style={{ color: 'var(--text)', whiteSpace: 'nowrap' }}>
+              <strong>{formatKg(listing.availableKg)}</strong>
+            </td>
 
-              {/* 7. Reserved */}
-              <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                {formatKg(listing.reservedKg)}
-              </td>
+            {/* 7. Reserved */}
+            <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+              {formatKg(listing.reservedKg)}
+            </td>
 
-              {/* 8. Valid Until */}
-              <td style={{ fontSize: '12px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                {formattedDate}
-              </td>
+            {/* 8. Valid Until */}
+            <td style={{ fontSize: '12px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+              {formatDisplayDateColombo(listing.validUntil)}
+            </td>
 
-              {/* 9. Actions */}
-              <td style={{ textAlign: 'right' }}>
-                <ProduceActionMenu produceName={listing.cropName} listingId={listing.id} />
-              </td>
-            </TableRow>
-          );
-        })}
+            {/* 9. Actions (stops row click propagation) */}
+            <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+              <ProduceActionMenu produceName={listing.cropName} listingId={listing.id} />
+            </td>
+          </TableRow>
+        ))}
       </Table>
     </div>
   );

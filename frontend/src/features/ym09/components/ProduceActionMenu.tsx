@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, MoreHorizontal, PauseCircle, Pencil, Trash2 } from 'lucide-react';
 
@@ -8,57 +8,113 @@ interface ProduceActionMenuProps {
 }
 
 /**
- * Context action menu for produce cards and table rows.
- *
- * Provides contextual actions for individual produce listings:
- * - Edit listing: Active (navigates to /farmer/produce/:id/edit)
- * - View details, Pause, Archive: Non-functional in current stage
+ * Accessible context action menu for produce cards and table rows.
+ * Supports keyboard navigation (ArrowDown, ArrowUp, Home, End, Escape) and focus return.
  */
 export function ProduceActionMenu({ produceName, listingId }: ProduceActionMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuPopoverRef = useRef<HTMLDivElement>(null);
+  const focusFirstOnOpenRef = useRef(false);
+  const menuId = useId();
   const navigate = useNavigate();
 
+  const getEnabledMenuItems = (): HTMLButtonElement[] => {
+    if (!menuPopoverRef.current) return [];
+    return Array.from(
+      menuPopoverRef.current.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitem"]:not([disabled])'
+      )
+    );
+  };
+
   useEffect(() => {
+    if (!open) return;
+
+    if (focusFirstOnOpenRef.current) {
+      focusFirstOnOpenRef.current = false;
+      const items = getEnabledMenuItems();
+      items[0]?.focus();
+    }
+
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
+
+    function handleDocumentKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+      } else if (event.key === 'Tab') {
+        setOpen(false);
+      }
     }
 
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleKeyDown);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleDocumentKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleDocumentKeyDown);
     };
   }, [open]);
 
+  const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      if (!open) {
+        e.preventDefault();
+        focusFirstOnOpenRef.current = true;
+        setOpen(true);
+      }
+    }
+  };
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = getEnabledMenuItems();
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % items.length : 0;
+      items[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex =
+        currentIndex >= 0 ? (currentIndex - 1 + items.length) % items.length : items.length - 1;
+      items[prevIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  };
+
   return (
-    <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
+    <div
+      ref={menuRef}
+      className="ym09-action-menu"
+      onClick={(e) => e.stopPropagation()}
+    >
       <button
+        ref={triggerRef}
         type="button"
+        className="ym09-action-menu-trigger"
         aria-label={`Actions for ${produceName}`}
         aria-expanded={open}
-        aria-haspopup="true"
-        onClick={() => setOpen((prev) => !prev)}
-        style={{
-          width: '32px',
-          height: '32px',
-          borderRadius: '8px',
-          border: '1px solid var(--border)',
-          background: 'var(--surface)',
-          color: 'var(--muted)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          padding: 0,
+        aria-haspopup="menu"
+        aria-controls={open ? menuId : undefined}
+        onKeyDown={handleTriggerKeyDown}
+        onClick={(e) => {
+          e.stopPropagation();
+          focusFirstOnOpenRef.current = false;
+          setOpen((prev) => !prev);
         }}
       >
         <MoreHorizontal size={16} aria-hidden="true" />
@@ -66,77 +122,33 @@ export function ProduceActionMenu({ produceName, listingId }: ProduceActionMenuP
 
       {open && (
         <div
+          id={menuId}
+          ref={menuPopoverRef}
           role="menu"
-          aria-label="Produce listing actions"
-          style={{
-            position: 'absolute',
-            right: 0,
-            bottom: '100%',
-            marginBottom: '6px',
-            width: '240px',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: '12px',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-            padding: '6px',
-            zIndex: 40,
-            display: 'grid',
-            gap: '2px',
-          }}
+          aria-label={`Actions for ${produceName}`}
+          className="ym09-action-menu-popover"
+          onKeyDown={handleMenuKeyDown}
         >
           <button
             type="button"
             role="menuitem"
-            disabled
-            title="Produce Listing Details is assigned for a future development stage"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 10px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              color: 'var(--muted)',
-              background: 'none',
-              border: 'none',
-              width: '100%',
-              textAlign: 'left',
-              cursor: 'not-allowed',
-              opacity: 0.7,
+            className="ym09-action-menu-item"
+            onClick={() => {
+              setOpen(false);
+              navigate(`/farmer/produce/${listingId}`);
             }}
           >
             <Eye size={14} aria-hidden="true" />
-            <span>View details <small style={{ fontSize: '10px', color: 'var(--muted)' }}>(Stage YM09-04)</small></span>
+            <span>View details</span>
           </button>
 
           <button
             type="button"
             role="menuitem"
+            className="ym09-action-menu-item"
             onClick={() => {
               setOpen(false);
               navigate(`/farmer/produce/${listingId}/edit`);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 10px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              color: 'var(--text)',
-              background: 'none',
-              border: 'none',
-              width: '100%',
-              textAlign: 'left',
-              cursor: 'pointer',
-              opacity: 1,
-              transition: 'background-color 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(0, 0, 0, 0.04))';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
             <Pencil size={14} aria-hidden="true" />
@@ -147,50 +159,28 @@ export function ProduceActionMenu({ produceName, listingId }: ProduceActionMenuP
             type="button"
             role="menuitem"
             disabled
+            aria-disabled="true"
             title="Pause Listing action requires backend workflow implementation"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 10px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              color: 'var(--muted)',
-              background: 'none',
-              border: 'none',
-              width: '100%',
-              textAlign: 'left',
-              cursor: 'not-allowed',
-              opacity: 0.7,
-            }}
+            className="ym09-action-menu-item"
           >
             <PauseCircle size={14} aria-hidden="true" />
-            <span>Pause listing <small style={{ fontSize: '10px', color: 'var(--muted)' }}>(Pending backend)</small></span>
+            <span>
+              Pause listing <small style={{ fontSize: '10px', color: 'var(--muted)' }}>(Pending backend)</small>
+            </span>
           </button>
 
           <button
             type="button"
             role="menuitem"
             disabled
+            aria-disabled="true"
             title="Archive action requires backend workflow implementation"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 10px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              color: 'var(--muted)',
-              background: 'none',
-              border: 'none',
-              width: '100%',
-              textAlign: 'left',
-              cursor: 'not-allowed',
-              opacity: 0.7,
-            }}
+            className="ym09-action-menu-item"
           >
             <Trash2 size={14} aria-hidden="true" />
-            <span>Archive <small style={{ fontSize: '10px', color: 'var(--muted)' }}>(Pending backend)</small></span>
+            <span>
+              Archive <small style={{ fontSize: '10px', color: 'var(--muted)' }}>(Pending backend)</small>
+            </span>
           </button>
         </div>
       )}

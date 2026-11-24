@@ -39,10 +39,10 @@ const CATEGORY_ICON_MAP: Record<string, ReactNode> = {
 
 /**
  * Filter controls for the My Produce page:
- * 1. Category pill buttons with live item counts
- * 2. Search input field with search icon
+ * 1. Category toggle button group with live item counts
+ * 2. Debounced search input field
  * 3. Status filter select dropdown
- * 4. Farm filter select dropdown (dynamically populated from listing data)
+ * 4. Farm filter select dropdown
  * 5. Grid vs. Table view toggle
  */
 export function ProduceFilters({
@@ -60,26 +60,18 @@ export function ProduceFilters({
   viewMode,
   onViewModeChange,
 }: ProduceFiltersProps) {
-  // Generate farm options with "Farm: All" as default
   const farmSelectOptions = [
     { value: 'all', label: 'Farm: All' },
     ...farmOptions.map((f) => ({ value: f.id, label: f.name })),
   ];
 
   return (
-    <div className="ym09-produce-filters" style={{ display: 'grid', gap: '16px' }}>
-      {/* 1. Category Pills Bar */}
+    <div className="ym09-produce-filters">
+      {/* 1. Category Filter Toggle Group */}
       <div
-        role="tablist"
+        role="group"
         aria-label="Filter produce by category"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          overflowX: 'auto',
-          paddingBottom: '4px',
-          WebkitOverflowScrolling: 'touch',
-        }}
+        className="ym09-filter-pills-row"
       >
         {CATEGORY_DEFINITIONS.map(({ key, label, iconName }) => {
           const isSelected = selectedCategory === key;
@@ -90,72 +82,26 @@ export function ProduceFilters({
             <button
               key={key}
               type="button"
-              role="tab"
-              aria-selected={isSelected}
+              aria-pressed={isSelected}
               onClick={() => onCategoryChange(key)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                height: '40px',
-                padding: '0 16px',
-                borderRadius: '9999px',
-                fontSize: '13px',
-                fontWeight: isSelected ? 600 : 500,
-                border: isSelected ? '1px solid #315A42' : '1px solid var(--border)',
-                background: isSelected ? '#315A42' : 'var(--surface)',
-                color: isSelected ? '#ffffff' : 'var(--text)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'background-color 0.15s, color 0.15s',
-              }}
+              className={`ym09-filter-pill ${isSelected ? 'ym09-filter-pill--active' : ''}`}
             >
               <span style={{ display: 'flex', alignItems: 'center' }}>{icon}</span>
               <span>{label}</span>
-              <span
-                style={{
-                  fontSize: '12px',
-                  opacity: isSelected ? 0.9 : 0.7,
-                  marginLeft: '2px',
-                }}
-              >
-                ({count})
-              </span>
+              <span className="ym09-filter-pill-count">({count})</span>
             </button>
           );
         })}
       </div>
 
       {/* 2. Search, Status, Farm & View Toggle Bar */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-        }}
-      >
+      <div className="ym09-filter-toolbar">
         {/* Search Input Field */}
-        <div
-          style={{
-            position: 'relative',
-            flex: '1 1 300px',
-            maxWidth: '520px',
-            minWidth: '240px',
-          }}
-        >
+        <div className="ym09-search-wrap">
           <Search
             size={18}
             aria-hidden="true"
-            style={{
-              position: 'absolute',
-              left: '14px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--muted)',
-              pointerEvents: 'none',
-            }}
+            className="ym09-search-icon"
           />
           <input
             type="search"
@@ -163,38 +109,17 @@ export function ProduceFilters({
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search produce (e.g., Tomato, Carrot...)"
             aria-label="Search produce listings"
-            style={{
-              width: '100%',
-              height: '48px',
-              padding: '0 16px 0 42px',
-              borderRadius: '12px',
-              border: '1px solid var(--control-border)',
-              background: 'var(--surface)',
-              color: 'var(--text)',
-              fontSize: '14px',
-              outline: 'none',
-            }}
+            className="ym09-search-input"
           />
         </div>
 
         {/* Filters and View Controls Group */}
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          {/* Status Select */}
+        <div className="ym09-filter-controls">
           <select
             value={selectedStatus}
             onChange={(e) => onStatusChange(e.target.value)}
             aria-label="Filter listings by status"
-            style={{
-              height: '48px',
-              padding: '0 32px 0 14px',
-              borderRadius: '12px',
-              border: '1px solid var(--control-border)',
-              background: 'var(--surface)',
-              color: 'var(--text)',
-              fontSize: '14px',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
+            className="ym09-filter-select"
           >
             {statusOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -203,22 +128,11 @@ export function ProduceFilters({
             ))}
           </select>
 
-          {/* Farm Select (Dynamically Populated) */}
           <select
             value={selectedFarm}
             onChange={(e) => onFarmChange(e.target.value)}
             aria-label="Filter listings by farm"
-            style={{
-              height: '48px',
-              padding: '0 32px 0 14px',
-              borderRadius: '12px',
-              border: '1px solid var(--control-border)',
-              background: 'var(--surface)',
-              color: 'var(--text)',
-              fontSize: '14px',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
+            className="ym09-filter-select"
           >
             {farmSelectOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -229,15 +143,7 @@ export function ProduceFilters({
 
           {/* View Mode Toggle Buttons */}
           <div
-            style={{
-              display: 'inline-flex',
-              height: '48px',
-              borderRadius: '12px',
-              border: '1px solid var(--control-border)',
-              background: 'var(--surface)',
-              padding: '4px',
-              gap: '4px',
-            }}
+            className="ym09-view-toggle"
             role="group"
             aria-label="Listing view display mode"
           >
@@ -246,19 +152,9 @@ export function ProduceFilters({
               aria-label="Grid view"
               aria-pressed={viewMode === 'grid'}
               onClick={() => onViewModeChange('grid')}
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '8px',
-                border: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: viewMode === 'grid' ? '#315A42' : 'transparent',
-                color: viewMode === 'grid' ? '#ffffff' : 'var(--muted)',
-                cursor: 'pointer',
-                transition: 'background-color 0.15s, color 0.15s',
-              }}
+              className={`ym09-view-toggle-btn ${
+                viewMode === 'grid' ? 'ym09-view-toggle-btn--active' : ''
+              }`}
             >
               <LayoutGrid size={18} aria-hidden="true" />
             </button>
@@ -267,19 +163,9 @@ export function ProduceFilters({
               aria-label="Table list view"
               aria-pressed={viewMode === 'table'}
               onClick={() => onViewModeChange('table')}
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '8px',
-                border: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: viewMode === 'table' ? '#315A42' : 'transparent',
-                color: viewMode === 'table' ? '#ffffff' : 'var(--muted)',
-                cursor: 'pointer',
-                transition: 'background-color 0.15s, color 0.15s',
-              }}
+              className={`ym09-view-toggle-btn ${
+                viewMode === 'table' ? 'ym09-view-toggle-btn--active' : ''
+              }`}
             >
               <List size={18} aria-hidden="true" />
             </button>

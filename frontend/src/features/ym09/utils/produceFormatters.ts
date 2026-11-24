@@ -59,6 +59,106 @@ export function formatListingStatusLabel(status: ListingStatus): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+/**
+ * Maps buyer allocation lifecycle status (database schema or display label)
+ * to YieldMatrix semantic badge tones.
+ */
+export function getAllocationStatusTone(
+  status?: string,
+  displayStatus?: string
+): 'success' | 'warning' | 'info' | 'error' | 'neutral' {
+  const raw = (status || '').trim().toLowerCase();
+  const label = (displayStatus || '').trim().toLowerCase();
+
+  if (['accepted', 'resolved', 'supplier_accepted'].includes(raw) || ['completed', 'confirmed'].includes(label)) {
+    return 'success';
+  }
+  if (['disputed', 'declined', 'expired'].includes(raw) || ['disputed', 'declined'].includes(label)) {
+    return 'error';
+  }
+  if (raw === 'held' || label === 'pending') {
+    return 'warning';
+  }
+  if (['committed', 'picked_up', 'handed_over', 'partially_accepted'].includes(raw) || label === 'committed') {
+    return 'info';
+  }
+  return 'neutral';
+}
+
+/**
+ * Maps purchase order lifecycle status (using schema.sql values such as 'in_fulfilment')
+ * to YieldMatrix semantic badge tones.
+ */
+export function getOrderStatusTone(
+  status?: string,
+  displayStatus?: string
+): 'success' | 'warning' | 'info' | 'error' | 'neutral' {
+  const raw = (status || '').trim().toLowerCase();
+  const label = (displayStatus || '').trim().toLowerCase();
+
+  if (['delivered', 'closed'].includes(raw) || ['completed', 'delivered'].includes(label)) {
+    return 'success';
+  }
+  if (['cancelled', 'expired'].includes(raw) || label === 'cancelled') {
+    return 'error';
+  }
+  if (raw === 'draft') {
+    return 'warning';
+  }
+  if (['in_fulfilment', 'awaiting_suppliers', 'ready_to_confirm'].includes(raw) || label === 'processing') {
+    return 'info';
+  }
+  if (raw === 'confirmed' || label === 'confirmed') {
+    return 'success';
+  }
+  return 'neutral';
+}
+
+/**
+ * Formats an ISO timestamp string into an Asia/Colombo date, e.g. "05 Nov 2026".
+ */
+export function formatDisplayDateColombo(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Colombo',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+/**
+ * Formats an ISO timestamp string into an Asia/Colombo date & time, e.g. "05 Nov 2026, 09:40 AM".
+ */
+export function formatDisplayDateTimeColombo(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const datePart = d.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Colombo',
+    });
+    const timePart = d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Colombo',
+    });
+    return `${datePart}, ${timePart}`;
+  } catch {
+    return dateStr;
+  }
+}
+
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**

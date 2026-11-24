@@ -17,28 +17,12 @@ export function ProduceGrid({ listings, loading = false, onResetFilters }: Produ
   if (loading) {
     return (
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: '20px',
-        }}
+        className="ym09-produce-grid"
         role="status"
         aria-label="Loading produce listings"
       >
         {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            key={index}
-            style={{
-              height: '340px',
-              borderRadius: '12px',
-              border: '1px solid var(--border)',
-              background: 'var(--surface)',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              opacity: 0.6,
-            }}
-          >
+          <div key={index} className="ym09-grid-skeleton-card">
             <div style={{ height: '180px', background: 'var(--soft)' }} />
             <div style={{ padding: '16px', display: 'grid', gap: '8px' }}>
               <div style={{ height: '18px', width: '60%', background: 'var(--canvas)', borderRadius: '4px' }} />
@@ -66,14 +50,7 @@ export function ProduceGrid({ listings, loading = false, onResetFilters }: Produ
   }
 
   return (
-    <div
-      className="ym09-produce-grid"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-        gap: '20px',
-      }}
-    >
+    <div className="ym09-produce-grid">
       {listings.map((listing) => (
         <ProduceCard key={listing.id} listing={listing} />
       ))}

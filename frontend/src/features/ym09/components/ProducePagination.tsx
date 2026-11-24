@@ -31,14 +31,6 @@ export function ProducePagination({
     <nav
       className="ym09-produce-pagination"
       aria-label="Produce listing pages"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '12px',
-        paddingTop: '8px',
-      }}
     >
       {/* 1. Showing range summary */}
       <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
@@ -48,30 +40,16 @@ export function ProducePagination({
 
       {/* 2. Page buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        {/* Previous Button */}
         <button
           type="button"
           aria-label="Previous page"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '8px',
-            border: '1px solid var(--border)',
-            background: 'var(--surface)',
-            color: 'var(--text)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: page <= 1 ? 'not-allowed' : 'pointer',
-            opacity: page <= 1 ? 0.4 : 1,
-          }}
+          className="ym09-page-btn"
         >
           <ChevronLeft size={16} aria-hidden="true" />
         </button>
 
-        {/* Numbered Pages */}
         {pageNumbers.map((p) => {
           const isCurrent = p === page;
           return (
@@ -81,46 +59,19 @@ export function ProducePagination({
               aria-label={`Page ${p}`}
               aria-current={isCurrent ? 'page' : undefined}
               onClick={() => onPageChange(p)}
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: isCurrent ? 600 : 500,
-                border: isCurrent ? '1px solid #315A42' : '1px solid var(--border)',
-                background: isCurrent ? '#315A42' : 'var(--surface)',
-                color: isCurrent ? '#ffffff' : 'var(--text)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'background-color 0.15s',
-              }}
+              className={`ym09-page-btn ${isCurrent ? 'ym09-page-btn--active' : ''}`}
             >
               {p}
             </button>
           );
         })}
 
-        {/* Next Button */}
         <button
           type="button"
           aria-label="Next page"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '8px',
-            border: '1px solid var(--border)',
-            background: 'var(--surface)',
-            color: 'var(--text)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: page >= totalPages ? 'not-allowed' : 'pointer',
-            opacity: page >= totalPages ? 0.4 : 1,
-          }}
+          className="ym09-page-btn"
         >
           <ChevronRight size={16} aria-hidden="true" />
         </button>

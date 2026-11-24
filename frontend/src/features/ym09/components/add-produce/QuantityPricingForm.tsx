@@ -60,7 +60,9 @@ export function QuantityPricingForm({
         {/* Column 1 (28%): Total Quantity */}
         <div className="ym-field">
           <label htmlFor="produce-quantity" className="ym09-field-label">
-            <span>Total Quantity <span style={{ color: '#b42318' }}>*</span></span>
+            <span>
+              Total Quantity <span className="ym09-required-mark" aria-hidden="true">*</span>
+            </span>
           </label>
           <div className="ym-input-wrap">
             <input
@@ -75,53 +77,32 @@ export function QuantityPricingForm({
               className="ym-input--unit"
               aria-invalid={errors.totalQuantity ? true : undefined}
               aria-describedby={errors.totalQuantity ? 'produce-quantity-error' : 'produce-quantity-hint'}
-              style={{
-                height: '48px',
-                width: '100%',
-                borderRadius: '12px',
-                border: `1px solid ${errors.totalQuantity ? '#b42318' : 'var(--control-border)'}`,
-                padding: '0 54px 0 16px',
-                backgroundColor: 'var(--surface)',
-                color: 'var(--text)',
-                fontSize: '15px',
-              }}
             />
-            <span
-              id="produce-quantity-unit"
-              className="ym-unit"
-              style={{
-                position: 'absolute',
-                right: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                padding: '4px 8px',
-                backgroundColor: 'var(--canvas)',
-                borderRadius: '6px',
-                fontSize: '13px',
-                color: 'var(--muted)',
-                fontWeight: 500,
-              }}
-            >
+            <span id="produce-quantity-unit" className="ym-unit">
               kg
             </span>
           </div>
           {errors.totalQuantity ? (
-            <p className="ym-field-error" id="produce-quantity-error" style={{ color: '#b42318', fontSize: '12px', margin: '4px 0 0 0' }}>
+            <p className="ym-field-error" id="produce-quantity-error">
               {errors.totalQuantity}
             </p>
-          ) : maxAvailableKg !== undefined && (
-            <span id="produce-quantity-hint" style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
-              {minAvailableKg && minAvailableKg > 0
-                ? `Max batch stock: ${maxAvailableKg} kg (min ${minAvailableKg} kg committed)`
-                : `Max batch stock: ${maxAvailableKg} kg`}
-            </span>
+          ) : (
+            maxAvailableKg !== undefined && (
+              <span id="produce-quantity-hint" className="ym09-field-hint">
+                {minAvailableKg && minAvailableKg > 0
+                  ? `Max batch stock: ${maxAvailableKg} kg (min ${minAvailableKg} kg committed)`
+                  : `Max batch stock: ${maxAvailableKg} kg`}
+              </span>
+            )
           )}
         </div>
 
         {/* Column 2 (28%): Price per kg */}
         <div className="ym-field">
           <label htmlFor="produce-price" className="ym09-field-label">
-            <span>Price per kg <span style={{ color: '#b42318' }}>*</span></span>
+            <span>
+              Price per kg <span className="ym09-required-mark" aria-hidden="true">*</span>
+            </span>
           </label>
           <div className="ym-input-wrap">
             <input
@@ -135,42 +116,17 @@ export function QuantityPricingForm({
               className="ym-input--unit"
               aria-invalid={errors.unitPrice ? true : undefined}
               aria-describedby={errors.unitPrice ? 'produce-price-error' : 'produce-price-hint'}
-              style={{
-                height: '48px',
-                width: '100%',
-                borderRadius: '12px',
-                border: `1px solid ${errors.unitPrice ? '#b42318' : 'var(--control-border)'}`,
-                padding: '0 64px 0 16px',
-                backgroundColor: 'var(--surface)',
-                color: 'var(--text)',
-                fontSize: '15px',
-              }}
             />
-            <span
-              id="produce-price-unit"
-              className="ym-unit"
-              style={{
-                position: 'absolute',
-                right: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                padding: '4px 8px',
-                backgroundColor: 'var(--canvas)',
-                borderRadius: '6px',
-                fontSize: '13px',
-                color: 'var(--muted)',
-                fontWeight: 500,
-              }}
-            >
+            <span id="produce-price-unit" className="ym-unit">
               / kg
             </span>
           </div>
           {errors.unitPrice ? (
-            <p className="ym-field-error" id="produce-price-error" style={{ color: '#b42318', fontSize: '12px', margin: '4px 0 0 0' }}>
+            <p className="ym-field-error" id="produce-price-error">
               {errors.unitPrice}
             </p>
           ) : (
-            <span id="produce-price-hint" style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+            <span id="produce-price-hint" className="ym09-field-hint">
               Wholesale farmgate price in LKR
             </span>
           )}
@@ -178,24 +134,22 @@ export function QuantityPricingForm({
 
         {/* Column 3 (44%): Estimated Total Value Card */}
         <div className="ym-field ym09-estimated-value-col">
-          <label className="ym09-field-label">
+          <span className="ym09-field-label">
             <Calculator size={14} color="#D97706" aria-hidden="true" />
             <span>Estimated Total Value</span>
-          </label>
+          </span>
 
           <div className="ym09-estimated-value-box">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <strong
-                style={{
-                  fontSize: '18px',
-                  fontWeight: 700,
-                  color: 'var(--green)',
-                  letterSpacing: '-0.02em',
-                }}
-              >
-                LKR {totalValueRupees.toLocaleString('en-US')}
-              </strong>
-            </div>
+            <strong
+              style={{
+                fontSize: '18px',
+                fontWeight: 700,
+                color: 'var(--green)',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              LKR {totalValueRupees.toLocaleString('en-US')}
+            </strong>
 
             <span
               style={{
@@ -208,7 +162,7 @@ export function QuantityPricingForm({
             </span>
           </div>
 
-          <span style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+          <span className="ym09-field-hint">
             Calculated marketplace gross value
           </span>
         </div>

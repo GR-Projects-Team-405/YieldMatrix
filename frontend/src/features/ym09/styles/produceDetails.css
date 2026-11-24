@@ -1,0 +1,1468 @@
+/* ==========================================================================
+   YM09 – Produce Listings Styles (My Produce & Produce Listing Details)
+   Author: Imalka Randev
+   Design System: YieldMatrix Inter, 48px controls, 12px cards, var(--green)
+   ========================================================================== */
+
+/* 0. Eliminate duplicate "My produce" workspace heading on Details Page */
+.workspace-content:has(.ym09-produce-details-page) > .page-heading {
+  display: none !important;
+}
+
+.ym09-produce-details-page {
+  padding-bottom: 36px;
+}
+
+/* ==========================================================================
+   1. My Produce Page Layout, Metrics, Filters, Grid, Table & Pagination
+   ========================================================================== */
+.ym09-my-produce-page {
+  display: grid;
+  gap: 24px;
+  max-width: 100%;
+}
+
+.ym09-produce-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: -12px;
+  margin-bottom: 4px;
+}
+
+.ym09-produce-header-desc {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 760px;
+  margin: 0;
+}
+
+.ym09-produce-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.ym09-stat-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ym09-stat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--soft);
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+
+.ym09-stat-icon--highlight {
+  background: var(--text);
+  color: #ffffff;
+}
+
+.ym09-produce-filters {
+  display: grid;
+  gap: 16px;
+}
+
+.ym09-filter-pills-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ym09-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.ym09-filter-pill:hover:not(.ym09-filter-pill--active) {
+  background: var(--soft);
+  border-color: var(--green);
+}
+
+.ym09-filter-pill:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ym09-filter-pill--active {
+  border-color: var(--green);
+  background: var(--green);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.ym09-filter-pill-count {
+  font-size: 12px;
+  opacity: 0.72;
+  margin-left: 2px;
+}
+
+.ym09-filter-pill--active .ym09-filter-pill-count {
+  opacity: 0.9;
+}
+
+.ym09-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ym09-search-wrap {
+  position: relative;
+  flex: 1 1 300px;
+  max-width: 520px;
+  min-width: 240px;
+}
+
+.ym09-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.ym09-search-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px 0 42px;
+  border-radius: 12px;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ym09-search-input:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-color: var(--green);
+}
+
+.ym09-filter-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ym09-filter-select {
+  height: 48px;
+  padding: 0 32px 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.ym09-filter-select:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-color: var(--green);
+}
+
+.ym09-view-toggle {
+  display: inline-flex;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  padding: 4px;
+  gap: 4px;
+}
+
+.ym09-view-toggle-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ym09-view-toggle-btn:hover:not(.ym09-view-toggle-btn--active) {
+  background: var(--soft);
+  color: var(--text);
+}
+
+.ym09-view-toggle-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
+
+.ym09-view-toggle-btn--active {
+  background: var(--green);
+  color: #ffffff;
+}
+
+.ym09-produce-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.ym09-grid-skeleton-card {
+  height: 340px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  opacity: 0.6;
+}
+
+.ym09-produce-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ym09-produce-card-media {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.ym09-produce-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ym09-produce-card-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--soft) 0%, var(--canvas) 100%);
+  color: var(--accent-text);
+  gap: 8px;
+}
+
+.ym09-produce-card-status {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.ym09-produce-card-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.ym09-produce-card-body {
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+  flex: 1 0 auto;
+}
+
+.ym09-produce-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.ym09-produce-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.ym09-produce-link:hover {
+  color: var(--green);
+}
+
+.ym09-produce-link:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.ym09-produce-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ym09-produce-card-price {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.ym09-produce-card-footer {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  gap: 8px;
+}
+
+.ym09-table-card {
+  background: var(--surface);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.ym09-table-loading {
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.ym09-table-thumb {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.ym09-table-thumb-fallback {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Action Menu */
+.ym09-action-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.ym09-action-menu-trigger {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ym09-action-menu-trigger:hover {
+  background: var(--soft);
+  border-color: var(--green);
+  color: var(--text);
+}
+
+.ym09-action-menu-trigger:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ym09-action-menu-popover {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: 6px;
+  width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  z-index: 40;
+  display: grid;
+  gap: 2px;
+}
+
+.ym09-action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ym09-action-menu-item:hover:not(:disabled),
+.ym09-action-menu-item:focus-visible:not(:disabled) {
+  background-color: var(--soft);
+  outline: none;
+}
+
+.ym09-action-menu-item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--green);
+}
+
+.ym09-action-menu-item:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Pagination */
+.ym09-produce-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.ym09-page-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ym09-page-btn:hover:not(:disabled):not(.ym09-page-btn--active) {
+  background: var(--soft);
+  border-color: var(--green);
+}
+
+.ym09-page-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ym09-page-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.ym09-page-btn--active {
+  border-color: var(--green);
+  background: var(--green);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   2. Details Page Header & Error Card
+   ========================================================================== */
+.ym09-details-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: -6px;
+  margin-bottom: 24px;
+}
+
+.ym09-details-back-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.ym09-details-back-btn:hover {
+  background-color: var(--soft);
+  border-color: var(--green);
+}
+
+.ym09-details-back-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ym09-details-back-btn:active {
+  transform: scale(0.96);
+}
+
+.ym09-details-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ym09-details-page-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.ym09-details-page-subtitle {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.ym09-details-error-card {
+  max-width: 540px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.ym09-details-error-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fcebea;
+  color: #a51c19;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+}
+
+/* ==========================================================================
+   3. Produce Summary Card
+   ========================================================================== */
+.ym09-summary-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) auto;
+  gap: 28px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+
+.ym09-summary-image-box {
+  width: 100%;
+  height: 190px;
+  background-color: var(--canvas);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ym09-summary-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 12px;
+}
+
+.ym09-image-expand-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: rgba(38, 58, 49, 0.65);
+  color: #ffffff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ym09-image-expand-btn:hover {
+  background-color: rgba(38, 58, 49, 0.88);
+}
+
+.ym09-image-expand-btn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.ym09-summary-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ym09-summary-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ym09-summary-name {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.ym09-summary-meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ym09-summary-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.ym09-summary-actions-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 20px;
+}
+
+.ym09-edit-listing-btn {
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.ym09-edit-listing-btn:hover {
+  background-color: var(--soft);
+  border-color: var(--green);
+}
+
+.ym09-edit-listing-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* Highlight Price Per Kg Box */
+.ym09-price-box {
+  background-color: #FFF8F0;
+  border: 1px solid #FFE3CC;
+  border-radius: 12px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 190px;
+}
+
+.ym09-price-box-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background-color: #FFEADB;
+  color: #B45309;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ym09-price-box-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.ym09-price-box-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.ym09-price-box-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.ym09-price-box-unit {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ==========================================================================
+   4. Four Metric Stat Cards Strip
+   ========================================================================== */
+.ym09-details-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.ym09-metric-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 118px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.ym09-metric-card--highlight {
+  background-color: var(--orange) !important;
+  border-color: transparent !important;
+  color: var(--text) !important;
+}
+
+.ym09-metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ym09-metric-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.ym09-metric-card--highlight .ym09-metric-label {
+  color: var(--green);
+}
+
+.ym09-metric-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: var(--soft);
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ym09-metric-card--highlight .ym09-metric-icon {
+  background-color: rgba(255, 255, 255, 0.35);
+  color: var(--text);
+}
+
+.ym09-metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 10px;
+  letter-spacing: -0.02em;
+}
+
+.ym09-metric-card--highlight .ym09-metric-value {
+  color: var(--text);
+}
+
+.ym09-metric-subtext {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ym09-metric-card--highlight .ym09-metric-subtext {
+  color: var(--green);
+}
+
+/* ==========================================================================
+   5. Tab Navigation Strip & Details Tab Content
+   ========================================================================== */
+.ym09-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 8px;
+  width: fit-content;
+  margin-bottom: 24px;
+}
+
+.ym09-tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ym09-tab-pill:hover:not(.ym09-tab-pill--active) {
+  color: var(--text);
+  background-color: var(--soft);
+}
+
+.ym09-tab-pill:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ym09-tab-pill--active {
+  background-color: var(--green);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.ym09-overview-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+.ym09-overview-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+}
+
+.ym09-info-column {
+  min-width: 0;
+}
+
+.ym09-description-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0;
+  white-space: pre-line;
+}
+
+.ym09-description-empty {
+  padding: 28px 20px;
+  text-align: center;
+  background-color: var(--canvas);
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+}
+
+.ym09-description-empty-text {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.ym09-details-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.ym09-details-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.ym09-details-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.ym09-details-card-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 4px 0 0 0;
+}
+
+.ym09-select {
+  height: 38px;
+  padding: 0 28px 0 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ym09-select:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-color: var(--green);
+}
+
+.ym09-icon-action-btn {
+  min-height: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+/* Table / Row Key-Value Styling */
+.ym09-kv-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ym09-kv-row {
+  border-bottom: 1px solid var(--canvas);
+}
+
+.ym09-kv-row:last-child {
+  border-bottom: none;
+}
+
+.ym09-kv-key {
+  padding: 13px 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  text-align: left;
+  width: 44%;
+}
+
+.ym09-kv-val {
+  padding: 13px 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* Tab 2: Allocations Layout */
+.ym09-allocations-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
+  align-items: start;
+}
+
+.ym09-allocations-tables-col {
+  display: grid;
+  gap: 24px;
+}
+
+.ym09-summary-sidebar {
+  display: grid;
+  gap: 16px;
+}
+
+.ym09-available-bar {
+  background-color: var(--soft);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0;
+  font-weight: 600;
+  color: var(--green);
+}
+
+.ym09-notice-box-blue {
+  background-color: #F0F7FF;
+  border: 1px dashed #3B82F6;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1E40AF;
+}
+
+/* Tab 3: Price History Layout */
+.ym09-price-history-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.ym09-timeframe-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background-color: var(--canvas);
+  border: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.ym09-timeframe-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+}
+
+.ym09-timeframe-btn:hover:not(.ym09-timeframe-btn--active) {
+  color: var(--text);
+  background-color: var(--soft);
+}
+
+.ym09-timeframe-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ym09-timeframe-btn--active {
+  background-color: var(--green);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.ym09-chart-container {
+  width: 100%;
+  height: auto;
+  min-height: 180px;
+  position: relative;
+  margin-top: 10px;
+}
+
+.ym09-price-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.ym09-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 36px 20px;
+  margin-top: 10px;
+  min-height: 200px;
+  background-color: var(--canvas);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.ym09-chart-empty-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ym09-chart-empty-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ym09-chart-empty-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.ym09-chart-reset-btn {
+  margin-top: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.ym09-chart-reset-btn:hover {
+  background-color: var(--soft);
+  border-color: var(--green);
+}
+
+.ym09-chart-reset-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ym09-chart-single-note {
+  margin: 10px 0 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--canvas);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* Tab 4: Activity Timeline */
+.ym09-timeline-list {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding-left: 20px;
+  margin: 10px 0 0 10px;
+}
+
+.ym09-timeline-list::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 24px;
+  left: 36px;
+  width: 2px;
+  background-color: var(--border);
+  z-index: 1;
+}
+
+.ym09-timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  position: relative;
+  z-index: 2;
+  padding-bottom: 28px;
+}
+
+.ym09-timeline-item:last-child {
+  padding-bottom: 8px;
+}
+
+.ym09-timeline-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: var(--soft);
+  border: 2px solid var(--surface);
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--border);
+}
+
+.ym09-timeline-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 4px;
+}
+
+.ym09-timeline-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.ym09-timeline-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.ym09-timeline-time {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Modal Lightbox & Inspection Dialog */
+.ym09-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 24px;
+  backdrop-filter: blur(2px);
+}
+
+.ym09-modal-dialog {
+  background-color: var(--surface);
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+  padding: 24px;
+  position: relative;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+.ym09-modal-title {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: var(--text);
+}
+
+.ym09-modal-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ym09-modal-close-btn:hover {
+  background: var(--soft);
+  border-color: var(--green);
+}
+
+.ym09-modal-close-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ym09-lightbox-stage {
+  width: 100%;
+  height: 340px;
+  background-color: var(--canvas);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ym09-lightbox-image {
+  max-width: 85%;
+  max-height: 85%;
+  object-fit: contain;
+}
+
+.ym09-lightbox-caption {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ==========================================================================
+   6. Responsive Media Queries
+   ========================================================================== */
+@media (max-width: 1199px) {
+  .ym09-summary-card {
+    grid-template-columns: 240px minmax(0, 1fr) auto;
+    gap: 20px;
+  }
+
+  .ym09-details-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ym09-allocations-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .ym09-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .ym09-summary-actions-col {
+    align-items: flex-start;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .ym09-price-history-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .ym09-overview-info-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .ym09-details-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ym09-tab-bar {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 12px;
+  }
+
+  .ym09-details-page-title {
+    font-size: 22px;
+  }
+
+  .ym09-kv-key,
+  .ym09-kv-val {
+    font-size: 13px;
+    padding: 10px 0;
+  }
+}
+
+/* ==========================================================================
+   7. Interactive Hover / Pointer Helpers for My Produce Cards & Table Rows
+   ========================================================================== */
+.ym09-card-interactive {
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.ym09-card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  border-color: var(--green);
+}
+
+.ym09-table-row-interactive {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ym09-table-row-interactive:hover {
+  background-color: var(--soft);
+}

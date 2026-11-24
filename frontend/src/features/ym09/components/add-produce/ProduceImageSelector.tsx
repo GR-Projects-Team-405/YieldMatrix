@@ -12,27 +12,10 @@ export function ProduceImageSelector({ selectedKey, onSelectKey }: ProduceImageS
 
   return (
     <div style={{ display: 'grid', gap: '14px' }}>
-      {/* Thumbnail and Upload Dropzone Row (Matching Screenshot) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '90px 1fr',
-          gap: '12px',
-          alignItems: 'stretch',
-        }}
-      >
-        {/* Active Selected Image Thumbnail with Active Indicator */}
-        <div
-          style={{
-            position: 'relative',
-            width: '90px',
-            height: '90px',
-            borderRadius: '14px',
-            overflow: 'hidden',
-            border: '2px solid var(--green)',
-            boxShadow: '0 2px 8px rgba(49, 90, 66, 0.15)',
-          }}
-        >
+      {/* Thumbnail and Upload Dropzone Row */}
+      <div className="ym09-image-selector-row">
+        {/* Active Selected Image Thumbnail */}
+        <div className="ym09-image-selected-box">
           <img
             src={currentPlaceholder.imageUrl}
             alt={currentPlaceholder.label}
@@ -43,7 +26,6 @@ export function ProduceImageSelector({ selectedKey, onSelectKey }: ProduceImageS
               display: 'block',
             }}
           />
-          {/* Active check indicator badge */}
           <div
             style={{
               position: 'absolute',
@@ -52,7 +34,7 @@ export function ProduceImageSelector({ selectedKey, onSelectKey }: ProduceImageS
               width: '20px',
               height: '20px',
               borderRadius: '50%',
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--surface)',
               color: 'var(--green)',
               display: 'flex',
               alignItems: 'center',
@@ -61,26 +43,14 @@ export function ProduceImageSelector({ selectedKey, onSelectKey }: ProduceImageS
             }}
             title="Selected agricultural placeholder"
           >
-            <Check size={12} strokeWidth={3} />
+            <Check size={12} strokeWidth={3} aria-hidden="true" />
           </div>
         </div>
 
-        {/* Illustrative Upload Dropzone Box (Matching Screenshot) */}
+        {/* Illustrative Upload Dropzone Box */}
         <div
           title="Image upload is scheduled for a future backend storage stage. Local verified placeholder is active."
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '14px',
-            border: '2px dashed #a3c4a8',
-            backgroundColor: 'rgba(234, 242, 232, 0.4)',
-            padding: '12px',
-            textAlign: 'center',
-            cursor: 'default',
-            userSelect: 'none',
-          }}
+          className="ym09-image-dropzone"
         >
           <UploadCloud size={24} color="var(--green)" aria-hidden="true" />
           <strong style={{ fontSize: '13px', color: 'var(--text)', marginTop: '4px' }}>
@@ -109,7 +79,7 @@ export function ProduceImageSelector({ selectedKey, onSelectKey }: ProduceImageS
           Choose Agricultural Placeholder:
         </span>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+        <div className="ym09-image-grid" role="group" aria-label="Choose agricultural placeholder image">
           {(Object.keys(PRODUCE_PLACEHOLDERS) as ProducePlaceholderKey[]).map((key) => {
             const item = PRODUCE_PLACEHOLDERS[key];
             const isSelected = selectedKey === key;
@@ -121,20 +91,9 @@ export function ProduceImageSelector({ selectedKey, onSelectKey }: ProduceImageS
                 title={`Select ${item.label}`}
                 aria-label={`Select ${item.label}`}
                 aria-pressed={isSelected}
-                style={{
-                  padding: 0,
-                  margin: 0,
-                  width: '100%',
-                  aspectRatio: '1',
-                  borderRadius: '10px',
-                  overflow: 'hidden',
-                  border: isSelected ? '2px solid var(--green)' : '1px solid var(--border)',
-                  background: 'none',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  opacity: isSelected ? 1 : 0.7,
-                  transition: 'opacity 0.15s, border 0.15s',
-                }}
+                className={`ym09-image-option ${
+                  isSelected ? 'ym09-image-option--selected' : ''
+                }`}
               >
                 <img
                   src={item.imageUrl}

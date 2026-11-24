@@ -28,7 +28,9 @@ export function AvailabilityForm({
         <div className="ym-field">
           <label htmlFor="produce-available-from" className="ym09-field-label">
             <CalendarDays size={15} color="var(--muted)" aria-hidden="true" />
-            <span>Available From <span style={{ color: '#b42318' }}>*</span></span>
+            <span>
+              Available From <span className="ym09-required-mark" aria-hidden="true">*</span>
+            </span>
           </label>
           <div className="ym-input-wrap">
             <input
@@ -38,20 +40,10 @@ export function AvailabilityForm({
               onChange={(e) => onFromChange(e.target.value)}
               aria-invalid={errors.availableFrom ? true : undefined}
               aria-describedby={errors.availableFrom ? 'produce-from-error' : undefined}
-              style={{
-                height: '48px',
-                width: '100%',
-                borderRadius: '12px',
-                border: `1px solid ${errors.availableFrom ? '#b42318' : 'var(--control-border)'}`,
-                padding: '0 16px',
-                backgroundColor: 'var(--surface)',
-                color: 'var(--text)',
-                fontSize: '14px',
-              }}
             />
           </div>
           {errors.availableFrom && (
-            <p className="ym-field-error" id="produce-from-error" style={{ color: '#b42318', fontSize: '12px', margin: '4px 0 0 0' }}>
+            <p className="ym-field-error" id="produce-from-error">
               {errors.availableFrom}
             </p>
           )}
@@ -61,7 +53,9 @@ export function AvailabilityForm({
         <div className="ym-field">
           <label htmlFor="produce-available-until" className="ym09-field-label">
             <CalendarDays size={15} color="var(--muted)" aria-hidden="true" />
-            <span>Available Until <span style={{ color: '#b42318' }}>*</span></span>
+            <span>
+              Available Until <span className="ym09-required-mark" aria-hidden="true">*</span>
+            </span>
           </label>
           <div className="ym-input-wrap">
             <input
@@ -72,20 +66,10 @@ export function AvailabilityForm({
               onChange={(e) => onUntilChange(e.target.value)}
               aria-invalid={errors.availableUntil ? true : undefined}
               aria-describedby={errors.availableUntil ? 'produce-until-error' : undefined}
-              style={{
-                height: '48px',
-                width: '100%',
-                borderRadius: '12px',
-                border: `1px solid ${errors.availableUntil ? '#b42318' : 'var(--control-border)'}`,
-                padding: '0 16px',
-                backgroundColor: 'var(--surface)',
-                color: 'var(--text)',
-                fontSize: '14px',
-              }}
             />
           </div>
           {errors.availableUntil && (
-            <p className="ym-field-error" id="produce-until-error" style={{ color: '#b42318', fontSize: '12px', margin: '4px 0 0 0' }}>
+            <p className="ym-field-error" id="produce-until-error">
               {errors.availableUntil}
             </p>
           )}

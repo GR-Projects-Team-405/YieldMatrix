@@ -22,7 +22,6 @@ export function ProduceInformationForm({
   onFarmChange,
   onBatchChange,
 }: ProduceInformationFormProps) {
-  // Filter harvest batches for the currently selected farm
   const farmBatches = harvestBatches.filter((b) => !formState.farmId || b.farmId === formState.farmId);
 
   const handleFarmSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -50,21 +49,7 @@ export function ProduceInformationForm({
 
       {/* Lock Notice banner when listing has active reservations or commitments */}
       {isSourceLocked && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '10px',
-            padding: '12px 14px',
-            borderRadius: '10px',
-            backgroundColor: 'var(--canvas)',
-            border: '1px solid var(--border)',
-            marginBottom: '16px',
-            fontSize: '13px',
-            lineHeight: 1.5,
-            color: 'var(--text)',
-          }}
-        >
+        <div className="ym09-lock-banner" role="note">
           <Lock size={16} color="var(--muted)" style={{ marginTop: '2px', flexShrink: 0 }} aria-hidden="true" />
           <div>
             <strong>Harvest Source Locked:</strong>{' '}
@@ -80,7 +65,9 @@ export function ProduceInformationForm({
         <div className="ym-field">
           <label htmlFor="produce-farm" className="ym09-field-label">
             <MapPin size={15} color="var(--muted)" aria-hidden="true" />
-            <span>Select Farm <span style={{ color: '#b42318' }}>*</span></span>
+            <span>
+              Select Farm <span className="ym09-required-mark" aria-hidden="true">*</span>
+            </span>
             {isSourceLocked && (
               <span title="Locked by active orders">
                 <Lock size={12} color="var(--muted)" aria-hidden="true" />
@@ -97,7 +84,6 @@ export function ProduceInformationForm({
               aria-describedby={errors.farmId ? 'produce-farm-error' : undefined}
               title={isSourceLocked ? 'Farm origin cannot be changed while active reservations exist' : undefined}
               className={`ym09-source-control ${isSourceLocked ? 'ym09-source-control--locked' : 'ym09-source-control--editable'}`}
-              style={errors.farmId ? { borderColor: '#b42318' } : undefined}
             >
               <option value="">Choose certified farm...</option>
               {farms.map((farm) => (
@@ -108,7 +94,7 @@ export function ProduceInformationForm({
             </select>
           </div>
           {errors.farmId && (
-            <p className="ym-field-error" id="produce-farm-error" style={{ color: '#b42318', fontSize: '12px', margin: '4px 0 0 0' }}>
+            <p className="ym-field-error" id="produce-farm-error">
               {errors.farmId}
             </p>
           )}
@@ -118,7 +104,9 @@ export function ProduceInformationForm({
         <div className="ym-field">
           <label htmlFor="produce-crop" className="ym09-field-label">
             <Sprout size={15} color="var(--muted)" aria-hidden="true" />
-            <span>Crop / Produce <span style={{ color: '#b42318' }}>*</span></span>
+            <span>
+              Crop / Produce <span className="ym09-required-mark" aria-hidden="true">*</span>
+            </span>
             <span title="Automatically certified from harvest batch">
               <Lock size={12} color="var(--muted)" aria-hidden="true" />
             </span>
@@ -129,20 +117,21 @@ export function ProduceInformationForm({
               type="text"
               readOnly
               value={formState.cropName ? `${formState.cropName} (${formState.category})` : 'Select a harvest batch to derive crop'}
+              aria-invalid={errors.cropId ? true : undefined}
+              aria-describedby={errors.cropId ? 'produce-crop-error' : 'produce-crop-hint'}
               className="ym09-source-control ym09-source-control--locked"
               style={{
                 color: formState.cropName ? 'var(--text)' : 'var(--muted)',
                 WebkitTextFillColor: formState.cropName ? 'var(--text)' : 'var(--muted)',
-                ...(errors.cropId ? { borderColor: '#b42318' } : {}),
               }}
             />
           </div>
           {errors.cropId ? (
-            <p className="ym-field-error" id="produce-crop-error" style={{ color: '#b42318', fontSize: '12px', margin: '4px 0 0 0' }}>
+            <p className="ym-field-error" id="produce-crop-error">
               {errors.cropId}
             </p>
           ) : (
-            <span style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+            <span id="produce-crop-hint" className="ym09-field-hint">
               Crop type is certified and derived directly from the harvest batch.
             </span>
           )}
@@ -152,7 +141,9 @@ export function ProduceInformationForm({
         <div className="ym-field">
           <label htmlFor="produce-batch" className="ym09-field-label">
             <Layers size={15} color="var(--muted)" aria-hidden="true" />
-            <span>Harvest Batch <span style={{ color: '#b42318' }}>*</span></span>
+            <span>
+              Harvest Batch <span className="ym09-required-mark" aria-hidden="true">*</span>
+            </span>
             {isSourceLocked && (
               <span title="Locked by active orders">
                 <Lock size={12} color="var(--muted)" aria-hidden="true" />
@@ -169,7 +160,6 @@ export function ProduceInformationForm({
               aria-describedby={errors.batchId ? 'produce-batch-error' : 'produce-batch-hint'}
               title={isSourceLocked ? 'Harvest batch cannot be changed while active reservations exist' : undefined}
               className={`ym09-source-control ${isSourceLocked ? 'ym09-source-control--locked' : 'ym09-source-control--editable'}`}
-              style={errors.batchId ? { borderColor: '#b42318' } : undefined}
             >
               <option value="">Select verified harvest batch...</option>
               {farmBatches.map((batch) => {
@@ -198,11 +188,11 @@ export function ProduceInformationForm({
             </select>
           </div>
           {errors.batchId ? (
-            <p className="ym-field-error" id="produce-batch-error" style={{ color: '#b42318', fontSize: '12px', margin: '4px 0 0 0' }}>
+            <p className="ym-field-error" id="produce-batch-error">
               {errors.batchId}
             </p>
           ) : (
-            <span id="produce-batch-hint" style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+            <span id="produce-batch-hint" className="ym09-field-hint">
               {isSourceLocked
                 ? 'Harvest source is locked to protect active order reservations and commitments.'
                 : 'Only harvested batches with unreserved sellable stock can be listed.'}
@@ -214,7 +204,9 @@ export function ProduceInformationForm({
         <div className="ym-field">
           <label htmlFor="produce-grade" className="ym09-field-label">
             <Award size={15} color="var(--muted)" aria-hidden="true" />
-            <span>Grade <span style={{ color: '#b42318' }}>*</span></span>
+            <span>
+              Grade <span className="ym09-required-mark" aria-hidden="true">*</span>
+            </span>
             <span title="Certified grade from harvest batch">
               <Lock size={12} color="var(--muted)" aria-hidden="true" />
             </span>
@@ -225,20 +217,21 @@ export function ProduceInformationForm({
               type="text"
               readOnly
               value={formState.gradeName || 'Select a harvest batch to derive grade'}
+              aria-invalid={errors.gradeId ? true : undefined}
+              aria-describedby={errors.gradeId ? 'produce-grade-error' : 'produce-grade-hint'}
               className="ym09-source-control ym09-source-control--locked"
               style={{
                 color: formState.gradeName ? 'var(--text)' : 'var(--muted)',
                 WebkitTextFillColor: formState.gradeName ? 'var(--text)' : 'var(--muted)',
-                ...(errors.gradeId ? { borderColor: '#b42318' } : {}),
               }}
             />
           </div>
           {errors.gradeId ? (
-            <p className="ym-field-error" id="produce-grade-error" style={{ color: '#b42318', fontSize: '12px', margin: '4px 0 0 0' }}>
+            <p className="ym-field-error" id="produce-grade-error">
               {errors.gradeId}
             </p>
           ) : (
-            <span style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+            <span id="produce-grade-hint" className="ym09-field-hint">
               Grade is certified and derived directly from the harvest batch.
             </span>
           )}
