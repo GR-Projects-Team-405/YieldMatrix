@@ -432,6 +432,23 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS farmer_market_price_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id UUID NOT NULL REFERENCES users(id),
+  crop_id UUID NOT NULL REFERENCES crops(id),
+  grade_id UUID NOT NULL REFERENCES grades(id),
+  district TEXT NOT NULL,
+  lower_price_cents BIGINT NOT NULL CHECK (lower_price_cents >= 0),
+  upper_price_cents BIGINT NOT NULL CHECK (upper_price_cents > lower_price_cents),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','replaced')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_farmer_market_price_alert
+  ON farmer_market_price_alerts(farmer_id, crop_id, grade_id, district)
+  WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS farmer_market_price_alert_history_idx
+  ON farmer_market_price_alerts(farmer_id, crop_id, grade_id, district, created_at DESC);
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_id UUID REFERENCES users(id),

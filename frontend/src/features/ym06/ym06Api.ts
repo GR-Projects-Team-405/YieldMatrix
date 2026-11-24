@@ -36,6 +36,20 @@ export type Allocation = {
   created_at: string;
 };
 
+export type BuyerDemand = {
+  id: string;
+  destination_district: string;
+  quantity_kg: string;
+  budget_cents: string | null;
+  delivery_from: string;
+  delivery_until: string;
+  allow_partial: boolean;
+  expires_at: string;
+  buyer: string;
+  crop: string;
+  grade: string;
+};
+
 export type MarketInsight = {
   cropId: string;
   gradeId: string;
@@ -44,6 +58,7 @@ export type MarketInsight = {
   district: string;
   recentDemandKg: string | null;
   priorDemandKg: string | null;
+  averagePriceCents: string | null;
   demandTrend: 'rising' | 'falling' | 'steady' | 'insufficient_data';
   changePercent: number | null;
   suggestedPriceLowCents: string | null;
@@ -54,10 +69,27 @@ export type MarketInsight = {
   reason: string;
 };
 
+export type FarmerPriceAlert = {
+  id: string;
+  crop_id: string;
+  grade_id: string;
+  crop: string;
+  grade: string;
+  district: string;
+  lower_price_cents: string;
+  upper_price_cents: string;
+  current_price_cents: string | null;
+  status: 'active' | 'replaced' | 'paused';
+  price_state: 'below' | 'above' | 'within' | 'unknown';
+  created_at: string;
+  updated_at: string;
+};
+
 export type Overview = {
   summary: Summary;
   upcomingHarvests: Harvest[];
   recentAllocations: Allocation[];
+  activeDemands: BuyerDemand[];
   marketInsights: MarketInsight[];
 };
 
@@ -71,11 +103,11 @@ export type SalesTransaction = {
 export type SalesPerformanceData = { summary: Summary; trend: SalesTrend[]; crops: SalesCrop[]; transactions: SalesTransaction[]; days: number };
 
 export type CompletedOrder = {
-  order_id: string; order_status: string; destination_district: string; completed_at: string;
+  order_id: string; order_status: string; destination_district: string; completed_at: string; batch_id: string;
   buyer: string; crop: string; grade: string; ordered_kg: string; accepted_kg: string;
   price_cents_per_kg: string; sales_cents: string; settled_cents: string; allocation_status: string;
 };
-export type CompletedOrdersData = { summary: Summary; trend: Array<{ week_start: string; accepted_kg: string; completed_orders: number }>; orders: CompletedOrder[]; days: number };
+export type CompletedOrdersData = { summary: Summary & { ordered_kg: string; fully_accepted_lines: number; partially_accepted_lines: number }; trend: Array<{ week_start: string; accepted_kg: string; completed_orders: number }>; orders: CompletedOrder[]; crops?: Array<{ crop_id: string; crop: string }>; days: number };
 
 export async function getOverview() {
   const { data } = await api.get<Overview>('/ym06/overview');
@@ -92,9 +124,19 @@ export async function getHarvests() {
   return data.harvests;
 }
 
-export async function getCompletedOrders(days: number) {
-  const { data } = await api.get<CompletedOrdersData>('/ym06/completed-orders', { params: { days } });
+export async function getCompletedOrders(days: number, cropId = '') {
+  const { data } = await api.get<CompletedOrdersData>('/ym06/completed-orders', { params: { days, ...(cropId ? { cropId } : {}) } });
   return data;
+}
+
+export async function getFarmerPriceAlerts(filters: { cropId: string; gradeId: string; district: string }) {
+  const { data } = await api.get<{ active: FarmerPriceAlert | null; history: FarmerPriceAlert[] }>('/ym06/price-alerts', { params: filters });
+  return data;
+}
+
+export async function saveFarmerPriceAlert(input: { cropId: string; gradeId: string; district: string; lowerPriceCents: number; upperPriceCents: number }) {
+  const { data } = await api.post<{ alert: FarmerPriceAlert }>('/ym06/price-alerts', input);
+  return data.alert;
 }
 
 export const formatLkr = (cents: string | number | null | undefined) => new Intl.NumberFormat('en-LK', {
