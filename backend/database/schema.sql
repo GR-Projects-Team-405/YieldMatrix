@@ -25,6 +25,19 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  token_hash TEXT NOT NULL UNIQUE CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (expires_at > created_at),
+  CHECK (used_at IS NULL OR used_at >= created_at)
+);
+CREATE INDEX IF NOT EXISTS password_reset_user_idx
+  ON password_reset_tokens(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS farms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   farmer_id UUID NOT NULL REFERENCES users(id),
@@ -107,6 +120,9 @@ CREATE TABLE IF NOT EXISTS offers (
   unit_price_cents BIGINT NOT NULL CHECK (unit_price_cents > 0),
   expires_at TIMESTAMPTZ NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected','withdrawn','expired')),
+  notes TEXT,
+  quality_specs JSONB NOT NULL DEFAULT '{}',
+  decline_reason TEXT,
   operation_key TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   FOREIGN KEY (batch_id, farmer_id) REFERENCES harvest_batches(id, farmer_id),
@@ -629,6 +645,9 @@ CREATE INDEX IF NOT EXISTS farms_farmer_idx ON farms(farmer_id);
 CREATE INDEX IF NOT EXISTS batches_farm_idx ON harvest_batches(farm_id);
 CREATE INDEX IF NOT EXISTS demands_buyer_idx ON demands(buyer_id);
 CREATE INDEX IF NOT EXISTS offers_demand_idx ON offers(demand_id);
+CREATE INDEX IF NOT EXISTS offers_status_idx ON offers(status);
+CREATE INDEX IF NOT EXISTS future_commitments_buyer_status_idx ON future_commitments(buyer_id, status);
+CREATE INDEX IF NOT EXISTS future_commitments_farmer_status_idx ON future_commitments(farmer_id, status);
 CREATE INDEX IF NOT EXISTS orders_buyer_idx ON orders(buyer_id);
 CREATE INDEX IF NOT EXISTS allocations_order_idx ON allocations(order_id);
 CREATE INDEX IF NOT EXISTS allocations_batch_idx ON allocations(batch_id);
