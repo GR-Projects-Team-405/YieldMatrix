@@ -1,6 +1,7 @@
 
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../context/AuthContext';
 import {
   ArrowRight,
   Eye,
@@ -15,6 +16,10 @@ import {
   registerFarmer,
   getRegistrationError,
 } from '../services/registrationApi';
+import {
+  loginWithYm03,
+  getLoginError,
+} from '../services/loginApi';
 
 type AuthMode = 'signup' | 'login';
 
@@ -74,6 +79,9 @@ function PasswordInput({
 }
 
 export default function FarmerAuthPage() {
+  const navigate = useNavigate();
+  const { completePasswordLogin } = useAuth();
+
   const [mode, setMode] = useState<AuthMode>('signup');
   const [message, setMessage] = useState('');
   const [fullName, setFullName] = useState('');
@@ -87,8 +95,8 @@ export default function FarmerAuthPage() {
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const passwordValid =
     password.length >= 15 && password.length <= 128;
@@ -178,20 +186,57 @@ export default function FarmerAuthPage() {
     }
   }
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!loginIdentifier.trim() || !loginPassword) {
-      setMessage('Enter your email/mobile number and password.');
+    if (isLoggingIn) return;
+
+    setMessage('');
+
+    const normalizedEmail = loginIdentifier.trim().toLowerCase();
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ||
+      normalizedEmail.length > 254
+    ) {
+      setMessage('Enter a valid email address.');
       return;
     }
 
-    // Shared authentication integration with YM02 is pending.
-    setMessage(
-      'Login form is ready. Authentication backend integration is pending.'
-    );
+    if (!loginPassword || loginPassword.length > 128) {
+      setMessage('Enter your password.');
+      return;
+    }
 
-    void rememberMe;
+    setIsLoggingIn(true);
+
+    try {
+      const result = await loginWithYm03(
+        {
+          email: normalizedEmail,
+          password: loginPassword,
+        },
+        'farmer'
+      );
+
+      // Store a session only after successful authentication
+      // and role verification.
+      completePasswordLogin(
+        result.token,
+        result.user,
+        'farmer'
+      );
+
+      setLoginPassword('');
+
+      navigate('/farmer/overview', { replace: true });
+    } catch (error) {
+      const loginError = getLoginError(error);
+
+      setMessage(loginError.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
   }
 
   return (
@@ -479,13 +524,14 @@ export default function FarmerAuthPage() {
                   onSubmit={handleLogin}
                 >
                   <label htmlFor="farmer-login-identifier">
-                    Email Address or Mobile Number
+                    Email Address
                   </label>
                   <div className="ym03-farmer-input-icon">
                     <UserRound size={18} />
                     <input
                       id="farmer-login-identifier"
-                      placeholder="Email or mobile number"
+                      type="email"
+                      placeholder="Enter your email address"
                       autoComplete="username"
                       value={loginIdentifier}
                       onChange={(e) =>
@@ -510,23 +556,16 @@ export default function FarmerAuthPage() {
                     onChange={setLoginPassword}
                   />
 
-                  <label className="ym03-farmer-check-row">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) =>
-                        setRememberMe(e.target.checked)
-                      }
-                    />
-                    <span>Stay signed on this device</span>
-                  </label>
-
                   <button
                     type="submit"
                     className="ym03-farmer-submit"
+                    disabled={isLoggingIn}
                   >
-                    Log In to Farm Dashboard
-                    <ArrowRight size={18} />
+                    {isLoggingIn
+                      ? 'Signing In...'
+                      : 'Log In to Farm Dashboard'}
+
+                    {!isLoggingIn && <ArrowRight size={18} />}
                   </button>
 
                   <p className="ym03-farmer-switch">

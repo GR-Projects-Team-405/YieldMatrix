@@ -2,12 +2,49 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import api, { TOKEN_KEY } from '../services/api';
 export type Role = 'farmer' | 'buyer' | 'driver' | 'admin';
 export interface User { id: string; name: string; role: Role }
-interface AuthState { user: User | null; loading: boolean; demoLogin: (role: Role) => Promise<void>; logout: () => void }
+interface AuthState {
+  user: User | null;
+  loading: boolean;
+  demoLogin: (role: Role) => Promise<void>;
+  completePasswordLogin: (
+    token: string,
+    authenticatedUser: User,
+    expectedRole: Role
+  ) => void;
+  logout: () => void;
+}
 const AuthContext = createContext<AuthState | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const logout = useCallback(() => { localStorage.removeItem(TOKEN_KEY); setUser(null); }, []);
+  const completePasswordLogin = useCallback(
+    (
+      token: string,
+      authenticatedUser: User,
+      expectedRole: Role
+    ) => {
+      if (
+        typeof token !== 'string' ||
+        token.trim().length === 0 ||
+        !authenticatedUser ||
+        typeof authenticatedUser.id !== 'string' ||
+        !authenticatedUser.id.trim() ||
+        typeof authenticatedUser.name !== 'string' ||
+        !authenticatedUser.name.trim() ||
+        authenticatedUser.role !== expectedRole
+      ) {
+        throw new Error(
+          'The authenticated account does not match the selected role.'
+        );
+      }
+
+      localStorage.setItem(TOKEN_KEY, token);
+      setUser(authenticatedUser);
+      setLoading(false);
+    },
+    []
+  );
   useEffect(() => {
     let active = true;
     const token = localStorage.getItem(TOKEN_KEY);
@@ -37,7 +74,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_KEY, data.token);
     setUser(data.user);
   }
-  return <AuthContext.Provider value={{ user, loading, demoLogin, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        demoLogin,
+        completePasswordLogin,
+        logout,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 export function useAuth() {
   const context = useContext(AuthContext);

@@ -1,6 +1,7 @@
 
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../context/AuthContext';
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,6 +23,10 @@ import {
   registerDriver,
   getRegistrationError,
 } from '../services/registrationApi';
+import {
+  loginWithYm03,
+  getLoginError,
+} from '../services/loginApi';
 
 type AuthMode = 'register' | 'login';
 type RegistrationStep = 1 | 2;
@@ -35,9 +40,19 @@ const operatingAreas = [
   'Kandy & Central Province',
   'Matale & Dambulla Agricultural Belt',
   'Nuwara Eliya Cold Region',
+  'Western Metro',
   'Kurunegala & North Western',
   'Western Metro & Colombo Port Hubs',
-];
+] as const;
+
+const operatingAreaDistricts: Record<string, string> = {
+  'Kandy & Central Province': 'Kandy',
+  'Matale & Dambulla Agricultural Belt': 'Matale',
+  'Nuwara Eliya Cold Region': 'Nuwara Eliya',
+  'Western Metro': 'Colombo',
+  'Kurunegala & North Western': 'Kurunegala',
+  'Western Metro & Colombo Port Hubs': 'Colombo',
+};
 
 const vehicleTypes = [
   {
@@ -98,6 +113,9 @@ function DriverPasswordField({
 }
 
 export default function DriverAuthPage() {
+  const navigate = useNavigate();
+  const { completePasswordLogin } = useAuth();
+
   const [mode, setMode] = useState<AuthMode>('register');
   const [step, setStep] = useState<RegistrationStep>(1);
   const [feedback, setFeedback] = useState('');
@@ -105,8 +123,9 @@ export default function DriverAuthPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
-  const [operatingArea, setOperatingArea] =
-    useState(operatingAreas[0]);
+  const [operatingArea, setOperatingArea] = useState<string>(
+    operatingAreas[0]
+  );
 
   const [vehicleType, setVehicleType] =
     useState<DriverVehicleType>('mini_lorry');
@@ -119,8 +138,8 @@ export default function DriverAuthPage() {
 
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
@@ -198,7 +217,13 @@ export default function DriverAuthPage() {
     setIsSubmitting(true);
 
     try {
-      const district = operatingArea.split(' & ')[0];
+      const district = operatingAreaDistricts[operatingArea];
+
+      if (!district) {
+        setFeedback('Please select a valid operating area.');
+        return;
+      }
+
       const result = await registerDriver({
         role: 'driver',
         fullName: fullName.trim(),
@@ -231,17 +256,54 @@ export default function DriverAuthPage() {
     }
   }
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!loginIdentifier.trim() || !loginPassword) {
-      setFeedback('Enter your email/mobile and password.');
+    if (isLoggingIn) return;
+
+    setFeedback('');
+
+    const normalizedEmail = loginIdentifier.trim().toLowerCase();
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ||
+      normalizedEmail.length > 254
+    ) {
+      setFeedback('Enter a valid email address.');
       return;
     }
 
-    setFeedback(
-      'Login form validation passed. Authentication API integration is pending.'
-    );
+    if (!loginPassword || loginPassword.length > 128) {
+      setFeedback('Enter your password.');
+      return;
+    }
+
+    setIsLoggingIn(true);
+
+    try {
+      const result = await loginWithYm03(
+        {
+          email: normalizedEmail,
+          password: loginPassword,
+        },
+        'driver'
+      );
+
+      completePasswordLogin(
+        result.token,
+        result.user,
+        'driver'
+      );
+
+      setLoginPassword('');
+
+      navigate('/driver/overview', { replace: true });
+    } catch (error) {
+      const loginError = getLoginError(error);
+      setFeedback(loginError.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
   }
 
   return (
@@ -634,13 +696,14 @@ export default function DriverAuthPage() {
                   onSubmit={handleLogin}
                 >
                   <label htmlFor="ym03-driver-login-identifier">
-                    Email or Mobile Number
+                    Email Address
                   </label>
                   <div className="ym03-driver-field">
                     <UserRound size={18} />
                     <input
                       id="ym03-driver-login-identifier"
-                      placeholder="Email or mobile number"
+                      type="email"
+                      placeholder="Enter your email address"
                       value={loginIdentifier}
                       onChange={(e) =>
                         setLoginIdentifier(e.target.value)
@@ -666,17 +729,6 @@ export default function DriverAuthPage() {
                     login
                   />
 
-                  <label className="ym03-driver-agreement">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) =>
-                        setRememberMe(e.target.checked)
-                      }
-                    />
-                    <span>Remember this terminal</span>
-                  </label>
-
                   <div className="ym03-driver-dispatch-label">
                     PROVINCIAL DISPATCH
                   </div>
@@ -684,9 +736,13 @@ export default function DriverAuthPage() {
                   <button
                     type="submit"
                     className="ym03-driver-submit"
+                    disabled={isLoggingIn}
                   >
-                    Log In to Fleet Console
-                    <ArrowRight size={18} />
+                    {isLoggingIn
+                      ? 'Signing In...'
+                      : 'Log In to Fleet Console'}
+
+                    {!isLoggingIn && <ArrowRight size={18} />}
                   </button>
 
                   <p className="ym03-driver-login-switch">

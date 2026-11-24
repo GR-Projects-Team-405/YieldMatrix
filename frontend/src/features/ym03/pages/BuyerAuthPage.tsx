@@ -1,5 +1,7 @@
 
 import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../context/AuthContext';
 import {
   ArrowRight,
   CheckCircle2,
@@ -17,6 +19,10 @@ import {
   registerBuyer,
   getRegistrationError,
 } from '../services/registrationApi';
+import {
+  loginWithYm03,
+  getLoginError,
+} from '../services/loginApi';
 
 type AuthMode = 'signup' | 'login';
 type BuyerType = 'individual' | 'commercial';
@@ -73,6 +79,9 @@ function PasswordField({
 }
 
 export default function BuyerAuthPage() {
+  const navigate = useNavigate();
+  const { completePasswordLogin } = useAuth();
+
   const [mode, setMode] = useState<AuthMode>('signup');
   const [buyerType, setBuyerType] = useState<BuyerType>('commercial');
 
@@ -87,10 +96,10 @@ export default function BuyerAuthPage() {
 
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
 
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   function changeMode(nextMode: AuthMode) {
     setMode(nextMode);
@@ -158,17 +167,54 @@ export default function BuyerAuthPage() {
     }
   }
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!loginIdentifier.trim() || !loginPassword) {
-      setFeedback('Please enter your email/mobile and password.');
+    if (isLoggingIn) return;
+
+    setFeedback('');
+
+    const normalizedEmail = loginIdentifier.trim().toLowerCase();
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ||
+      normalizedEmail.length > 254
+    ) {
+      setFeedback('Enter a valid email address.');
       return;
     }
 
-    setFeedback(
-      'Login form validation passed. Authentication API integration is pending.'
-    );
+    if (!loginPassword || loginPassword.length > 128) {
+      setFeedback('Enter your password.');
+      return;
+    }
+
+    setIsLoggingIn(true);
+
+    try {
+      const result = await loginWithYm03(
+        {
+          email: normalizedEmail,
+          password: loginPassword,
+        },
+        'buyer'
+      );
+
+      completePasswordLogin(
+        result.token,
+        result.user,
+        'buyer'
+      );
+
+      setLoginPassword('');
+
+      navigate('/buyer/overview', { replace: true });
+    } catch (error) {
+      const loginError = getLoginError(error);
+      setFeedback(loginError.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
   }
 
   return (
@@ -487,14 +533,15 @@ export default function BuyerAuthPage() {
                   onSubmit={handleLogin}
                 >
                   <label htmlFor="buyer-login-identifier">
-                    Email Address or Mobile Number
+                    Email Address
                   </label>
 
                   <div className="ym03-buyer-field">
                     <UserRound size={19} />
                     <input
                       id="buyer-login-identifier"
-                      placeholder="Email or mobile number"
+                      type="email"
+                      placeholder="Enter your email address"
                       autoComplete="username"
                       value={loginIdentifier}
                       onChange={(e) =>
@@ -515,23 +562,13 @@ export default function BuyerAuthPage() {
                     login
                   />
 
-                  <label className="ym03-buyer-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) =>
-                        setRememberMe(e.target.checked)
-                      }
-                    />
-                    <span>Stay signed in on this device</span>
-                  </label>
-
                   <button
                     type="submit"
                     className="ym03-buyer-submit"
+                    disabled={isLoggingIn}
                   >
-                    Log In to Shop Dashboard
-                    <ArrowRight size={18} />
+                    {isLoggingIn ? 'Signing In...' : 'Log In to Shop Dashboard'}
+                    {!isLoggingIn && <ArrowRight size={18} />}
                   </button>
 
                   <p className="ym03-buyer-switch">
