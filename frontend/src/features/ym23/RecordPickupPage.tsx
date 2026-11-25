@@ -6,22 +6,13 @@ import { Button } from '../../components/Button';
 import { ContentCard } from '../../components/ContentCard';
 import { EmptyState } from '../../components/EmptyState';
 import { InputField } from '../../components/InputField';
-import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Toast } from '../../components/Toast';
 import { mockPickupStops } from './mockPickupStops';
 import './ym23.css';
 
-type PickupResult = '' | 'completed' | 'partially-collected' | 'unable-to-collect';
-type PickupField = 'quantity' | 'date' | 'time' | 'result';
+type PickupField = 'quantity' | 'date' | 'time';
 type PickupErrors = Partial<Record<PickupField, string>>;
-
-const resultOptions = [
-  { value: '', label: 'Select pickup result', disabled: true },
-  { value: 'completed', label: 'Completed' },
-  { value: 'partially-collected', label: 'Partially Collected' },
-  { value: 'unable-to-collect', label: 'Unable to Collect' },
-];
 
 export default function RecordPickupPage() {
   const { stopId } = useParams<{ stopId: string }>();
@@ -30,8 +21,6 @@ export default function RecordPickupPage() {
   const [quantity, setQuantity] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
-  const [result, setResult] = useState<PickupResult>('');
-  const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<PickupErrors>({});
   const [showToast, setShowToast] = useState(false);
 
@@ -63,7 +52,6 @@ export default function RecordPickupPage() {
     }
     if (!date) nextErrors.date = 'Select the pickup date.';
     if (!time) nextErrors.time = 'Select the pickup time.';
-    if (!result) nextErrors.result = 'Select the pickup result.';
 
     return nextErrors;
   }
@@ -149,14 +137,6 @@ export default function RecordPickupPage() {
               error={errors.quantity}
               onChange={(event) => updateField('quantity', () => setQuantity(event.target.value))}
             />
-            <SelectField
-              label="Pickup result *"
-              options={resultOptions}
-              required
-              value={result}
-              error={errors.result}
-              onChange={(event) => updateField('result', () => setResult(event.target.value as PickupResult))}
-            />
             <InputField
               label="Pickup date *"
               type="date"
@@ -173,19 +153,6 @@ export default function RecordPickupPage() {
               error={errors.time}
               onChange={(event) => updateField('time', () => setTime(event.target.value))}
             />
-            <div className="ym-field ym23-record-notes">
-              <label htmlFor="ym23-record-notes">Driver notes <span>(optional)</span></label>
-              <textarea
-                id="ym23-record-notes"
-                rows={4}
-                placeholder="Add collection notes or describe any problems..."
-                value={notes}
-                onChange={(event) => {
-                  setNotes(event.target.value);
-                  setShowToast(false);
-                }}
-              />
-            </div>
           </div>
         </ContentCard>
 

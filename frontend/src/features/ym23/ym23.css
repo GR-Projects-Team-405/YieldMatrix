@@ -124,11 +124,6 @@
 .ym23-record-form-card .ym-card-heading h2 { font-size: 16px; }
 .ym23-record-form-card .ym-card-heading p { margin-top: 4px; font-size: 11px; }
 .ym23-record-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; }
-.ym23-record-fields .ym-field label span { color: var(--muted); font-weight: 400; }
-.ym23-record-notes { grid-column: 1 / -1; }
-.ym23-record-notes textarea { display: block; width: 100%; min-height: 112px; padding: 12px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
-.ym23-record-notes textarea::placeholder { color: var(--muted); }
-.ym23-record-notes textarea:focus { border-color: var(--green); outline: 2px solid color-mix(in srgb, var(--green) 18%, transparent); outline-offset: 1px; }
 .ym23-record-actions { display: flex; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .ym23-record-actions .ym-button { min-height: 42px; height: 42px; padding: 0 18px; font-size: 12px; }
 .ym23-record-footer { color: var(--muted); font-size: 11px; }
@@ -218,7 +213,6 @@
   .ym23-record-stop-heading { align-items: flex-start; flex-wrap: wrap; }
   .ym23-record-stop-status { width: 100%; justify-items: start; margin-top: 4px; padding: 12px 0 0; border-top: 1px solid var(--border); border-left: 0; }
   .ym23-record-fields { grid-template-columns: minmax(0, 1fr); }
-  .ym23-record-notes { grid-column: auto; }
   .ym23-record-actions { flex-direction: column-reverse; }
   .ym23-record-actions .ym-button { width: 100%; }
   .ym23-history-header { align-items: flex-start; flex-direction: column; }
