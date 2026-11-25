@@ -153,6 +153,89 @@ export async function getPickupStopDetails(req, res, next) {
   } catch (error) { next(error); }
 }
 
+export async function getPickupHistory(req, res, next) {
+  try {
+    const approval = await pool.query(
+      'SELECT id FROM users WHERE id = $1 AND role = $2 AND approval_status = $3',
+      [req.user.id, 'driver', 'approved'],
+    );
+    if (!approval.rows[0]) {
+      return res.status(403).json({ error: 'Account is not approved', requestId: req.requestId });
+    }
+
+    const { rows } = await pool.query(
+      `WITH pickup_event_history AS (
+         SELECT
+           ce.id,
+           ce.allocation_id,
+           ce.trip_id,
+           ce.order_id,
+           ce.actor_id,
+           ce.quantity_kg,
+           ce.occurred_at,
+           ce.recorded_at,
+           SUM(ce.quantity_kg) OVER (
+             PARTITION BY ce.allocation_id
+             ORDER BY ce.occurred_at, ce.recorded_at, ce.id
+             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+           ) AS cumulative_picked_up_kg
+         FROM custody_events ce
+         WHERE ce.event_type = 'pickup'
+           AND ce.quantity_kg > 0
+       )
+       SELECT
+         peh.id AS "eventId",
+         peh.occurred_at AS "occurredAt",
+         peh.quantity_kg::text AS "quantityKg",
+         peh.cumulative_picked_up_kg::text AS "cumulativePickedUpKg",
+         f.name AS "farmName",
+         f.pickup_address AS "pickupAddress",
+         f.district,
+         farmer.name AS "farmerName",
+         c.name AS "cropType",
+         o.id AS "orderId",
+         t.id AS "tripId",
+         ts.id AS "stopId",
+         ts.sequence AS "stopSequence",
+         a.committed_kg::text AS "committedKg",
+         ts.status AS "currentStopStatus"
+       FROM pickup_event_history peh
+       JOIN trips t
+         ON t.id = peh.trip_id AND t.order_id = peh.order_id
+       JOIN orders o
+         ON o.id = peh.order_id
+       JOIN allocations a
+         ON a.id = peh.allocation_id AND a.order_id = peh.order_id
+       LEFT JOIN trip_stops ts
+         ON ts.trip_id = peh.trip_id
+        AND ts.order_id = peh.order_id
+        AND ts.allocation_id = peh.allocation_id
+       JOIN harvest_batches b
+         ON b.id = a.batch_id AND b.farmer_id = a.farmer_id
+       JOIN farms f
+         ON f.id = b.farm_id AND f.farmer_id = b.farmer_id
+       JOIN users farmer
+         ON farmer.id = f.farmer_id
+       JOIN crops c
+         ON c.id = b.crop_id
+       WHERE peh.actor_id = $1
+       ORDER BY peh.occurred_at DESC, peh.recorded_at DESC, peh.id DESC`,
+      [req.user.id],
+    );
+
+    return res.json({
+      records: rows.map((row) => ({
+        ...row,
+        quantityKg: Number(row.quantityKg),
+        cumulativePickedUpKg: Number(row.cumulativePickedUpKg),
+        committedKg: Number(row.committedKg),
+        currentStopStatus: row.currentStopStatus ?? null,
+      })),
+      requestId: req.requestId,
+    });
+  } catch (error) { next(error); }
+}
+
 export async function recordPickup(req, res, next) {
   const stopId = req.params.stopId;
   if (!uuidPattern.test(stopId)) {
