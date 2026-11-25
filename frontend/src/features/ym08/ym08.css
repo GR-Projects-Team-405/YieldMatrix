@@ -1,0 +1,535 @@
+.ym-harvest-page {
+  display: grid;
+  gap: 24px;
+  color: var(--text);
+}
+
+.ym-harvest-page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ym-harvest-page-heading h2 {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.ym-harvest-page-heading p {
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.ym-harvest-add-button {
+  white-space: nowrap;
+}
+
+.ym-harvest-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ym-harvest-list-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  min-width: 0;
+}
+
+.ym-harvest-list-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.ym-harvest-list-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ym-harvest-list-title h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ym-harvest-list-title > span {
+  background: var(--canvas);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.ym-harvest-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ym-harvest-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 10px;
+  height: 44px;
+  padding: 0 12px;
+  min-width: 220px;
+}
+
+.ym-harvest-search input {
+  background: transparent;
+  color: var(--text);
+  border: none;
+  outline: none;
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.ym-harvest-search input:focus-visible {
+  outline: none;
+}
+
+.ym-harvest-status-filter {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 140px;
+}
+
+.ym-harvest-table th {
+  white-space: nowrap;
+}
+
+.ym-harvest-table td {
+  vertical-align: middle;
+}
+
+.ym-harvest-batch-id {
+  font-weight: 600;
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+
+.ym-harvest-crop-name {
+  font-weight: 600;
+}
+
+.ym-harvest-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ym-harvest-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ym-harvest-status--completed {
+  color: var(--accent-text);
+  background: var(--soft);
+}
+
+.ym-harvest-status--scheduled {
+  color: #245b80;
+  background: #e8f2f8;
+}
+
+.ym-harvest-status--pending {
+  color: #854500;
+  background: #fff0e3;
+}
+
+.ym-harvest-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ym-harvest-actions button {
+  height: 34px;
+  width: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.ym-harvest-actions button:hover {
+  background: var(--canvas);
+}
+
+.ym-harvest-empty {
+  text-align: center;
+  padding: 32px 12px;
+  color: var(--muted);
+}
+
+.ym-harvest-empty p {
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.ym-harvest-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ym-harvest-page-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ym-harvest-page-buttons .ym-button {
+  height: 38px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.ym-harvest-page-number {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .ym-harvest-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .ym-harvest-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .ym-harvest-list-card {
+    padding: 14px;
+  }
+
+  .ym-harvest-list-toolbar {
+    align-items: stretch;
+  }
+
+  .ym-harvest-filters {
+    width: 100%;
+  }
+
+  .ym-harvest-search {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .ym-harvest-status-filter {
+    min-width: 120px;
+    max-width: 150px;
+  }
+
+  .ym-harvest-pagination {
+    align-items: flex-start;
+  }
+}
+
+:root[data-theme='dark'] .ym-harvest-status--scheduled {
+  color: #b5ddf8;
+  background: #213c4e;
+}
+
+:root[data-theme='dark'] .ym-harvest-status--pending {
+  color: #ffd2a1;
+  background: #483322;
+}
+.ym-harvest-view-switch {
+  display: inline-flex;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+  margin-bottom: 16px;
+}
+
+.ym-harvest-view-switch a {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.ym-harvest-view-switch a.active {
+  background: var(--soft);
+  color: var(--accent-text);
+}
+
+.ym-harvest-cal-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ym-harvest-cal-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ym-harvest-cal-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.ym-harvest-cal-legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.ym-harvest-cal-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ym-harvest-cal-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.ym-harvest-cal-dot--completed { background: var(--accent-text); }
+.ym-harvest-cal-dot--scheduled { background: #245b80; }
+.ym-harvest-cal-dot--pending { background: #854500; }
+
+.ym-harvest-cal-scroll {
+  overflow-x: auto;
+}
+
+.ym-harvest-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.ym-harvest-cal-head {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: var(--muted);
+  padding: 8px 0;
+  background: var(--canvas);
+  border-radius: 8px;
+}
+
+.ym-harvest-cal-cell {
+  min-height: 110px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 8px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ym-harvest-cal-empty {
+  border: none;
+  background: transparent;
+}
+
+.ym-harvest-cal-day {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ym-harvest-cal-today {
+  border: 2px solid var(--accent-text);
+}
+
+.ym-harvest-cal-today .ym-harvest-cal-day {
+  color: var(--accent-text);
+}
+
+.ym-harvest-cal-event {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--accent-text);
+  background: var(--soft);
+}
+
+.ym-harvest-cal-event--scheduled { color: #245b80; background: #e8f2f8; }
+.ym-harvest-cal-event--pending { color: #854500; background: #fff0e3; }
+
+:root[data-theme='dark'] .ym-harvest-cal-event--scheduled { color: #b5ddf8; background: #213c4e; }
+:root[data-theme='dark'] .ym-harvest-cal-event--pending { color: #ffd2a1; background: #483322; }
+
+@media (max-width: 650px) {
+  .ym-harvest-cal-cell { min-height: 90px; }
+}
+.ym-harvest-switch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ym-harvest-switch-row .ym-harvest-view-switch {
+  margin-bottom: 0;
+}
+
+.ym-harvest-add-link {
+  padding: 11px 18px;
+  border-radius: 10px;
+  background: var(--accent-text);
+  color: var(--surface);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+}
+.ym-harvest-stats .ym-harvest-list-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ym-harvest-stats .ym-harvest-list-card small {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.ym-harvest-stats .ym-harvest-list-card h3 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ym-harvest-table {
+  border-collapse: collapse;
+}
+
+.ym-harvest-table th {
+  padding: 12px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--canvas);
+}
+
+.ym-harvest-table td {
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.ym-harvest-actions {
+  white-space: nowrap;
+}
+
+.ym-harvest-actions a {
+  text-decoration: none;
+}
+
+.ym-harvest-actions button {
+  width: auto;
+  min-width: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+a.ym-harvest-cal-event {
+  display: block;
+  text-decoration: none;
+}
+
+a.ym-harvest-cal-event:hover {
+  filter: brightness(0.95);
+}
+.ym-harvest-details {
+  display: grid;
+  gap: 20px;
+}
+
+.ym-harvest-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+
+.ym-harvest-details-grid > div {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.ym-harvest-details-grid dt {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.ym-harvest-details-grid dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
