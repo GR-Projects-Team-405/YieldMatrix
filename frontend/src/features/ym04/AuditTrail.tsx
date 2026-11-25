@@ -20,6 +20,10 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
+import { Button } from '../../components/Button';
+import { StatusBadge } from '../../components/StatusBadge';
+import { EmptyState } from '../../components/EmptyState';
+import { Table, TableRow } from '../../components/Table';
 import { Toast } from '../../components/Toast';
 import { AuditEventItem, GENERATED_AUDIT_EVENTS } from './auditMockData';
 
@@ -401,8 +405,9 @@ export default function AuditTrail() {
       {/* 4. Action Bar / Refresh Button                                     */}
       {/* ------------------------------------------------------------------ */}
       <div className="ym04-audit-action-bar">
-        <button
+        <Button
           type="button"
+          variant="outline"
           className="ym04-btn-refresh"
           onClick={handleRefresh}
           disabled={isRefreshing}
@@ -410,7 +415,7 @@ export default function AuditTrail() {
         >
           <RotateCw size={15} className={isRefreshing ? 'ym04-spin' : ''} aria-hidden="true" />
           <span>Refresh</span>
-        </button>
+        </Button>
       </div>
 
       {/* ------------------------------------------------------------------ */}
@@ -418,112 +423,101 @@ export default function AuditTrail() {
       {/* ------------------------------------------------------------------ */}
       <section className="ym04-audit-card" aria-label="Audit Events List">
         <div className="ym04-table-wrap">
-          <table className="ym04-audit-table">
-            <thead>
-              <tr>
-                <th scope="col">Event ID</th>
-                <th scope="col">Actor</th>
-                <th scope="col">Action</th>
-                <th scope="col">Target</th>
-                <th scope="col">Date &amp; Time</th>
-                <th scope="col">Status</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedEvents.length > 0 ? (
-                paginatedEvents.map((item) => (
-                  <tr key={item.id}>
-                    {/* Event ID */}
-                    <td
-                      className="ym04-cell-event-id"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => handleViewDetails(item)}
-                      title={`View event ${item.id} details`}
-                    >
-                      {item.id}
-                    </td>
+          <Table
+            headers={['Event ID', 'Actor', 'Action', 'Target', 'Date & Time', 'Status', 'Actions']}
+            className="ym04-audit-table"
+            aria-label="Audit Events List"
+          >
+            {paginatedEvents.length > 0 ? (
+              paginatedEvents.map((item) => (
+                <TableRow key={item.id}>
+                  {/* Event ID */}
+                  <td
+                    className="ym04-cell-event-id"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleViewDetails(item)}
+                    title={`View event ${item.id} details`}
+                  >
+                    {item.id}
+                  </td>
 
-                    {/* Actor */}
-                    <td>
-                      <div className="ym04-cell-actor">
-                        <span className="ym04-actor-avatar" aria-hidden="true">
-                          {item.actorAvatar}
-                        </span>
-                        <span>{item.actor}</span>
-                      </div>
-                    </td>
-
-                    {/* Action */}
-                    <td>
-                      <span
-                        className={`ym04-badge-action ym04-badge-action--${item.action.toLowerCase()}`}
-                      >
-                        {item.action}
+                  {/* Actor */}
+                  <td>
+                    <div className="ym04-cell-actor">
+                      <span className="ym04-actor-avatar" aria-hidden="true">
+                        {item.actorAvatar}
                       </span>
-                    </td>
+                      <span>{item.actor}</span>
+                    </div>
+                  </td>
 
-                    {/* Target */}
-                    <td>
-                      <div className="ym04-cell-target">
-                        {item.targetType === 'Crop' ? (
-                          <Sprout size={16} className="ym04-target-icon ym04-target-icon--crop" aria-hidden="true" />
-                        ) : item.targetType === 'Grade' ? (
-                          <Tag size={15} className="ym04-target-icon ym04-target-icon--grade" aria-hidden="true" />
-                        ) : (
-                          <Info size={15} className="ym04-target-icon ym04-target-icon--system" aria-hidden="true" />
-                        )}
-                        <span>{item.target}</span>
-                      </div>
-                    </td>
+                  {/* Action */}
+                  <td>
+                    <span
+                      className={`ym04-badge-action ym04-badge-action--${item.action.toLowerCase()}`}
+                    >
+                      {item.action}
+                    </span>
+                  </td>
 
-                    {/* Date & Time */}
-                    <td className="ym04-cell-date">{item.dateTime}</td>
+                  {/* Target */}
+                  <td>
+                    <div className="ym04-cell-target">
+                      {item.targetType === 'Crop' ? (
+                        <Sprout size={16} className="ym04-target-icon ym04-target-icon--crop" aria-hidden="true" />
+                      ) : item.targetType === 'Grade' ? (
+                        <Tag size={15} className="ym04-target-icon ym04-target-icon--grade" aria-hidden="true" />
+                      ) : (
+                        <Info size={15} className="ym04-target-icon ym04-target-icon--system" aria-hidden="true" />
+                      )}
+                      <span>{item.target}</span>
+                    </div>
+                  </td>
 
-                    {/* Status */}
-                    <td>
-                      <div className="ym04-cell-status ym04-cell-status--success">
-                        <span className="ym04-status-circle" aria-hidden="true" />
-                        <span>{item.status}</span>
-                      </div>
-                    </td>
+                  {/* Date & Time */}
+                  <td className="ym04-cell-date">{item.dateTime}</td>
 
-                    {/* Actions */}
-                    <td>
-                      <button
+                  {/* Status */}
+                  <td>
+                    <StatusBadge status={item.status} />
+                  </td>
+
+                  {/* Actions */}
+                  <td>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="ym04-btn-view-details"
+                      onClick={() => handleViewDetails(item)}
+                      aria-label={`View audit details for event ${item.id}`}
+                    >
+                      View Details
+                    </Button>
+                  </td>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <td colSpan={7}>
+                  <EmptyState
+                    title="No audit events match your filters"
+                    description="Try clearing your search terms or resetting the action, actor, or date filters to view all audit records."
+                    action={
+                      <Button
                         type="button"
-                        className="ym04-btn-view-details"
-                        onClick={() => handleViewDetails(item)}
-                        aria-label={`View audit details for event ${item.id}`}
-                      >
-                        View Details
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7}>
-                    <div className="ym04-table-empty">
-                      <AlertCircle size={36} color="var(--muted)" aria-hidden="true" />
-                      <p className="ym04-empty-title">No audit events match your filters</p>
-                      <p className="ym04-empty-desc">
-                        Try clearing your search terms or resetting the action, actor, or date filters to view all audit records.
-                      </p>
-                      <button
-                        type="button"
+                        variant="outline"
                         className="ym04-reset-filter-btn"
                         onClick={handleResetFilters}
                       >
                         <RefreshCw size={14} aria-hidden="true" />
                         <span>Reset Filters</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                      </Button>
+                    }
+                  />
+                </td>
+              </TableRow>
+            )}
+          </Table>
         </div>
 
         {/* ------------------------------------------------------------------ */}

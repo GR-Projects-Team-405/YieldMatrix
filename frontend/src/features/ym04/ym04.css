@@ -2596,6 +2596,153 @@
   background: #2d6b49;
 }
 
+/* ==========================================================================
+   Shared Components Integration & Theme Adaptations for YM04
+   Ensures Button, Table, InputField, SelectField, StatusBadge, Alert,
+   EmptyState, ConfirmDialog, and Toast align seamlessly with Figma design.
+   ========================================================================== */
+
+/* Button Variant & Dimension Adapters */
+.ym-button.ym04-btn-view,
+.ym-button.ym04-btn-view-details {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  min-height: auto;
+}
+
+.ym-button.ym04-btn-add {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  min-height: auto;
+}
+
+.ym-button.ym04-btn-refresh,
+.ym-button.ym04-btn-back {
+  height: 38px;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  min-height: auto;
+}
+
+.ym-button.ym04-panel-btn-cancel,
+.ym-button.ym04-panel-btn-save {
+  height: 40px;
+  padding: 0 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  min-height: auto;
+}
+
+.ym-button.ym04-reset-filter-btn {
+  height: 34px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  min-height: auto;
+}
+
+/* Shared EmptyState in Tables */
+.ym04-table td .ym-empty-state,
+.ym04-audit-table td .ym-empty-state {
+  background: transparent;
+  border: none;
+  padding: 36px 20px;
+  box-shadow: none;
+}
+
+.ym04-table td .ym-empty-state h3,
+.ym04-audit-table td .ym-empty-state h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ym04-table td .ym-empty-state p,
+.ym04-audit-table td .ym-empty-state p {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 440px;
+  margin: 6px auto 0 auto;
+}
+
+/* Shared InputField & SelectField in YM04 Panels */
+.ym04-form-group .ym-field {
+  gap: 6px;
+}
+
+.ym04-form-group .ym-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ym04-form-group .ym-field input,
+.ym04-form-group .ym-field select {
+  height: 42px;
+  border-radius: 8px;
+  font-size: 13px;
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.ym04-form-group .ym-field input:focus,
+.ym04-form-group .ym-field select:focus {
+  border-color: var(--accent-text);
+  outline: none;
+}
+
+:root[data-theme='dark'] .ym04-form-group .ym-field input,
+:root[data-theme='dark'] .ym04-form-group .ym-field select {
+  background: var(--surface);
+  border-color: var(--control-border);
+  color: var(--text);
+}
+
+/* Shared Alert inside Form and Modals */
+.ym04-form-alert-wrap {
+  width: 100%;
+}
+
+.ym04-form-alert-wrap .ym-alert {
+  padding: 10px 14px;
+  font-size: 13px;
+  border-radius: 8px;
+  width: 100%;
+}
+
+/* StatusBadge in Tables and Cards */
+.ym-status {
+  align-items: center;
+  gap: 6px;
+  line-height: 1.2;
+}
+
+/* Modal and ConfirmDialog Enhancements */
+dialog.ym-confirm-dialog {
+  z-index: 1000;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28);
+}
+
+dialog.ym-confirm-dialog::backdrop {
+  background: rgba(18, 30, 22, 0.7);
+  backdrop-filter: blur(2px);
+}
+
+
 
 
 

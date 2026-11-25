@@ -17,6 +17,13 @@ import {
   FileText,
   AlertCircle
 } from 'lucide-react';
+import { Button } from '../../components/Button';
+import { InputField } from '../../components/InputField';
+import { StatusBadge } from '../../components/StatusBadge';
+import { Alert } from '../../components/Alert';
+import { EmptyState } from '../../components/EmptyState';
+import { Table, TableRow } from '../../components/Table';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
 
 export interface GradeItem {
@@ -143,6 +150,15 @@ export default function GradeManagement() {
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Confirmation dialog state for changing status to Inactive
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [pendingGradeUpdate, setPendingGradeUpdate] = useState<{
+    id: string;
+    name: string;
+    description: string;
+    status: 'Inactive';
+  } | null>(null);
+
   // Summary counts
   const totalGrades = grades.length;
   const activeGrades = useMemo(() => grades.filter(g => g.status === 'Active').length, [grades]);
@@ -218,6 +234,19 @@ export default function GradeManagement() {
     setFormError(null);
 
     if (panelMode === 'edit' && selectedGradeId) {
+      // Check if deactivating an active grade
+      const currentItem = grades.find(g => g.id === selectedGradeId);
+      if (currentItem && currentItem.status === 'Active' && formStatus === 'Inactive') {
+        setPendingGradeUpdate({
+          id: selectedGradeId,
+          name: formName.trim(),
+          description: formDescription.trim() || 'Produce quality grade registered in YieldMatrix.',
+          status: 'Inactive'
+        });
+        setShowDeactivateConfirm(true);
+        return;
+      }
+
       // Update existing grade
       setGrades(prev =>
         prev.map(item => {
@@ -251,6 +280,28 @@ export default function GradeManagement() {
       setToastMessage(`Grade "${newGrade.name}" (${newGrade.id}) added successfully!`);
       handleOpenAdd();
     }
+  };
+
+  // Confirm deactivation execution
+  const handleConfirmDeactivate = () => {
+    if (!pendingGradeUpdate) return;
+    setGrades(prev =>
+      prev.map(item => {
+        if (item.id === pendingGradeUpdate.id) {
+          return {
+            ...item,
+            name: pendingGradeUpdate.name,
+            description: pendingGradeUpdate.description,
+            status: 'Inactive'
+          };
+        }
+        return item;
+      })
+    );
+    setToastMessage(`Grade "${pendingGradeUpdate.name}" set to Inactive successfully.`);
+    setShowDeactivateConfirm(false);
+    setPendingGradeUpdate(null);
+    handleOpenAdd();
   };
 
   return (
@@ -405,15 +456,16 @@ export default function GradeManagement() {
               <Ribbon className="ym04-section-icon" size={22} strokeWidth={2.2} aria-hidden="true" />
               <h2 id="heading-grade-list" className="ym04-section-title">Grade List</h2>
             </div>
-            <button
+            <Button
               type="button"
+              variant="primary"
               className="ym04-btn-add"
               onClick={handleOpenAdd}
               aria-label="Add new grade"
             >
               <Plus size={16} aria-hidden="true" />
               <span>Add Grade</span>
-            </button>
+            </Button>
           </div>
 
           {/* Search Bar & Status Filter */}
@@ -462,92 +514,76 @@ export default function GradeManagement() {
 
           {/* Table */}
           <div className="ym04-table-wrap">
-            <table className="ym04-table" aria-label="Grade List Table">
-              <thead>
-                <tr>
-                  <th scope="col" style={{ width: '15%' }}>Grade ID</th>
-                  <th scope="col" style={{ width: '22%' }}>Grade Name</th>
-                  <th scope="col" style={{ width: '27%' }}>Description</th>
-                  <th scope="col" style={{ width: '16%' }}>Status</th>
-                  <th scope="col" style={{ width: '14%' }}>Created Date</th>
-                  <th scope="col" style={{ width: '6%', textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedGrades.length > 0 ? (
-                  paginatedGrades.map((grade) => (
-                    <tr
-                      key={grade.id}
-                      className={selectedGradeId === grade.id ? 'ym04-row--selected' : ''}
-                    >
-                      <td className="ym04-cell-crop-id">{grade.id}</td>
-                      <td className="ym04-cell-crop-name-bold">{grade.name}</td>
-                      <td className="ym04-cell-grade-desc">{grade.description}</td>
-                      <td>
-                        <span
-                          className={`ym04-badge-status ${
-                            grade.status === 'Active'
-                              ? 'ym04-badge-status--active'
-                              : 'ym04-badge-status--inactive'
-                          }`}
+            <Table
+              headers={['Grade ID', 'Grade Name', 'Description', 'Status', 'Created Date', 'Actions']}
+              className="ym04-table"
+              aria-label="Grade List Table"
+            >
+              {paginatedGrades.length > 0 ? (
+                paginatedGrades.map((grade) => (
+                  <TableRow
+                    key={grade.id}
+                    className={selectedGradeId === grade.id ? 'ym04-row--selected' : ''}
+                  >
+                    <td className="ym04-cell-crop-id">{grade.id}</td>
+                    <td className="ym04-cell-crop-name-bold">{grade.name}</td>
+                    <td className="ym04-cell-grade-desc">{grade.description}</td>
+                    <td>
+                      <StatusBadge status={grade.status} />
+                    </td>
+                    <td className="ym04-cell-date">{grade.createdDate}</td>
+                    <td>
+                      <div className="ym04-action-icons-wrap">
+                        <button
+                          type="button"
+                          className="ym04-icon-action-btn"
+                          onClick={() => handleOpenView(grade)}
+                          title={`View details for ${grade.name}`}
+                          aria-label={`View details for ${grade.name}`}
                         >
-                          <span className="ym04-status-dot" aria-hidden="true" />
-                          <span>{grade.status}</span>
-                        </span>
-                      </td>
-                      <td className="ym04-cell-date">{grade.createdDate}</td>
-                      <td>
-                        <div className="ym04-action-icons-wrap">
-                          <button
-                            type="button"
-                            className="ym04-icon-action-btn"
-                            onClick={() => handleOpenView(grade)}
-                            title={`View details for ${grade.name}`}
-                            aria-label={`View details for ${grade.name}`}
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            className="ym04-icon-action-btn"
-                            onClick={() => handleOpenEdit(grade)}
-                            title={`Edit ${grade.name}`}
-                            aria-label={`Edit ${grade.name}`}
-                          >
-                            <SquarePen size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6}>
-                      <div className="ym04-table-empty">
-                        <p className="ym04-empty-title">No grades found</p>
-                        <p className="ym04-empty-desc">
-                          {searchQuery || statusFilter !== 'All'
-                            ? 'No produce grades match your active filter criteria. Try clearing search or status filters.'
-                            : 'No produce grade records available.'}
-                        </p>
-                        {(searchQuery || statusFilter !== 'All') && (
-                          <button
-                            type="button"
-                            className="ym04-btn-view"
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="ym04-icon-action-btn"
+                          onClick={() => handleOpenEdit(grade)}
+                          title={`Edit ${grade.name}`}
+                          aria-label={`Edit ${grade.name}`}
+                        >
+                          <SquarePen size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <td colSpan={6}>
+                    <EmptyState
+                      title="No grades found"
+                      description={
+                        searchQuery || statusFilter !== 'All'
+                          ? 'No produce grades match your active filter criteria. Try clearing search or status filters.'
+                          : 'No produce grade records available.'
+                      }
+                      action={
+                        (searchQuery || statusFilter !== 'All') ? (
+                          <Button
+                            variant="outline"
                             onClick={() => {
                               setSearchQuery('');
                               setStatusFilter('All');
                             }}
                           >
                             Reset Filters
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                          </Button>
+                        ) : undefined
+                      }
+                    />
+                  </td>
+                </TableRow>
+              )}
+            </Table>
           </div>
 
           {/* Pagination Bar */}
@@ -634,9 +670,8 @@ export default function GradeManagement() {
 
           {/* Error Banner */}
           {formError && (
-            <div className="ym04-form-alert" role="alert">
-              <AlertCircle size={16} />
-              <span>{formError}</span>
+            <div className="ym04-form-alert-wrap">
+              <Alert type="error">{formError}</Alert>
             </div>
           )}
 
@@ -650,15 +685,8 @@ export default function GradeManagement() {
                 </div>
                 <div className="ym04-detail-item">
                   <span className="ym04-detail-label">Status</span>
-                  <span
-                    className={`ym04-badge-status ${
-                      formStatus === 'Active'
-                        ? 'ym04-badge-status--active'
-                        : 'ym04-badge-status--inactive'
-                    }`}
-                  >
-                    <span className="ym04-status-dot" aria-hidden="true" />
-                    <span>{formStatus}</span>
+                  <span className="ym04-detail-value">
+                    <StatusBadge status={formStatus} />
                   </span>
                 </div>
                 <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
@@ -672,20 +700,22 @@ export default function GradeManagement() {
               </div>
 
               <div className="ym04-panel-actions">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   className="ym04-panel-btn-cancel"
                   onClick={handleClosePanel}
                 >
                   Close
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="primary"
                   className="ym04-panel-btn-save"
                   onClick={() => setPanelMode('edit')}
                 >
                   Edit This Grade
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -693,13 +723,8 @@ export default function GradeManagement() {
             <form className="ym04-crop-form" onSubmit={handleSaveGrade}>
               {/* Field 1: Grade Name */}
               <div className="ym04-form-group">
-                <label htmlFor="grade-name-input" className="ym04-form-label">
-                  Grade Name <span className="ym04-required-star">*</span>
-                </label>
-                <input
-                  id="grade-name-input"
-                  type="text"
-                  className="ym04-form-input"
+                <InputField
+                  label="Grade Name"
                   placeholder="Enter grade name"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
@@ -756,19 +781,21 @@ export default function GradeManagement() {
 
               {/* Action Buttons */}
               <div className="ym04-panel-actions">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   className="ym04-panel-btn-cancel"
                   onClick={handleClosePanel}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
                   className="ym04-panel-btn-save"
                 >
                   Save Grade
-                </button>
+                </Button>
               </div>
             </form>
           )}
@@ -831,6 +858,20 @@ export default function GradeManagement() {
           </button>
         </div>
       </section>
+
+      {/* Status Deactivation Confirmation Dialog */}
+      <ConfirmDialog
+        open={showDeactivateConfirm}
+        title="Deactivate Quality Grade"
+        description={`Are you sure you want to deactivate "${pendingGradeUpdate?.name}"? Inactive grades cannot be assigned to produce lots.`}
+        simulationNote="This action can be undone by editing the grade and setting status back to Active."
+        confirmLabel="Deactivate"
+        onCancel={() => {
+          setShowDeactivateConfirm(false);
+          setPendingGradeUpdate(null);
+        }}
+        onConfirm={handleConfirmDeactivate}
+      />
 
       {/* Toast Notification */}
       {toastMessage && (

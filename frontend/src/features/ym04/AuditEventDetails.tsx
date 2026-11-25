@@ -18,6 +18,10 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { getAuditEventById, AuditEventItem } from './auditMockData';
+import { Button } from '../../components/Button';
+import { StatusBadge } from '../../components/StatusBadge';
+import { Alert } from '../../components/Alert';
+import { Table, TableRow } from '../../components/Table';
 import { Toast } from '../../components/Toast';
 
 export default function AuditEventDetails() {
@@ -66,15 +70,16 @@ export default function AuditEventDetails() {
               <p className="ym04-subtitle">View detailed information about this audit event.</p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="outline"
             className="ym04-btn-back"
             onClick={handleBack}
             aria-label="Back to Audit Trail"
           >
             <ArrowLeft size={16} aria-hidden="true" />
             <span>Back to Audit Trail</span>
-          </button>
+          </Button>
         </div>
 
         <div className="ym04-not-found-card">
@@ -82,18 +87,18 @@ export default function AuditEventDetails() {
             <AlertTriangle size={36} />
           </div>
           <h2 className="ym04-not-found-title">Audit Event Not Found</h2>
-          <p className="ym04-not-found-desc">
-            No audit event could be found matching ID <strong>{eventId || 'unknown'}</strong>.
-            The event might have been archived or the ID is incorrect.
-          </p>
-          <button
+          <Alert type="error">
+            No audit event could be found matching ID <strong>{eventId || 'unknown'}</strong>. The event might have been archived or the ID is incorrect.
+          </Alert>
+          <Button
             type="button"
+            variant="primary"
             className="ym04-btn-back-primary"
             onClick={handleBack}
           >
             <ArrowLeft size={16} aria-hidden="true" />
             <span>Back to Audit Trail</span>
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -124,15 +129,16 @@ export default function AuditEventDetails() {
           </div>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="outline"
           className="ym04-btn-back"
           onClick={handleBack}
           aria-label="Back to Audit Trail"
         >
           <ArrowLeft size={16} aria-hidden="true" />
           <span>Back to Audit Trail</span>
-        </button>
+        </Button>
       </header>
 
       {/* ------------------------------------------------------------------ */}
@@ -258,29 +264,19 @@ export default function AuditEventDetails() {
         <p className="ym04-summary-action-text">{actionSummaryText}</p>
 
         <div className="ym04-table-wrap">
-          <table className="ym04-summary-table">
-            <thead>
-              <tr>
-                <th scope="col">Target Record ID</th>
-                <th scope="col">{targetLabel}</th>
-                <th scope="col">Category</th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="ym04-cell-record-id">{recordId}</td>
-                <td>{event.target}</td>
-                <td>{targetCategory}</td>
-                <td>
-                  <div className="ym04-cell-status ym04-cell-status--success">
-                    <span className="ym04-status-circle" aria-hidden="true" />
-                    <span>{event.recordStatus || 'Active'}</span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <Table
+            headers={['Target Record ID', targetLabel, 'Category', 'Status']}
+            className="ym04-summary-table"
+          >
+            <TableRow>
+              <td className="ym04-cell-record-id">{recordId}</td>
+              <td>{event.target}</td>
+              <td>{targetCategory}</td>
+              <td>
+                <StatusBadge status={event.recordStatus || 'Active'} />
+              </td>
+            </TableRow>
+          </Table>
         </div>
       </section>
 
@@ -308,13 +304,7 @@ export default function AuditEventDetails() {
                         <span className="ym04-kv-colon">:</span>
                         <span className="ym04-kv-val">
                           {key === 'Status' ? (
-                            <span className="ym04-status-inline">
-                              <span
-                                className={`ym04-status-circle ${val === 'Active' ? 'ym04-status-circle--active' : 'ym04-status-circle--inactive'}`}
-                                aria-hidden="true"
-                              />
-                              {val}
-                            </span>
+                            <StatusBadge status={val} />
                           ) : (
                             val
                           )}
@@ -349,13 +339,7 @@ export default function AuditEventDetails() {
                         <span className="ym04-kv-colon">:</span>
                         <span className="ym04-kv-val">
                           {key === 'Status' ? (
-                            <span className="ym04-status-inline">
-                              <span
-                                className={`ym04-status-circle ${val === 'Active' ? 'ym04-status-circle--active' : 'ym04-status-circle--inactive'}`}
-                                aria-hidden="true"
-                              />
-                              {val}
-                            </span>
+                            <StatusBadge status={val} />
                           ) : (
                             val
                           )}
@@ -379,10 +363,7 @@ export default function AuditEventDetails() {
                       <span className="ym04-kv-key">Status</span>
                       <span className="ym04-kv-colon">:</span>
                       <span className="ym04-kv-val">
-                        <span className="ym04-status-inline">
-                          <span className="ym04-status-circle ym04-status-circle--active" aria-hidden="true" />
-                          {event.recordStatus || 'Active'}
-                        </span>
+                        <StatusBadge status={event.recordStatus || 'Active'} />
                       </span>
                     </div>
                   </div>

@@ -16,6 +16,14 @@ import {
   ShieldCheck,
   AlertCircle
 } from 'lucide-react';
+import { Button } from '../../components/Button';
+import { InputField } from '../../components/InputField';
+import { SelectField } from '../../components/SelectField';
+import { StatusBadge } from '../../components/StatusBadge';
+import { Alert } from '../../components/Alert';
+import { EmptyState } from '../../components/EmptyState';
+import { Table, TableRow } from '../../components/Table';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
 
 export interface CropItem {
@@ -304,6 +312,16 @@ export default function CropManagement() {
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Confirmation dialog state for changing status to Inactive
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [pendingCropUpdate, setPendingCropUpdate] = useState<{
+    id: string;
+    name: string;
+    category: CropItem['category'];
+    description: string;
+    status: 'Inactive';
+  } | null>(null);
+
   // Summary counts
   const totalCrops = crops.length;
   const activeCrops = useMemo(() => crops.filter(c => c.status === 'Active').length, [crops]);
@@ -386,6 +404,20 @@ export default function CropManagement() {
     setFormError(null);
 
     if (panelMode === 'edit' && selectedCropId) {
+      // Check if deactivating an active crop
+      const currentItem = crops.find(c => c.id === selectedCropId);
+      if (currentItem && currentItem.status === 'Active' && formStatus === 'Inactive') {
+        setPendingCropUpdate({
+          id: selectedCropId,
+          name: formName.trim(),
+          category: formCategory as CropItem['category'],
+          description: formDescription.trim() || 'Agricultural commodity registered in YieldMatrix.',
+          status: 'Inactive'
+        });
+        setShowDeactivateConfirm(true);
+        return;
+      }
+
       // Update existing crop
       setCrops(prev =>
         prev.map(item => {
@@ -420,6 +452,29 @@ export default function CropManagement() {
       setToastMessage(`Crop "${newCrop.name}" (${newCrop.id}) added successfully!`);
       handleOpenAdd();
     }
+  };
+
+  // Confirm deactivation execution
+  const handleConfirmDeactivate = () => {
+    if (!pendingCropUpdate) return;
+    setCrops(prev =>
+      prev.map(item => {
+        if (item.id === pendingCropUpdate.id) {
+          return {
+            ...item,
+            name: pendingCropUpdate.name,
+            category: pendingCropUpdate.category,
+            description: pendingCropUpdate.description,
+            status: 'Inactive'
+          };
+        }
+        return item;
+      })
+    );
+    setToastMessage(`Crop "${pendingCropUpdate.name}" set to Inactive successfully.`);
+    setShowDeactivateConfirm(false);
+    setPendingCropUpdate(null);
+    handleOpenAdd();
   };
 
   return (
@@ -574,15 +629,16 @@ export default function CropManagement() {
               <Sprout className="ym04-section-icon" size={22} aria-hidden="true" />
               <h2 id="heading-crop-list" className="ym04-section-title">Crop List</h2>
             </div>
-            <button
+            <Button
               type="button"
+              variant="primary"
               className="ym04-btn-add"
               onClick={handleOpenAdd}
               aria-label="Add new crop"
             >
               <Plus size={16} aria-hidden="true" />
               <span>Add Crop</span>
-            </button>
+            </Button>
           </div>
 
           {/* Search Bar & Status Filter */}
@@ -631,94 +687,78 @@ export default function CropManagement() {
 
           {/* Table */}
           <div className="ym04-table-wrap">
-            <table className="ym04-table" aria-label="Crop List Table">
-              <thead>
-                <tr>
-                  <th scope="col" style={{ width: '15%' }}>Crop ID</th>
-                  <th scope="col" style={{ width: '22%' }}>Crop Name</th>
-                  <th scope="col" style={{ width: '18%' }}>Category</th>
-                  <th scope="col" style={{ width: '18%' }}>Status</th>
-                  <th scope="col" style={{ width: '17%' }}>Created Date</th>
-                  <th scope="col" style={{ width: '10%', textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedCrops.length > 0 ? (
-                  paginatedCrops.map((crop) => (
-                    <tr
-                      key={crop.id}
-                      className={selectedCropId === crop.id ? 'ym04-row--selected' : ''}
-                    >
-                      <td className="ym04-cell-crop-id">{crop.id}</td>
-                      <td className="ym04-cell-crop-name-bold">{crop.name}</td>
-                      <td>
-                        <span className="ym04-badge-category">{crop.category}</span>
-                      </td>
-                      <td>
-                        <span
-                          className={`ym04-badge-status ${
-                            crop.status === 'Active'
-                              ? 'ym04-badge-status--active'
-                              : 'ym04-badge-status--inactive'
-                          }`}
+            <Table
+              headers={['Crop ID', 'Crop Name', 'Category', 'Status', 'Created Date', 'Actions']}
+              className="ym04-table"
+              aria-label="Crop List Table"
+            >
+              {paginatedCrops.length > 0 ? (
+                paginatedCrops.map((crop) => (
+                  <TableRow
+                    key={crop.id}
+                    className={selectedCropId === crop.id ? 'ym04-row--selected' : ''}
+                  >
+                    <td className="ym04-cell-crop-id">{crop.id}</td>
+                    <td className="ym04-cell-crop-name-bold">{crop.name}</td>
+                    <td>
+                      <span className="ym04-badge-category">{crop.category}</span>
+                    </td>
+                    <td>
+                      <StatusBadge status={crop.status} />
+                    </td>
+                    <td className="ym04-cell-date">{crop.createdDate}</td>
+                    <td>
+                      <div className="ym04-action-icons-wrap">
+                        <button
+                          type="button"
+                          className="ym04-icon-action-btn"
+                          onClick={() => handleOpenView(crop)}
+                          title={`View details for ${crop.name}`}
+                          aria-label={`View details for ${crop.name}`}
                         >
-                          <span className="ym04-status-dot" aria-hidden="true" />
-                          <span>{crop.status}</span>
-                        </span>
-                      </td>
-                      <td className="ym04-cell-date">{crop.createdDate}</td>
-                      <td>
-                        <div className="ym04-action-icons-wrap">
-                          <button
-                            type="button"
-                            className="ym04-icon-action-btn"
-                            onClick={() => handleOpenView(crop)}
-                            title={`View details for ${crop.name}`}
-                            aria-label={`View details for ${crop.name}`}
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            className="ym04-icon-action-btn"
-                            onClick={() => handleOpenEdit(crop)}
-                            title={`Edit ${crop.name}`}
-                            aria-label={`Edit ${crop.name}`}
-                          >
-                            <SquarePen size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6}>
-                      <div className="ym04-table-empty">
-                        <p className="ym04-empty-title">No crops found</p>
-                        <p className="ym04-empty-desc">
-                          {searchQuery || statusFilter !== 'All'
-                            ? 'No crops match your active filter criteria. Try clearing search or status filters.'
-                            : 'No crop records available.'}
-                        </p>
-                        {(searchQuery || statusFilter !== 'All') && (
-                          <button
-                            type="button"
-                            className="ym04-btn-view"
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="ym04-icon-action-btn"
+                          onClick={() => handleOpenEdit(crop)}
+                          title={`Edit ${crop.name}`}
+                          aria-label={`Edit ${crop.name}`}
+                        >
+                          <SquarePen size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <td colSpan={6}>
+                    <EmptyState
+                      title="No crops found"
+                      description={
+                        searchQuery || statusFilter !== 'All'
+                          ? 'No crops match your active filter criteria. Try clearing search or status filters.'
+                          : 'No crop records available.'
+                      }
+                      action={
+                        (searchQuery || statusFilter !== 'All') ? (
+                          <Button
+                            variant="outline"
                             onClick={() => {
                               setSearchQuery('');
                               setStatusFilter('All');
                             }}
                           >
                             Reset Filters
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                          </Button>
+                        ) : undefined
+                      }
+                    />
+                  </td>
+                </TableRow>
+              )}
+            </Table>
           </div>
 
           {/* Pagination Bar */}
@@ -809,9 +849,8 @@ export default function CropManagement() {
 
           {/* Error Banner */}
           {formError && (
-            <div className="ym04-form-alert" role="alert">
-              <AlertCircle size={16} />
-              <span>{formError}</span>
+            <div className="ym04-form-alert-wrap">
+              <Alert type="error">{formError}</Alert>
             </div>
           )}
 
@@ -825,15 +864,8 @@ export default function CropManagement() {
                 </div>
                 <div className="ym04-detail-item">
                   <span className="ym04-detail-label">Status</span>
-                  <span
-                    className={`ym04-badge-status ${
-                      formStatus === 'Active'
-                        ? 'ym04-badge-status--active'
-                        : 'ym04-badge-status--inactive'
-                    }`}
-                  >
-                    <span className="ym04-status-dot" aria-hidden="true" />
-                    <span>{formStatus}</span>
+                  <span className="ym04-detail-value">
+                    <StatusBadge status={formStatus} />
                   </span>
                 </div>
                 <div className="ym04-detail-item">
@@ -851,20 +883,22 @@ export default function CropManagement() {
               </div>
 
               <div className="ym04-panel-actions">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   className="ym04-panel-btn-cancel"
                   onClick={handleClosePanel}
                 >
                   Close
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="primary"
                   className="ym04-panel-btn-save"
                   onClick={() => setPanelMode('edit')}
                 >
                   Edit This Crop
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -872,13 +906,8 @@ export default function CropManagement() {
             <form className="ym04-crop-form" onSubmit={handleSaveCrop}>
               {/* Field 1: Crop Name */}
               <div className="ym04-form-group">
-                <label htmlFor="crop-name-input" className="ym04-form-label">
-                  Crop Name <span className="ym04-required-star">*</span>
-                </label>
-                <input
-                  id="crop-name-input"
-                  type="text"
-                  className="ym04-form-input"
+                <InputField
+                  label="Crop Name"
                   placeholder="Enter crop name"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
@@ -888,23 +917,16 @@ export default function CropManagement() {
 
               {/* Field 2: Category */}
               <div className="ym04-form-group">
-                <label htmlFor="crop-category-select" className="ym04-form-label">
-                  Category <span className="ym04-required-star">*</span>
-                </label>
-                <div className="ym04-form-select-wrap">
-                  <select
-                    id="crop-category-select"
-                    className="ym04-form-select"
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value as CropItem['category'])}
-                    required
-                  >
-                    <option value="" disabled>Select category</option>
-                    {CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
+                <SelectField
+                  label="Category"
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value as CropItem['category'])}
+                  options={[
+                    { value: '', label: 'Select category', disabled: true },
+                    ...CATEGORIES.map(cat => ({ value: cat, label: cat }))
+                  ]}
+                  required
+                />
               </div>
 
               {/* Field 3: Description */}
@@ -956,19 +978,21 @@ export default function CropManagement() {
 
               {/* Action Buttons */}
               <div className="ym04-panel-actions">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   className="ym04-panel-btn-cancel"
                   onClick={handleClosePanel}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
                   className="ym04-panel-btn-save"
                 >
                   Save Crop
-                </button>
+                </Button>
               </div>
             </form>
           )}
@@ -1031,6 +1055,20 @@ export default function CropManagement() {
           </button>
         </div>
       </section>
+
+      {/* Status Deactivation Confirmation Dialog */}
+      <ConfirmDialog
+        open={showDeactivateConfirm}
+        title="Deactivate Crop"
+        description={`Are you sure you want to deactivate "${pendingCropUpdate?.name}"? Deactivated crops will be marked as Inactive and will be unavailable for active transactions.`}
+        simulationNote="This action can be undone by editing the crop and setting status back to Active."
+        confirmLabel="Deactivate"
+        onCancel={() => {
+          setShowDeactivateConfirm(false);
+          setPendingCropUpdate(null);
+        }}
+        onConfirm={handleConfirmDeactivate}
+      />
 
       {/* Toast Notification */}
       {toastMessage && (

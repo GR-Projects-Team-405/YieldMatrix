@@ -21,6 +21,9 @@ import {
 import { Button } from '../../components/Button';
 import { InputField } from '../../components/InputField';
 import { SelectField } from '../../components/SelectField';
+import { StatusBadge } from '../../components/StatusBadge';
+import { Table, TableRow } from '../../components/Table';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
 import api from '../../services/api';
 
@@ -130,6 +133,12 @@ export default function ReferenceDataOverview() {
   const [grades, setGrades] = useState<Grade[]>(INITIAL_GRADES);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [deactivateConfirm, setDeactivateConfirm] = useState<{
+    open: boolean;
+    type: 'crop' | 'grade';
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Modals state
   const [selectedCrop, setSelectedCrop] = useState<Crop | null>(null);
@@ -182,8 +191,8 @@ export default function ReferenceDataOverview() {
   const totalGradesCount = grades.length >= 4 ? '08' : String(grades.length).padStart(2, '0');
   const activeGradesCount = grades.length >= 4 ? '06' : String(grades.filter(g => g.status === 'Active').length).padStart(2, '0');
 
-  // Toggle crop status
-  const handleToggleCropStatus = (id: string) => {
+  // Toggle crop status execution
+  const executeToggleCropStatus = (id: string) => {
     setCrops(prev => prev.map(crop => {
       if (crop.id === id) {
         const nextStatus = crop.status === 'Active' ? 'Inactive' : 'Active';
@@ -195,8 +204,24 @@ export default function ReferenceDataOverview() {
     setActiveMenuId(null);
   };
 
-  // Toggle grade status
-  const handleToggleGradeStatus = (id: string) => {
+  // Toggle crop status with confirmation on deactivation
+  const handleToggleCropStatus = (id: string) => {
+    const target = crops.find(c => c.id === id);
+    if (target && target.status === 'Active') {
+      setDeactivateConfirm({
+        open: true,
+        type: 'crop',
+        id: target.id,
+        name: target.name
+      });
+      setActiveMenuId(null);
+      return;
+    }
+    executeToggleCropStatus(id);
+  };
+
+  // Toggle grade status execution
+  const executeToggleGradeStatus = (id: string) => {
     setGrades(prev => prev.map(grade => {
       if (grade.id === id) {
         const nextStatus = grade.status === 'Active' ? 'Inactive' : 'Active';
@@ -206,6 +231,22 @@ export default function ReferenceDataOverview() {
       return grade;
     }));
     setActiveMenuId(null);
+  };
+
+  // Toggle grade status with confirmation on deactivation
+  const handleToggleGradeStatus = (id: string) => {
+    const target = grades.find(g => g.id === id);
+    if (target && target.status === 'Active') {
+      setDeactivateConfirm({
+        open: true,
+        type: 'grade',
+        id: target.id,
+        name: target.name
+      });
+      setActiveMenuId(null);
+      return;
+    }
+    executeToggleGradeStatus(id);
   };
 
   // Handle Add Crop
@@ -376,114 +417,99 @@ export default function ReferenceDataOverview() {
               <p className="ym04-section-subtitle">View and manage registered crop types.</p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="primary"
             className="ym04-btn-add"
             onClick={() => setIsAddCropOpen(true)}
             aria-label="Add new crop type"
           >
             <Plus size={16} aria-hidden="true" />
             <span>Add Crop</span>
-          </button>
+          </Button>
         </header>
 
         <div className="ym04-table-wrap">
-          <table className="ym04-table" aria-label="Registered Crops">
-            <thead>
-              <tr>
-                <th scope="col">Crop Name</th>
-                <th scope="col">Category</th>
-                <th scope="col">Status</th>
-                <th scope="col">Created Date</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {crops.map((crop) => (
-                <tr key={crop.id}>
-                  <td>
-                    <div className="ym04-cell-crop-name">
-                      <span className="ym04-crop-emoji" aria-hidden="true">{crop.emoji}</span>
-                      <span>{crop.name}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="ym04-badge-category">{crop.category}</span>
-                  </td>
-                  <td>
-                    <span
-                      className={`ym04-badge-status ${crop.status === 'Active' ? 'ym04-badge-status--active' : 'ym04-badge-status--inactive'
-                        }`}
+          <Table headers={['Crop Name', 'Category', 'Status', 'Created Date', 'Actions']} className="ym04-table" aria-label="Registered Crops">
+            {crops.map((crop) => (
+              <TableRow key={crop.id}>
+                <td>
+                  <div className="ym04-cell-crop-name">
+                    <span className="ym04-crop-emoji" aria-hidden="true">{crop.emoji}</span>
+                    <span>{crop.name}</span>
+                  </div>
+                </td>
+                <td>
+                  <span className="ym04-badge-category">{crop.category}</span>
+                </td>
+                <td>
+                  <StatusBadge status={crop.status} />
+                </td>
+                <td>{crop.createdDate}</td>
+                <td>
+                  <div className="ym04-actions-cell">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="ym04-btn-view"
+                      onClick={() => setSelectedCrop(crop)}
+                      aria-label={`View details for ${crop.name}`}
                     >
-                      <span className="ym04-status-dot" aria-hidden="true" />
-                      <span>{crop.status}</span>
-                    </span>
-                  </td>
-                  <td>{crop.createdDate}</td>
-                  <td>
-                    <div className="ym04-actions-cell">
+                      View
+                    </Button>
+                    <div style={{ position: 'relative' }}>
                       <button
                         type="button"
-                        className="ym04-btn-view"
-                        onClick={() => setSelectedCrop(crop)}
-                        aria-label={`View details for ${crop.name}`}
+                        className="ym04-btn-menu"
+                        onClick={() => setActiveMenuId(activeMenuId === crop.id ? null : crop.id)}
+                        aria-label={`More actions for ${crop.name}`}
+                        aria-expanded={activeMenuId === crop.id}
                       >
-                        View
+                        <MoreVertical size={16} />
                       </button>
-                      <div style={{ position: 'relative' }}>
-                        <button
-                          type="button"
-                          className="ym04-btn-menu"
-                          onClick={() => setActiveMenuId(activeMenuId === crop.id ? null : crop.id)}
-                          aria-label={`More actions for ${crop.name}`}
-                          aria-expanded={activeMenuId === crop.id}
-                        >
-                          <MoreVertical size={16} />
-                        </button>
-                        {activeMenuId === crop.id && (
-                          <div className="ym04-dropdown-menu" role="menu">
-                            <button
-                              type="button"
-                              className="ym04-dropdown-item"
-                              role="menuitem"
-                              onClick={() => {
-                                setSelectedCrop(crop);
-                                setActiveMenuId(null);
-                              }}
-                            >
-                              <Eye size={14} />
-                              <span>View Details</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="ym04-dropdown-item"
-                              role="menuitem"
-                              onClick={() => {
-                                setActiveMenuId(null);
-                                navigate('/admin/reference-data/crops');
-                              }}
-                            >
-                              <Sprout size={14} />
-                              <span>Manage Crops</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="ym04-dropdown-item"
-                              role="menuitem"
-                              onClick={() => handleToggleCropStatus(crop.id)}
-                            >
-                              <RefreshCw size={14} />
-                              <span>Make {crop.status === 'Active' ? 'Inactive' : 'Active'}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      {activeMenuId === crop.id && (
+                        <div className="ym04-dropdown-menu" role="menu">
+                          <button
+                            type="button"
+                            className="ym04-dropdown-item"
+                            role="menuitem"
+                            onClick={() => {
+                              setSelectedCrop(crop);
+                              setActiveMenuId(null);
+                            }}
+                          >
+                            <Eye size={14} />
+                            <span>View Details</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="ym04-dropdown-item"
+                            role="menuitem"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              navigate('/admin/reference-data/crops');
+                            }}
+                          >
+                            <Sprout size={14} />
+                            <span>Manage Crops</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="ym04-dropdown-item"
+                            role="menuitem"
+                            onClick={() => handleToggleCropStatus(crop.id)}
+                          >
+                            <RefreshCw size={14} />
+                            <span>Make {crop.status === 'Active' ? 'Inactive' : 'Active'}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </td>
+              </TableRow>
+            ))}
+          </Table>
         </div>
       </section>
 
@@ -499,110 +525,96 @@ export default function ReferenceDataOverview() {
               <p className="ym04-section-subtitle">View and manage produce quality grades.</p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="primary"
             className="ym04-btn-add"
             onClick={() => setIsAddGradeOpen(true)}
             aria-label="Add new grade standard"
           >
             <Plus size={16} aria-hidden="true" />
             <span>Add Grade</span>
-          </button>
+          </Button>
         </header>
 
         <div className="ym04-table-wrap">
-          <table className="ym04-table" aria-label="Registered Produce Grades">
-            <thead>
-              <tr>
-                <th scope="col">Grade Name</th>
-                <th scope="col">Description</th>
-                <th scope="col">Status</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grades.map((grade) => (
-                <tr key={grade.id}>
-                  <td>
-                    <div className="ym04-cell-grade-name">
-                      <Star className="ym04-star-icon" size={15} aria-hidden="true" />
-                      <span>{grade.name}</span>
-                    </div>
-                  </td>
-                  <td>{grade.description}</td>
-                  <td>
-                    <span
-                      className={`ym04-badge-status ${grade.status === 'Active' ? 'ym04-badge-status--active' : 'ym04-badge-status--inactive'
-                        }`}
+          <Table headers={['Grade Name', 'Description', 'Status', 'Actions']} className="ym04-table" aria-label="Registered Produce Grades">
+            {grades.map((grade) => (
+              <TableRow key={grade.id}>
+                <td>
+                  <div className="ym04-cell-grade-name">
+                    <Star className="ym04-star-icon" size={15} aria-hidden="true" />
+                    <span>{grade.name}</span>
+                  </div>
+                </td>
+                <td>{grade.description}</td>
+                <td>
+                  <StatusBadge status={grade.status} />
+                </td>
+                <td>
+                  <div className="ym04-actions-cell">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="ym04-btn-view"
+                      onClick={() => setSelectedGrade(grade)}
+                      aria-label={`View details for ${grade.name}`}
                     >
-                      <span className="ym04-status-dot" aria-hidden="true" />
-                      <span>{grade.status}</span>
-                    </span>
-                  </td>
-                  <td>
-                    <div className="ym04-actions-cell">
+                      View
+                    </Button>
+                    <div style={{ position: 'relative' }}>
                       <button
                         type="button"
-                        className="ym04-btn-view"
-                        onClick={() => setSelectedGrade(grade)}
-                        aria-label={`View details for ${grade.name}`}
+                        className="ym04-btn-menu"
+                        onClick={() => setActiveMenuId(activeMenuId === grade.id ? null : grade.id)}
+                        aria-label={`More actions for ${grade.name}`}
+                        aria-expanded={activeMenuId === grade.id}
                       >
-                        View
+                        <MoreVertical size={16} />
                       </button>
-                      <div style={{ position: 'relative' }}>
-                        <button
-                          type="button"
-                          className="ym04-btn-menu"
-                          onClick={() => setActiveMenuId(activeMenuId === grade.id ? null : grade.id)}
-                          aria-label={`More actions for ${grade.name}`}
-                          aria-expanded={activeMenuId === grade.id}
-                        >
-                          <MoreVertical size={16} />
-                        </button>
-                        {activeMenuId === grade.id && (
-                          <div className="ym04-dropdown-menu" role="menu">
-                            <button
-                              type="button"
-                              className="ym04-dropdown-item"
-                              role="menuitem"
-                              onClick={() => {
-                                setSelectedGrade(grade);
-                                setActiveMenuId(null);
-                              }}
-                            >
-                              <Eye size={14} />
-                              <span>View Details</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="ym04-dropdown-item"
-                              role="menuitem"
-                              onClick={() => {
-                                setActiveMenuId(null);
-                                navigate('/admin/reference-data/grades');
-                              }}
-                            >
-                              <Award size={14} />
-                              <span>Manage Grades</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="ym04-dropdown-item"
-                              role="menuitem"
-                              onClick={() => handleToggleGradeStatus(grade.id)}
-                            >
-                              <RefreshCw size={14} />
-                              <span>Make {grade.status === 'Active' ? 'Inactive' : 'Active'}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      {activeMenuId === grade.id && (
+                        <div className="ym04-dropdown-menu" role="menu">
+                          <button
+                            type="button"
+                            className="ym04-dropdown-item"
+                            role="menuitem"
+                            onClick={() => {
+                              setSelectedGrade(grade);
+                              setActiveMenuId(null);
+                            }}
+                          >
+                            <Eye size={14} />
+                            <span>View Details</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="ym04-dropdown-item"
+                            role="menuitem"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              navigate('/admin/reference-data/grades');
+                            }}
+                          >
+                            <Award size={14} />
+                            <span>Manage Grades</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="ym04-dropdown-item"
+                            role="menuitem"
+                            onClick={() => handleToggleGradeStatus(grade.id)}
+                          >
+                            <RefreshCw size={14} />
+                            <span>Make {grade.status === 'Active' ? 'Inactive' : 'Active'}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </td>
+              </TableRow>
+            ))}
+          </Table>
         </div>
       </section>
 
@@ -692,7 +704,9 @@ export default function ReferenceDataOverview() {
               </div>
               <div className="ym04-detail-item">
                 <span className="ym04-detail-label">Status</span>
-                <span className="ym04-detail-value">{selectedCrop.status}</span>
+                <span className="ym04-detail-value">
+                  <StatusBadge status={selectedCrop.status} />
+                </span>
               </div>
               <div className="ym04-detail-item">
                 <span className="ym04-detail-label">Registration Date</span>
@@ -767,7 +781,9 @@ export default function ReferenceDataOverview() {
               </div>
               <div className="ym04-detail-item">
                 <span className="ym04-detail-label">Status</span>
-                <span className="ym04-detail-value">{selectedGrade.status}</span>
+                <span className="ym04-detail-value">
+                  <StatusBadge status={selectedGrade.status} />
+                </span>
               </div>
               <div className="ym04-detail-item">
                 <span className="ym04-detail-label">Inspection Threshold</span>
@@ -944,6 +960,25 @@ export default function ReferenceDataOverview() {
           </form>
         </div>
       )}
+
+      {/* Deactivation Confirmation Dialog */}
+      <ConfirmDialog
+        open={Boolean(deactivateConfirm?.open)}
+        title={`Deactivate ${deactivateConfirm?.type === 'crop' ? 'Crop' : 'Grade'}`}
+        description={`Are you sure you want to set "${deactivateConfirm?.name}" to Inactive? This will mark it as unavailable for active trading and operations.`}
+        simulationNote="This action can be reversed at any time by toggling status back to Active."
+        confirmLabel="Deactivate"
+        onCancel={() => setDeactivateConfirm(null)}
+        onConfirm={() => {
+          if (!deactivateConfirm) return;
+          if (deactivateConfirm.type === 'crop') {
+            executeToggleCropStatus(deactivateConfirm.id);
+          } else {
+            executeToggleGradeStatus(deactivateConfirm.id);
+          }
+          setDeactivateConfirm(null);
+        }}
+      />
 
       {/* Confirmation / Status Toast */}
       {toastMessage && (
