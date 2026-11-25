@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { isAxiosError } from 'axios';
+import api, { TOKEN_KEY } from '../../services/api';
 import AuthSplitLayout from './AuthSplitLayout';
 import { ContentCard } from '../../components/ContentCard';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -7,6 +9,7 @@ import { Button } from '../../components/Button';
 import { Alert } from '../../components/Alert';
 
 type AccessStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+type View = AccessStatus | 'loading' | 'signed-out' | 'error';
 
 interface StatusContent {
   label: string;
@@ -52,6 +55,12 @@ const CONTENT: Record<AccessStatus, StatusContent> = {
   },
 };
 
+const NEUTRAL_SUBTITLE = {
+  loading: 'Checking your account status…',
+  'signed-out': 'Log in to see your account status.',
+  error: 'We could not load your account status.',
+} as const;
+
 function parseStatus(raw: string | null): AccessStatus {
   return raw === 'approved' || raw === 'rejected' || raw === 'suspended' ? raw : 'pending';
 }
@@ -59,11 +68,53 @@ function parseStatus(raw: string | null): AccessStatus {
 export default function AccessStatusPage() {
   const [params] = useSearchParams();
   const [showHelp, setShowHelp] = useState(false);
+  const [view, setView] = useState<View>('loading');
 
-  // TODO (Tue 24 Nov): load the real status from GET /api/ym02/status.
-  // Until then the status is 'pending'. In development only, ?status=rejected etc. lets us preview each state.
-  const status: AccessStatus = import.meta.env.DEV ? parseStatus(params.get('status')) : 'pending';
-  const content = CONTENT[status];
+  // In development only, ?status=rejected etc. previews each state without signing in.
+  const preview = import.meta.env.DEV ? params.get('status') : null;
+
+  useEffect(() => {
+    if (preview) {
+      setView(parseStatus(preview));
+      return;
+    }
+    if (!localStorage.getItem(TOKEN_KEY)) {
+      setView('signed-out');
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<{ status: string }>('/ym02/account-status')
+      .then(({ data }) => {
+        if (!cancelled) setView(parseStatus(data.status));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setView(isAxiosError(error) && error.response?.status === 401 ? 'signed-out' : 'error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [preview]);
+
+  if (view === 'loading' || view === 'signed-out' || view === 'error') {
+    return (
+      <AuthSplitLayout
+        label="Account status"
+        headline="Check your account access."
+        body="Log in to see where your account stands."
+      >
+        <ContentCard title="Account access status" subtitle={NEUTRAL_SUBTITLE[view]}>
+          <div className="ym02-form">
+            {view === 'error' && <Alert type="error">Something went wrong. Please try again later.</Alert>}
+            {view !== 'loading' && <Link className="ym-button ym-button--primary" to="/account/login">Log in</Link>}
+          </div>
+        </ContentCard>
+      </AuthSplitLayout>
+    );
+  }
+
+  const content = CONTENT[view];
 
   return (
     <AuthSplitLayout label={content.label} headline={content.headline} body={content.body}>
@@ -72,7 +123,7 @@ export default function AccessStatusPage() {
           <StatusBadge status={content.badge} />
           <p className="module-note">{content.detail}</p>
 
-          {status === 'approved' ? (
+          {view === 'approved' ? (
             <Link className="ym-button ym-button--primary" to="/account/login">Log in</Link>
           ) : (
             <>

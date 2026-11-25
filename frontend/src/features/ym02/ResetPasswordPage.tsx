@@ -1,12 +1,23 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { isAxiosError } from 'axios';
+import api from '../../services/api';
 import AuthSplitLayout from './AuthSplitLayout';
 import { ContentCard } from '../../components/ContentCard';
 import { InputField } from '../../components/InputField';
 import { Button } from '../../components/Button';
+import { Alert } from '../../components/Alert';
 
 const MIN_LENGTH = 15;
 const MAX_LENGTH = 128;
+
+function messageFor(error: unknown): string {
+  if (isAxiosError(error) && error.response) {
+    if (error.response.status === 422) return 'Check your new password and try again.';
+    if (error.response.status === 429) return 'Too many attempts. Try again later.';
+  }
+  return 'Something went wrong. Please try again.';
+}
 
 export default function ResetPasswordPage() {
   const [params] = useSearchParams();
@@ -15,20 +26,33 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [errors, setErrors] = useState<{ password?: string; confirm?: string }>({});
+  const [formError, setFormError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [invalidLink, setInvalidLink] = useState(false);
   const [done, setDone] = useState(false);
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submitting) return;
+    setFormError('');
     const next: { password?: string; confirm?: string } = {};
-    if (password.length < MIN_LENGTH) next.password = `Use at least ${MIN_LENGTH} characters.`;
-    else if (password.length > MAX_LENGTH) next.password = `Use no more than ${MAX_LENGTH} characters.`;
+    const length = Array.from(password).length;
+    if (length < MIN_LENGTH) next.password = `Use at least ${MIN_LENGTH} characters.`;
+    else if (length > MAX_LENGTH) next.password = `Use no more than ${MAX_LENGTH} characters.`;
     if (confirm !== password) next.confirm = 'Passwords do not match.';
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
-    // TODO: send { token, password } to the YM02 reset-password API.
-    // On an invalid or expired token show the "link is not valid" view below.
-    setDone(true);
+    setSubmitting(true);
+    try {
+      await api.post('/ym02/reset-password', { token, password });
+      setDone(true);
+    } catch (err) {
+      if (isAxiosError(err) && err.response?.status === 400) setInvalidLink(true);
+      else setFormError(messageFor(err));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -37,7 +61,7 @@ export default function ResetPasswordPage() {
       headline="Choose a strong new password."
       body="Use 15 to 128 characters. Spaces are allowed."
     >
-      {!token ? (
+      {!token || invalidLink ? (
         <ContentCard title="Reset link not valid" subtitle="This link is missing or has expired.">
           <div className="ym02-form">
             <p className="module-note">Request a new reset link to continue.</p>
@@ -53,6 +77,7 @@ export default function ResetPasswordPage() {
       ) : (
         <ContentCard title="Reset password" subtitle="Choose a new password for your account">
           <form className="ym02-form" onSubmit={handleSubmit} noValidate>
+            {formError && <Alert type="error">{formError}</Alert>}
             <div className="ym02-field-box">
               <InputField
                 id="reset-password"
@@ -78,7 +103,9 @@ export default function ResetPasswordPage() {
                 error={errors.confirm}
               />
             </div>
-            <Button type="submit" variant="primary">Save new password</Button>
+            <Button type="submit" variant="primary" disabled={submitting}>
+              {submitting ? 'Saving…' : 'Save new password'}
+            </Button>
             <Link className="ym02-link ym02-link--center" to="/account/login">Back to login</Link>
           </form>
         </ContentCard>
