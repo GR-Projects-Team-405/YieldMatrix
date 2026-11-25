@@ -1,73 +1,58 @@
-import { useId, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import type { DragEvent, FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { InputField } from '../../components/InputField';
 import { SelectField } from '../../components/SelectField';
+import { createIncident, errorMessage, getDeliveries, getDelivery, getIncidents } from './ym24Api';
+import type { DeliveryDetail, DeliveryRow, IncidentRow, IncidentType } from './ym24Api';
 import './DeliveryHistory.css'; // shared page styles
 import './DeliveryDetails.css'; // back link
 import './DeliveryHandover.css'; // upload area
 import './ReportIncident.css';
 
-type TripStatus = 'Completed' | 'Partially accepted' | 'Disputed';
-
-interface TripOption {
-  id: string;
-  destination: string;
-  pickedUpKg: number;
-  handedOverKg: number;
-  acceptedKg: number;
-  status: TripStatus;
-  allocations: { farm: string; kg: number }[];
-}
-
-// Demo data for now. Replaced with API data after the backend endpoint is ready.
-const trips: TripOption[] = [
-  {
-    id: '1041', destination: 'Kandy', pickedUpKg: 600, handedOverKg: 600, acceptedKg: 580, status: 'Partially accepted',
-    allocations: [{ farm: 'Green Valley Farm', kg: 400 }, { farm: 'Highland Harvest', kg: 200 }],
-  },
-  {
-    id: '1039', destination: 'Galle', pickedUpKg: 350, handedOverKg: 350, acceptedKg: 0, status: 'Disputed',
-    allocations: [{ farm: 'Hill Country Farm', kg: 350 }],
-  },
-  {
-    id: '1034', destination: 'Colombo', pickedUpKg: 500, handedOverKg: 500, acceptedKg: 500, status: 'Completed',
-    allocations: [{ farm: 'Lakeside Farm', kg: 500 }],
-  },
+const incidentTypes: { value: IncidentType; label: string }[] = [
+  { value: 'spoilage', label: 'Spoilage' },
+  { value: 'short_quantity', label: 'Short quantity at pickup' },
+  { value: 'refused_load', label: 'Refused load at handover' },
+  { value: 'delay', label: 'Delay' },
+  { value: 'packaging', label: 'Packaging damage' },
+  { value: 'other', label: 'Other' },
 ];
-
-const incidentTypes = [
-  'Spoilage',
-  'Short quantity at pickup',
-  'Refused load at handover',
-  'Delay',
-  'Packaging damage',
-];
-
-const recentIncidents = [
-  { id: 'INC-0031', label: 'Spoilage', status: 'Open' },
-  { id: 'INC-0029', label: 'Refused load', status: 'Under review' },
-  { id: 'INC-0026', label: 'Short quantity', status: 'Resolved' },
-];
+const typeShort: Record<IncidentType, string> = {
+  spoilage: 'Spoilage',
+  short_quantity: 'Short quantity',
+  refused_load: 'Refused load',
+  delay: 'Delay',
+  packaging: 'Packaging',
+  other: 'Other',
+};
 
 const statusClass: Record<string, string> = {
-  Open: 'ym-tone--error',
-  'Under review': 'ym-tone--warning',
-  Resolved: 'ym-tone--success',
+  open: 'ym-tone--error',
+  under_review: 'ym-tone--warning',
+  resolved: 'ym-tone--success',
   Completed: 'ym-tone--success',
   'Partially accepted': 'ym-tone--warning',
   Disputed: 'ym-tone--error',
 };
+const statusLabel: Record<string, string> = { open: 'Open', under_review: 'Under review', resolved: 'Resolved' };
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_DESCRIPTION = 500;
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
-const fmtKg = (n: number) => `${round3(n).toLocaleString('en-US', { maximumFractionDigits: 3 })} kg`;
+const fmtKg = (n: number) => round3(n).toLocaleString('en-US', { maximumFractionDigits: 3 }) + ' kg';
 const fmtSize = (bytes: number) =>
-  bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  bytes >= 1024 * 1024 ? (bytes / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+
+// One key per report, so a double click or a retry never saves the same report twice.
+function newKey(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return 'ym24-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
 
 function validateQty(raw: string, max?: number): string | undefined {
   const value = raw.trim();
@@ -75,7 +60,7 @@ function validateQty(raw: string, max?: number): string | undefined {
   if (!/^\d+(\.\d{1,3})?$/.test(value)) return 'Use a number with up to 3 decimals.';
   const n = Number(value);
   if (n <= 0) return 'Quantity must be more than 0.';
-  if (max !== undefined && n > max) return `Quantity cannot exceed the allocation (${fmtKg(max)}).`;
+  if (max !== undefined && n > max) return 'Quantity cannot exceed the allocation (' + fmtKg(max) + ').';
   return undefined;
 }
 
@@ -90,43 +75,90 @@ function validateFile(file: File): string | undefined {
   return undefined;
 }
 
-// Demo only: the real version will POST the report to the API and reject on network errors.
-async function submitIncident(): Promise<{ id: string }> {
-  await new Promise((resolve) => setTimeout(resolve, 700));
-  return { id: 'INC-0032' };
-}
-
-
-
 export default function ReportIncident() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const initialTrip = trips.find((t) => t.id === params.get('trip'))?.id ?? trips[0].id;
+  const wantedTrip = params.get('trip');
 
-  const [type, setType] = useState('');
-  const [tripId, setTripId] = useState(initialTrip);
-  const [allocationFarm, setAllocationFarm] = useState('');
+  const [trips, setTrips] = useState<DeliveryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [tripId, setTripId] = useState('');
+  const [detail, setDetail] = useState<DeliveryDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [recent, setRecent] = useState<IncidentRow[]>([]);
+
+  const [type, setType] = useState<IncidentType | ''>('');
+  const [allocationId, setAllocationId] = useState('');
   const [qty, setQty] = useState('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ kind: 'success'; id: string } | { kind: 'error' } | null>(null);
+  const [result, setResult] = useState<{ kind: 'success'; code: string } | { kind: 'error'; message: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const keyRef = useRef<string>(newKey());
 
-  const trip = trips.find((t) => t.id === tripId) ?? trips[0];
-  const allocation = trip.allocations.find((a) => a.farm === allocationFarm);
+  const loadRecent = useCallback(async () => {
+    try {
+      setRecent((await getIncidents()).slice(0, 3));
+    } catch {
+      // The recent list is optional, the form still works without it.
+    }
+  }, []);
+
+  // 1. The driver's trips
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getDeliveries();
+        if (cancelled) return;
+        setTrips(rows);
+        setTripId(rows.find((r) => r.id === wantedTrip)?.id ?? rows[0]?.id ?? '');
+      } catch (e) {
+        if (!cancelled) setLoadError(errorMessage(e, 'Could not load your trips.'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [wantedTrip]);
+
+  // 2. The selected trip with its allocations
+  useEffect(() => {
+    if (!tripId) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    setDetailError('');
+    getDelivery(tripId)
+      .then((d) => { if (!cancelled) setDetail(d); })
+      .catch((e) => { if (!cancelled) setDetailError(errorMessage(e, 'Could not load this trip.')); })
+      .finally(() => { if (!cancelled) setDetailLoading(false); });
+    return () => { cancelled = true; };
+  }, [tripId]);
+
+  useEffect(() => { void loadRecent(); }, [loadRecent]);
+
+  const allocations = detail ? detail.allocations : [];
+  const allocation = allocations.find((a) => a.id === allocationId);
+  const pickedUpKg = round3(allocations.reduce((sum, a) => sum + a.pickedUpKg, 0));
+  const acceptedKg = round3(allocations.reduce((sum, a) => sum + a.acceptedKg, 0));
 
   const typeError = submitted && type === '' ? 'Choose an incident type.' : undefined;
   const allocationError = submitted && !allocation ? 'Choose the allocation affected.' : undefined;
-  const qtyError = submitted ? validateQty(qty, allocation?.kg) : undefined;
+  const qtyError = submitted ? validateQty(qty, allocation?.pickedUpKg) : undefined;
   const descriptionError = submitted ? validateDescription(description) : undefined;
   const fileError = file ? validateFile(file) : undefined;
 
   const checks = [
     { text: 'Choose the right trip and allocation.', done: allocation !== undefined },
-    { text: 'Enter the affected quantity in kg', done: qty.trim() !== '' && !validateQty(qty, allocation?.kg) },
+    { text: 'Enter the affected quantity in kg', done: qty.trim() !== '' && !validateQty(qty, allocation?.pickedUpKg) },
     { text: 'Add a photo or PDF (up to 5 MB).', done: file !== null && !fileError },
   ];
 
@@ -144,7 +176,7 @@ export default function ReportIncident() {
 
   function resetForm() {
     setType('');
-    setAllocationFarm('');
+    setAllocationId('');
     setQty('');
     setDescription('');
     setSubmitted(false);
@@ -155,21 +187,29 @@ export default function ReportIncident() {
     event.preventDefault();
     setSubmitted(true);
     setResult(null);
-    const invalid =
-      type === '' ||
-      !allocation ||
-      validateQty(qty, allocation.kg) ||
-      validateDescription(description) ||
-      (file && validateFile(file));
-    if (invalid) return;
+    if (type === '' || !allocation) return;
+    if (validateQty(qty, allocation.pickedUpKg)) return;
+    if (validateDescription(description)) return;
+    if (file && validateFile(file)) return;
 
     setBusy(true);
     try {
-      const created = await submitIncident();
-      setResult({ kind: 'success', id: created.id });
+      const created = await createIncident({
+        tripId,
+        allocationId: allocation.id,
+        type,
+        quantityKg: Number(qty.trim()),
+        description: description.trim(),
+        evidence: file ? [{ name: file.name, type: file.type, size: file.size }] : [],
+        operationKey: keyRef.current,
+      });
+      setResult({ kind: 'success', code: created.code });
+      keyRef.current = newKey();
       resetForm();
-    } catch {
-      setResult({ kind: 'error' }); // answers are kept so the driver can retry
+      void loadRecent();
+    } catch (e) {
+      // The answers and the key are kept so the driver can retry safely.
+      setResult({ kind: 'error', message: errorMessage(e, 'Your report has not been saved. Check your connection and try again.') });
     } finally {
       setBusy(false);
     }
@@ -181,154 +221,174 @@ export default function ReportIncident() {
         <div>
           <Link className="ym24-back" to="/driver/incidents">← Back to incidents</Link>
           <p>Tell us what went wrong. Your report is saved to the trip record.</p>
-          <span className="ym24-demo-tag">DEMO DASHBOARD</span>
-          <span className="ym24-date-note">02 NOV 2026</span>
         </div>
       </div>
 
-      <div className="ym24-panel">
-        <h3>Selected trip</h3>
-        <p className="ym24-panel-sub">YM {trip.id} • {trip.destination}</p>
-        <div className="ym24-trip-facts">
-          <div><span>Picked up</span><strong>{fmtKg(trip.pickedUpKg)}</strong></div>
-          <div><span>Handed over</span><strong>{fmtKg(trip.handedOverKg)}</strong></div>
-          <div><span>Accepted</span><strong>{fmtKg(trip.acceptedKg)}</strong></div>
-          <div><span>Status</span><span className={`ym-status ${statusClass[trip.status]}`}>{trip.status}</span></div>
-        </div>
-      </div>
+      {loading && <div className="ym24-panel ym24-empty">Loading your trips…</div>}
 
-      <div className="ym24-row">
-        <form className="ym24-panel" onSubmit={handleSubmit} noValidate>
-          <h3>Incident details</h3>
-          <div className="ym24-form">
-            <div className="ym24-form-grid">
-                <SelectField
-                label="Incident type"
-                value={type}
-                options={[{ value: '', label: 'Select a type' }, ...incidentTypes.map((t) => ({ value: t, label: t }))]}
-                error={typeError}
-                disabled={busy}
-                onChange={(e) => setType(e.target.value)}
-              />
-              <SelectField
-                label="Related trip"
-                value={tripId}
-                options={trips.map((t) => ({ value: t.id, label: `YM ${t.id} • ${t.destination}` }))}
-                disabled={busy}
-                onChange={(e) => {
-                  setTripId(e.target.value);
-                  setAllocationFarm('');
-                }}
-              />
-            </div>
+      {!loading && loadError && <Alert type="error">{loadError}</Alert>}
 
-            <div className="ym24-form-grid">
-                <SelectField
-                label="Allocation"
-                value={allocationFarm}
-                options={[
-                  { value: '', label: 'Select an allocation' },
-                  ...trip.allocations.map((a) => ({ value: a.farm, label: `${a.farm} · ${a.kg} kg` })),
-                ]}
-                error={allocationError}
-                disabled={busy}
-                onChange={(e) => setAllocationFarm(e.target.value)}
-              />
-              <InputField
-                label="Quantity affected"
-                unit="kg"
-                inputMode="decimal"
-                autoComplete="off"
-                value={qty}
-                disabled={busy}
-                error={qtyError}
-                onChange={(e) => setQty(e.target.value)}
-              />
-            </div>
+      {!loading && !loadError && trips.length === 0 && (
+        <div className="ym24-panel ym24-empty">You have no trips to report an incident on yet.</div>
+      )}
 
-            <DescriptionField
-              value={description}
-              error={descriptionError}
-              disabled={busy}
-              onChange={setDescription}
-            />
-
-            <div>
-              <p className="ym24-field-title">Evidence</p>
-              <label
-                className={`ym24-upload ${dragOver ? 'ym24-upload--drag' : ''}`}
-                htmlFor="ym24-evidence"
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-              >
-                <input
-                  id="ym24-evidence"
-                  ref={fileInput}
-                  className="ym24-file"
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-                  disabled={busy}
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                />
-                <strong>Drag a file here or choose a file</strong>
-                <span>JPEG, PNG or PDF · up to 5 MB</span>
-              </label>
-              {file && (
-                <div className="ym24-file-chip">
-                  <p style={{ margin: 0 }}>{file.name}</p>
-                  <span>{fmtSize(file.size)}</span>
-                  <button type="button" className="ym24-link-btn" onClick={() => chooseFile(null)}>Remove</button>
+      {!loading && !loadError && trips.length > 0 && (
+        <>
+          <div className="ym24-panel">
+            <h3>Selected trip</h3>
+            {detailLoading && <p className="ym24-panel-sub">Loading trip…</p>}
+            {detailError && <Alert type="error">{detailError}</Alert>}
+            {detail && !detailLoading && (
+              <>
+                <p className="ym24-panel-sub">{detail.code} • {detail.destination}</p>
+                <div className="ym24-trip-facts">
+                  <div><span>Picked up</span><strong>{fmtKg(pickedUpKg)}</strong></div>
+                  <div><span>Handed over</span><strong>{fmtKg(detail.handedOverKg)}</strong></div>
+                  <div><span>Accepted</span><strong>{fmtKg(acceptedKg)}</strong></div>
+                  <div><span>Status</span><span className={'ym-status ' + statusClass[detail.status]}>{detail.status}</span></div>
                 </div>
-              )}
-              {fileError && <p className="ym-field-error" role="alert">{fileError}</p>}
-            </div>
-
-            <div className="ym24-actions">
-              <Button variant="outline" disabled={busy} onClick={() => navigate('/driver/incidents')}>Cancel</Button>
-              <Button type="submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit report'}</Button>
-            </div>
-          </div>
-        </form>
-
-        <div className="ym24-stack">
-          <div className="ym24-panel">
-            <h3>Before you submit</h3>
-            <ul className="ym24-checks">
-              {checks.map((c) => (
-                <li key={c.text}>
-                  <span className={`ym24-tick ${c.done ? 'ym24-tick--done' : ''}`} aria-hidden="true">✓</span>
-                  <span>{c.text}</span>
-                </li>
-              ))}
-            </ul>
+              </>
+            )}
           </div>
 
-          <div className="ym24-panel">
-            <h3>Recent incidents</h3>
-            {recentIncidents.map((i) => (
-              <div className="ym24-recent" key={i.id}>
-                <p>{i.id} · {i.label}</p>
-                <span className={`ym-status ${statusClass[i.status]}`}>{i.status}</span>
+          <div className="ym24-row">
+            <form className="ym24-panel" onSubmit={handleSubmit} noValidate>
+              <h3>Incident details</h3>
+              <div className="ym24-form">
+                <div className="ym24-form-grid">
+                  <SelectField
+                    label="Incident type"
+                    value={type}
+                    options={[{ value: '', label: 'Select a type' }, ...incidentTypes]}
+                    error={typeError}
+                    disabled={busy}
+                    onChange={(e) => setType(e.target.value as IncidentType | '')}
+                  />
+                  <SelectField
+                    label="Related trip"
+                    value={tripId}
+                    options={trips.map((t) => ({ value: t.id, label: t.code + ' • ' + t.destination }))}
+                    disabled={busy}
+                    onChange={(e) => {
+                      setTripId(e.target.value);
+                      setAllocationId('');
+                    }}
+                  />
+                </div>
+
+                <div className="ym24-form-grid">
+                  <SelectField
+                    label="Allocation"
+                    value={allocationId}
+                    options={[
+                      { value: '', label: 'Select an allocation' },
+                      ...allocations.map((a) => ({ value: a.id, label: a.farm + ' · ' + a.pickedUpKg + ' kg' })),
+                    ]}
+                    error={allocationError}
+                    disabled={busy || detailLoading}
+                    onChange={(e) => setAllocationId(e.target.value)}
+                  />
+                  <InputField
+                    label="Quantity affected"
+                    unit="kg"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={qty}
+                    disabled={busy}
+                    error={qtyError}
+                    onChange={(e) => setQty(e.target.value)}
+                  />
+                </div>
+
+                <DescriptionField
+                  value={description}
+                  error={descriptionError}
+                  disabled={busy}
+                  onChange={setDescription}
+                />
+
+                <div>
+                  <p className="ym24-field-title">Evidence</p>
+                  <label
+                    className={'ym24-upload ' + (dragOver ? 'ym24-upload--drag' : '')}
+                    htmlFor="ym24-evidence"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleDrop}
+                  >
+                    <input
+                      id="ym24-evidence"
+                      ref={fileInput}
+                      className="ym24-file"
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                      disabled={busy}
+                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    />
+                    <strong>Drag a file here or choose a file</strong>
+                    <span>JPEG, PNG or PDF · up to 5 MB</span>
+                  </label>
+                  {file && (
+                    <div className="ym24-file-chip">
+                      <p style={{ margin: 0 }}>{file.name}</p>
+                      <span>{fmtSize(file.size)}</span>
+                      <button type="button" className="ym24-link-btn" onClick={() => chooseFile(null)}>Remove</button>
+                    </div>
+                  )}
+                  {fileError && <p className="ym-field-error" role="alert">{fileError}</p>}
+                </div>
+
+                <div className="ym24-actions">
+                  <Button variant="outline" disabled={busy} onClick={() => navigate('/driver/incidents')}>Cancel</Button>
+                  <Button type="submit" disabled={busy || detailLoading}>{busy ? 'Submitting…' : 'Submit report'}</Button>
+                </div>
               </div>
-            ))}
-          </div>
+            </form>
 
-          {result?.kind === 'success' && (
-            <Alert type="success">
-              <strong>Report submitted.</strong> {result.id} is now Open and visible to the admin team.
-            </Alert>
-          )}
-          {result?.kind === 'error' && (
-            <Alert type="error">
-              <strong>Could not submit.</strong> Your report has not been saved. Check your connection and try again. Your answers are kept.
-            </Alert>
-          )}
-        </div>
-      </div>
+            <div className="ym24-stack">
+              <div className="ym24-panel">
+                <h3>Before you submit</h3>
+                <ul className="ym24-checks">
+                  {checks.map((c) => (
+                    <li key={c.text}>
+                      <span className={'ym24-tick ' + (c.done ? 'ym24-tick--done' : '')} aria-hidden="true">✓</span>
+                      <span>{c.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="ym24-panel">
+                <h3>Recent incidents</h3>
+                {recent.length === 0 ? (
+                  <p className="ym24-panel-sub">No incidents reported yet.</p>
+                ) : (
+                  recent.map((i) => (
+                    <div className="ym24-recent" key={i.id}>
+                      <p>{i.code} · {typeShort[i.type]}</p>
+                      <span className={'ym-status ' + statusClass[i.status]}>{statusLabel[i.status]}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {result?.kind === 'success' && (
+                <Alert type="success">
+                  <strong>Report submitted.</strong> {result.code} is now Open and visible to the admin team.
+                </Alert>
+              )}
+              {result?.kind === 'error' && (
+                <Alert type="error">
+                  <strong>Could not submit.</strong> {result.message} Your answers are kept.
+                </Alert>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -352,11 +412,11 @@ function DescriptionField({ value, error, disabled, onChange }: DescriptionField
         maxLength={MAX_DESCRIPTION}
         disabled={disabled}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={error ? id + '-error' : undefined}
         onChange={(e) => onChange(e.target.value)}
       />
       <div className="ym24-counter">{value.length}/{MAX_DESCRIPTION}</div>
-      {error && <p className="ym-field-error" id={`${id}-error`}>{error}</p>}
+      {error && <p className="ym-field-error" id={id + '-error'}>{error}</p>}
     </div>
   );
 }

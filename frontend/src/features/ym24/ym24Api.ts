@@ -22,6 +22,7 @@ export interface DeliveryRow {
 
 export interface DeliveryAllocation {
   farm: string;
+  id: string;
   sequence: number;
   pickedUpAt: string | null;
   pickedUpKg: number;

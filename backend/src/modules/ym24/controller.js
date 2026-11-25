@@ -118,6 +118,7 @@ export async function getDelivery(req, res, next) {
     ]);
 
     const allocations = allocResult.rows.map((a) => ({
+      id: a.id,
       farm: a.farm,
       sequence: a.sequence,
       pickedUpAt: a.completed_at,
