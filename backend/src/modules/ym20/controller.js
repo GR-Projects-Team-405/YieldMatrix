@@ -114,3 +114,85 @@ export async function getMyTransactionById(req, res, next) {
     next(error);
   }
 }
+
+// One order with its allocations. Buyers see their own orders; farmers see only their own allocation rows.
+export async function getMyOrder(req, res, next) {
+  try {
+    const { id } = req.params;
+    if (!UUID_PATTERN.test(id)) {
+      return res.status(404).json({ error: 'Order not found', requestId: req.requestId });
+    }
+    const account = await pool.query(
+      'SELECT id FROM users WHERE id = $1 AND role = $2 AND approval_status = $3',
+      [req.user.id, req.user.role, 'approved']
+    );
+    if (!account.rows[0]) {
+      return res.status(403).json({ error: 'Account is not approved', requestId: req.requestId });
+    }
+
+    const isFarmer = req.user.role === 'farmer';
+    const orderResult = await pool.query(
+      `SELECT o.id, o.status, o.destination, o.destination_district,
+              o.delivery_date::text AS delivery_date,
+              o.agreed_total_cents::text AS agreed_total_cents, o.created_at
+       FROM orders o
+       WHERE o.id = $1 AND ${
+         isFarmer
+           ? 'EXISTS (SELECT 1 FROM allocations x WHERE x.order_id = o.id AND x.farmer_id = $2)'
+           : 'o.buyer_id = $2'
+       }`,
+      [id, req.user.id]
+    );
+    const o = orderResult.rows[0];
+    if (!o) {
+      return res.status(404).json({ error: 'Order not found', requestId: req.requestId });
+    }
+
+    const allocResult = await pool.query(
+      `SELECT a.id, a.status, f.name AS farm, c.name AS crop, g.name AS grade,
+              a.agreed_kg::text AS agreed_kg,
+              a.agreed_unit_price_cents::text AS unit_price_cents,
+              a.agreed_value_cents::text AS value_cents,
+              a.funded_cents::text AS funded_cents,
+              a.held_cents::text AS held_cents,
+              a.settled_cents::text AS settled_cents,
+              a.refunded_cents::text AS refunded_cents
+       FROM allocations a
+       JOIN harvest_batches b ON b.id = a.batch_id
+       JOIN crops c ON c.id = b.crop_id
+       JOIN grades g ON g.id = b.grade_id
+       JOIN farms f ON f.id = b.farm_id
+       WHERE a.order_id = $1 ${isFarmer ? 'AND a.farmer_id = $2' : ''}
+       ORDER BY f.name`,
+      isFarmer ? [id, req.user.id] : [id]
+    );
+
+    res.json({
+      order: {
+        id: o.id,
+        status: o.status,
+        destination: isFarmer ? o.destination_district : o.destination,
+        deliveryDate: o.delivery_date,
+        createdAt: o.created_at,
+        totalCents: isFarmer ? null : o.agreed_total_cents,
+      },
+      allocations: allocResult.rows.map((a) => ({
+        id: a.id,
+        status: a.status,
+        farm: a.farm,
+        crop: a.crop,
+        grade: a.grade,
+        agreedKg: a.agreed_kg,
+        unitPriceCents: a.unit_price_cents,
+        valueCents: a.value_cents,
+        fundedCents: a.funded_cents,
+        heldCents: a.held_cents,
+        settledCents: a.settled_cents,
+        refundedCents: a.refunded_cents,
+      })),
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}

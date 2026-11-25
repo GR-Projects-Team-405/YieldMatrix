@@ -47,3 +47,37 @@ export type ApiTransactionDetail = ApiTransaction & {
 
 export const formatDateTime = (iso: string) =>
   new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Colombo', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+
+export type ApiAllocation = {
+  id: string;
+  status: string;
+  farm: string;
+  crop: string;
+  grade: string;
+  agreedKg: string;
+  unitPriceCents: string;
+  valueCents: string;
+  fundedCents: string;
+  heldCents: string;
+  settledCents: string;
+  refundedCents: string;
+};
+
+export type ApiOrderDetail = {
+  order: { id: string; status: string; destination: string; deliveryDate: string; createdAt: string; totalCents: string | null };
+  allocations: ApiAllocation[];
+};
+
+export const formatKg = (kg: string | number) => `${Number(kg).toLocaleString('en-US', { maximumFractionDigits: 3 })} kg`;
+
+export const labelize = (s: string) => s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+
+type CentsKey = 'valueCents' | 'fundedCents' | 'heldCents' | 'settledCents' | 'refundedCents' | 'agreedKg';
+export const sumField = (rows: ApiAllocation[], key: CentsKey) => rows.reduce((t, r) => t + Number(r[key]), 0);
+
+export const paymentStatus = (rows: ApiAllocation[]) => {
+  if (sumField(rows, 'heldCents') > 0) return 'Held';
+  if (sumField(rows, 'settledCents') > 0) return 'Completed';
+  if (sumField(rows, 'refundedCents') > 0) return 'Refunded';
+  return 'Not funded';
+};

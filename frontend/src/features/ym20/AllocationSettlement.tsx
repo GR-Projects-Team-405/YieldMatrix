@@ -1,57 +1,53 @@
 import { useNavigate, useParams } from 'react-router-dom';
+import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ContentCard } from '../../components/ContentCard';
-import { formatLkr, orderSlug, orders, statusClass, sum, transactions } from './data';
+import { badgeClass, formatCents, formatKg, labelize, shortCode, sumField } from './txApi';
+import { useOrder } from './useOrder';
 import { useRecordsBase } from './useRecordsBase';
 
 export default function AllocationSettlement() {
   const { orderId } = useParams();
   const base = useRecordsBase();
   const navigate = useNavigate();
-  const order = orders[orderId ?? ''];
+  const { data, loading, error } = useOrder(orderId);
 
-  if (!order) {
+  if (loading) return <p role="status" className="text-sm opacity-70">Loading settlement...</p>;
+  if (error || !data) {
     return (
-      <ContentCard title="Settlement not found" subtitle={`We could not find ${orderId ?? 'this order'}.`}>
+      <div className="space-y-4">
+        <Alert type="error">{error || 'Order not found.'}</Alert>
         <Button variant="outline" onClick={() => navigate(base)}>Back to transaction history</Button>
-      </ContentCard>
+      </div>
     );
   }
 
-  const totalQty = sum(order.growers.map((g) => g.qty));
-  const gross = sum(order.growers.map((g) => g.qty * g.unitPrice));
-  const fees = sum(order.growers.map((g) => g.fee));
-  const net = gross - fees;
-  const tx = transactions.find((t) => orderSlug(t.orderId) === orderId);
-  const settled = order.payment === 'Completed';
-
+  const { order, allocations } = data;
+  const totalKg = sumField(allocations, 'agreedKg');
   const stats = [
-    { label: 'ALLOCATED QUANTITY', value: `${totalQty.toLocaleString('en-US')} kg`, note: `${order.growers.length} grower${order.growers.length > 1 ? 's' : ''}` },
-    { label: 'GROSS VALUE', value: formatLkr(gross), note: 'Goods total' },
-    { label: 'PLATFORM FEE', value: formatLkr(fees), note: 'Simulated' },
-    { label: 'NET TO GROWERS', value: formatLkr(net), note: 'After fees' },
+    { label: 'ALLOCATED QUANTITY', value: formatKg(totalKg), note: `${allocations.length} farm${allocations.length === 1 ? '' : 's'}` },
+    { label: 'AGREED VALUE', value: formatCents(sumField(allocations, 'valueCents')), note: 'Goods total' },
+    { label: 'HELD IN ESCROW', value: formatCents(sumField(allocations, 'heldCents')), note: 'Simulated funds' },
+    { label: 'SETTLED', value: formatCents(sumField(allocations, 'settledCents')), note: `Refunded ${formatCents(sumField(allocations, 'refundedCents'))}` },
   ];
 
+  const accepted = allocations.some((a) => ['accepted', 'partially_accepted', 'resolved'].includes(a.status));
   const timeline = [
-    { label: 'Allocation confirmed', done: true },
-    { label: 'Funds held', done: true },
-    { label: 'Delivery accepted', done: settled },
-    { label: 'Settlement released', done: settled },
+    { label: 'Allocation confirmed', done: allocations.length > 0 },
+    { label: 'Funds held', done: sumField(allocations, 'fundedCents') > 0 },
+    { label: 'Delivery accepted', done: accepted },
+    { label: 'Settlement released', done: sumField(allocations, 'settledCents') > 0 },
   ];
 
   return (
     <div className="space-y-6">
-      <button className="text-xs opacity-70 hover:underline" onClick={() => navigate(`${base}/orders/${orderId}`)}>
+      <button className="text-xs opacity-70 hover:underline" onClick={() => navigate(`${base}/orders/${order.id}`)}>
         ← Back to order summary
       </button>
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Allocation settlement details</h1>
-          <p className="text-sm opacity-70">How the order value is shared across growers · {order.id}</p>
-          <span className="mt-2 inline-block text-[10px] tracking-wide opacity-70">DEMO DASHBOARD · 02 NOV 2026</span>
-        </div>
-        <Button variant="outline">Download breakdown</Button>
+      <div>
+        <h1 className="text-3xl font-bold">Allocation settlement details</h1>
+        <p className="text-sm opacity-70">How the order value is shared across farms · {shortCode('ORD', order.id)}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -64,39 +60,41 @@ export default function AllocationSettlement() {
         ))}
       </div>
 
-      <ContentCard title="Settlement by grower">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-[10px] tracking-wider opacity-70">
-                <th className="p-3">GROWER</th><th className="p-3">QTY</th><th className="p-3">SHARE</th><th className="p-3">GROSS</th>
-                <th className="p-3">FEE</th><th className="p-3">NET</th><th className="p-3">STATUS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order.growers.map((g) => {
-                const gGross = g.qty * g.unitPrice;
-                return (
-                  <tr key={g.name} className="border-t border-gray-200">
-                    <td className="p-3 font-semibold">{g.name}</td>
-                    <td className="p-3">{g.qty} kg</td>
+      <ContentCard title="Settlement by farm">
+        {allocations.length === 0 ? (
+          <p className="text-sm opacity-70">No allocations on this order yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-[10px] tracking-wider opacity-70">
+                  <th className="p-3">FARM</th><th className="p-3">QTY</th><th className="p-3">SHARE</th><th className="p-3">VALUE</th>
+                  <th className="p-3">HELD</th><th className="p-3">SETTLED</th><th className="p-3">REFUNDED</th><th className="p-3">STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allocations.map((a) => (
+                  <tr key={a.id} className="border-t border-gray-200">
+                    <td className="p-3 font-semibold">{a.farm}</td>
+                    <td className="p-3">{formatKg(a.agreedKg)}</td>
                     <td className="p-3">
                       <div className="h-2 min-w-20 overflow-hidden rounded-full bg-gray-200">
-                        <div className="h-full bg-[#315A42]" style={{ width: `${Math.round((g.qty / totalQty) * 100)}%` }} />
+                        <div className="h-full bg-[#315A42]" style={{ width: `${totalKg ? Math.round((Number(a.agreedKg) / totalKg) * 100) : 0}%` }} />
                       </div>
                     </td>
-                    <td className="p-3">{formatLkr(gGross)}</td>
-                    <td className="p-3">{formatLkr(g.fee)}</td>
-                    <td className="p-3">{formatLkr(gGross - g.fee)}</td>
+                    <td className="p-3">{formatCents(a.valueCents)}</td>
+                    <td className="p-3">{formatCents(a.heldCents)}</td>
+                    <td className="p-3">{formatCents(a.settledCents)}</td>
+                    <td className="p-3">{formatCents(a.refundedCents)}</td>
                     <td className="p-3">
-                      <span className={`rounded-xl px-3 py-1 text-xs font-semibold ${statusClass[order.payment]}`}>{order.payment}</span>
+                      <span className={`rounded-xl px-3 py-1 text-xs font-semibold ${badgeClass(Number(a.heldCents) > 0 ? 'Held' : 'Completed')}`}>{labelize(a.status)}</span>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </ContentCard>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -113,11 +111,10 @@ export default function AllocationSettlement() {
 
         <ContentCard title="Related records">
           <div className="space-y-3 text-sm font-semibold text-[#315A42]">
-            {tx && <button className="block hover:underline" onClick={() => navigate(`${base}/transactions/${tx.id}`)}>{tx.id} · {tx.type} →</button>}
-            <button className="block hover:underline" onClick={() => navigate(`${base}/orders/${orderId}`)}>Order summary →</button>
+            <button className="block hover:underline" onClick={() => navigate(`${base}/orders/${order.id}`)}>Order summary →</button>
             <button className="block hover:underline" onClick={() => navigate(base)}>All transactions →</button>
           </div>
-          <p className="mt-4 rounded-xl bg-orange-100 px-4 py-3 text-xs text-orange-900">Demo data · Simulated settlement.</p>
+          <p className="mt-4 rounded-xl bg-orange-100 px-4 py-3 text-xs text-orange-900">Simulated funds only · No real money is moved.</p>
         </ContentCard>
       </div>
     </div>
