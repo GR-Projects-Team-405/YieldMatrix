@@ -21,6 +21,8 @@ const navigation: Record<Role, { label: string; path: string; icon: LucideIcon }
     { label: "Bulk matching", path: 'bulk-matching', icon: Sprout },
     { label: "My demands", path: 'demands', icon: ClipboardList },
     { label: "My orders", path: 'orders', icon: Package },
+    { label: "Acceptance", path: 'acceptance', icon: PackageCheck },
+    { label: "My disputes", path: 'disputes', icon: TriangleAlert },
     { label: "Commitments", path: 'commitments', icon: CalendarDays },
     { label: "Agri wallet", path: 'wallet', icon: Wallet },
     { label: "Market insights", path: 'market-insights', icon: ChartNoAxesCombined },
