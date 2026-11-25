@@ -1,11 +1,14 @@
-import { Link } from 'react-router-dom';
-import { ContentCard } from '../../components/ContentCard';
+import { useNavigate } from 'react-router-dom';
+import api from '../../services/api';
+import { FarmForm } from './FarmForm';
+import { farmsPath } from './farmProfile';
 
 export default function AddFarm() {
+  const navigate = useNavigate();
   return (
-    <ContentCard title="Add farm">
-      <p>The farm registration form will appear here.</p>
-      <Link to="/farmer/farms">Back to My farms</Link>
-    </ContentCard>
+    <FarmForm cancelTo={farmsPath} onSave={async (profile) => {
+      await api.post('/ym07/farms', profile);
+      navigate(farmsPath, { replace: true, state: { farmNotice: 'Farm added successfully.' } });
+    }} />
   );
 }
