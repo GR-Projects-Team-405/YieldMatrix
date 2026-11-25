@@ -172,7 +172,7 @@ export default function WalletTransactions() {
       </div>
 
       <div className="ym27-filters">
-        <label className="ym27-filter">
+        <label className="ym27-filter ym27-filter--search">
           <span>Search reference or produce</span>
           <input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} type="search" placeholder="Search reference or produce" />
         </label>
