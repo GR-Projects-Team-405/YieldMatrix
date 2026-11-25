@@ -53,7 +53,13 @@ export interface ProduceListingView {
   committedKg: number;
   /** Listing status from listings.status */
   status: ListingStatus;
-  /** Optional image URL or asset path (FR-FARM-10: fallback placeholder used if omitted) */
+  /** Optional human-readable batch reference returned by backend */
+  batchNumber?: string;
+  /** Harvest batch harvested total kg (when included by GET /produce/:id) */
+  actualKg?: number;
+  /** Harvest batch net sellable kg ceiling (when included by GET /produce/:id) */
+  sellableKg?: number;
+  /** Optional image URL returned by backend */
   imageUrl?: string;
   /** Listing validity start timestamp (UTC ISO string) from listings.valid_from */
   validFrom: string;
@@ -97,15 +103,7 @@ export interface ProduceFilterState {
   pageSize: number;
 }
 
-/** Category tab item with display label, category key, count, and icon identifier */
-export interface CategoryFilterItem {
-  key: ProduceCategory;
-  label: string;
-  count: number;
-  iconName: 'grid' | 'vegetable' | 'fruit' | 'grain' | 'spice' | 'other';
-}
-
-/** Unified response structure for produce listings query */
+/** Unified response structure for live produce listings query */
 export interface ProduceApiResponse {
   listings: ProduceListingView[];
   summary: ProducePageSummary;
@@ -114,8 +112,6 @@ export interface ProduceApiResponse {
   pageSize: number;
   farms: Array<{ id: string; name: string }>;
   categoryCounts: Record<ProduceCategory, number>;
-  /** Explicitly flags whether the returned data is development sample data */
-  isSampleData?: boolean;
 }
 
 /**
@@ -142,6 +138,8 @@ export interface HarvestBatchOption {
   gradeId: string;
   /** Grade name from grades.name, e.g. "Grade A" */
   gradeName: string;
+  /** Harvest date recorded in YM08 harvest batch (ISO string or YYYY-MM-DD) */
+  harvestDate?: string;
   /** Batch lifecycle status from harvest_batches.status */
   status: 'planned' | 'ready' | 'harvested' | 'depleted' | 'cancelled';
   /** Total harvested weight in kg from harvest_batches.actual_kg */
@@ -158,15 +156,20 @@ export interface HarvestBatchOption {
   hasActiveListing?: boolean;
 }
 
-/** The 5 agricultural placeholder visual categories */
-export type ProducePlaceholderKey = 'vegetables' | 'fruits' | 'grains' | 'fresh-produce' | 'spices';
+/** Certified farm option sourced from YM07 */
+export interface FarmerFarmOption {
+  id: string;
+  name: string;
+  district?: string;
+  status?: string;
+}
 
-/** Information describing a placeholder image asset */
-export interface ProducePlaceholderItem {
-  key: ProducePlaceholderKey;
-  label: string;
-  category: Exclude<ProduceCategory, 'All'>;
-  imageUrl: string;
+/** Explicit state for external YM07 / YM08 dependency adapters */
+export interface DependencyIntegrationState<T> {
+  status: 'ready' | 'pending' | 'error';
+  items: T[];
+  message?: string;
+  isSampleData?: boolean;
 }
 
 /**
@@ -188,7 +191,6 @@ export interface AddProduceFormState {
   unitPrice: number | ''; // In LKR per kg (e.g. 320)
   availableFrom: string; // YYYY-MM-DD
   availableUntil: string; // YYYY-MM-DD
-  selectedImageKey: ProducePlaceholderKey;
   status?: ListingStatus;
 }
 
@@ -206,9 +208,6 @@ export interface AddProduceValidationErrors {
   availableFrom?: string;
   availableUntil?: string;
 }
-
-/** Type alias for shared validation errors */
-export type ProduceListingValidationErrors = AddProduceValidationErrors;
 
 /** Available tabs on the Produce Listing Details page */
 export type ListingDetailsTabId = 'overview' | 'allocations' | 'price-history' | 'activity';
@@ -285,7 +284,6 @@ export interface ActivityEventRecord {
  */
 export interface ProduceListingDetailView extends ProduceListingView {
   batchNumber: string;
-  description?: string;
   updatedAt?: string;
   allocations: ListingAllocationRecord[];
   orders: ListingOrderRecord[];

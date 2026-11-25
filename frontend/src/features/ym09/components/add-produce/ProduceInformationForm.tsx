@@ -1,11 +1,21 @@
 import { Info, MapPin, Sprout, Layers, Award, Lock } from 'lucide-react';
-import type { ProduceListingFormState, AddProduceValidationErrors, HarvestBatchOption } from '../../types/produce';
+import { Alert } from '../../../../components/Alert';
+import { isEligibleCreateBatch } from '../../services/produceDependenciesApi';
+import type {
+  ProduceListingFormState,
+  AddProduceValidationErrors,
+  HarvestBatchOption,
+} from '../../types/produce';
 
 interface ProduceInformationFormProps {
+  mode?: 'create' | 'edit';
   formState: ProduceListingFormState;
   errors: AddProduceValidationErrors;
   farms: Array<{ id: string; name: string }>;
   harvestBatches: HarvestBatchOption[];
+  dependenciesLoading?: boolean;
+  dependencyNotice?: string | null;
+  isSamplePreview?: boolean;
   isSourceLocked?: boolean;
   lockReason?: string;
   onFarmChange: (farmId: string, farmName: string) => void;
@@ -13,16 +23,25 @@ interface ProduceInformationFormProps {
 }
 
 export function ProduceInformationForm({
+  mode = 'create',
   formState,
   errors,
   farms,
   harvestBatches,
+  dependenciesLoading = false,
+  dependencyNotice = null,
+  isSamplePreview = false,
   isSourceLocked = false,
   lockReason,
   onFarmChange,
   onBatchChange,
 }: ProduceInformationFormProps) {
   const farmBatches = harvestBatches.filter((b) => !formState.farmId || b.farmId === formState.farmId);
+
+  const effectiveFarms =
+    formState.farmId && !farms.some((f) => f.id === formState.farmId)
+      ? [{ id: formState.farmId, name: formState.farmName || formState.farmId }, ...farms]
+      : farms;
 
   const handleFarmSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedId = e.target.value;
@@ -47,14 +66,33 @@ export function ProduceInformationForm({
         <span>Produce Information</span>
       </div>
 
-      {/* Lock Notice banner when listing has active reservations or commitments */}
+      {/* Explicit Development Preview Notice when SAMPLE_HARVEST_BATCHES are active */}
+      {mode === 'create' && !dependenciesLoading && isSamplePreview && (
+        <div style={{ marginBottom: '14px' }}>
+          <Alert type="info">
+            <strong>DEVELOPMENT PREVIEW:</strong> Displaying illustrative sample farms and harvest batches while YM07 and YM08 APIs are pending. These sample batches are for UI preview only and are not real database records.
+          </Alert>
+        </div>
+      )}
+
+      {/* Dependency Pending Notice in Create Mode */}
+      {mode === 'create' && !dependenciesLoading && dependencyNotice && (
+        <div className="ym09-lock-banner" role="status">
+          <Info size={16} color="var(--muted)" style={{ marginTop: '2px', flexShrink: 0 }} aria-hidden="true" />
+          <div>
+            <strong>External Module Integration Pending:</strong> {dependencyNotice}
+          </div>
+        </div>
+      )}
+
+      {/* Lock Notice banner when editing an existing listing */}
       {isSourceLocked && (
         <div className="ym09-lock-banner" role="note">
           <Lock size={16} color="var(--muted)" style={{ marginTop: '2px', flexShrink: 0 }} aria-hidden="true" />
           <div>
-            <strong>Harvest Source Locked:</strong>{' '}
+            <strong>Harvest Source Fixed:</strong>{' '}
             {lockReason ||
-              'Source batch cannot be changed because this listing has active reservations or commitments. Reassigning batches under active holds is prevented to protect order integrity.'}
+              'Farm, Harvest Batch, Crop, and Grade are fixed when editing an existing listing to protect original harvest traceability and historical allocations.'}
           </div>
         </div>
       )}
@@ -79,14 +117,16 @@ export function ProduceInformationForm({
               id="produce-farm"
               value={formState.farmId}
               onChange={handleFarmSelect}
-              disabled={isSourceLocked}
+              disabled={isSourceLocked || dependenciesLoading}
               aria-invalid={errors.farmId ? true : undefined}
               aria-describedby={errors.farmId ? 'produce-farm-error' : undefined}
-              title={isSourceLocked ? 'Farm origin cannot be changed while active reservations exist' : undefined}
+              title={isSourceLocked ? 'Farm origin is fixed on existing listings' : undefined}
               className={`ym09-source-control ${isSourceLocked ? 'ym09-source-control--locked' : 'ym09-source-control--editable'}`}
             >
-              <option value="">Choose certified farm...</option>
-              {farms.map((farm) => (
+              <option value="">
+                {dependenciesLoading ? 'Loading certified farms...' : 'Choose certified farm...'}
+              </option>
+              {effectiveFarms.map((farm) => (
                 <option key={farm.id} value={farm.id}>
                   {farm.name}
                 </option>
@@ -155,25 +195,31 @@ export function ProduceInformationForm({
               id="produce-batch"
               value={formState.batchId}
               onChange={handleBatchSelect}
-              disabled={isSourceLocked}
+              disabled={isSourceLocked || dependenciesLoading}
               aria-invalid={errors.batchId ? true : undefined}
               aria-describedby={errors.batchId ? 'produce-batch-error' : 'produce-batch-hint'}
-              title={isSourceLocked ? 'Harvest batch cannot be changed while active reservations exist' : undefined}
+              title={isSourceLocked ? 'Harvest batch is fixed on existing listings' : undefined}
               className={`ym09-source-control ${isSourceLocked ? 'ym09-source-control--locked' : 'ym09-source-control--editable'}`}
             >
-              <option value="">Select verified harvest batch...</option>
+              <option value="">
+                {dependenciesLoading ? 'Loading eligible harvest batches...' : 'Select verified harvest batch...'}
+              </option>
+              {formState.batchId && !farmBatches.some((b) => b.id === formState.batchId) && (
+                <option value={formState.batchId}>
+                  {formState.batchNumber || formState.batchId} — Currently Selected
+                </option>
+              )}
               {farmBatches.map((batch) => {
                 const isCurrentListingBatch = batch.id === formState.batchId;
-                const isHarvested = batch.status === 'harvested';
-                const isDuplicate = !isCurrentListingBatch && batch.hasActiveListing;
-                const isDisabled = !isCurrentListingBatch && (!isHarvested || isDuplicate || batch.availableStockKg <= 0);
+                const eligible = isEligibleCreateBatch(batch);
+                const isDisabled = !isCurrentListingBatch && !eligible;
 
                 let suffix = `— ${batch.availableStockKg} kg available`;
                 if (isCurrentListingBatch) {
                   suffix = `— Currently Selected`;
-                } else if (!isHarvested) {
+                } else if (batch.status !== 'harvested') {
                   suffix = `— Status: ${batch.status} (Not harvested)`;
-                } else if (isDuplicate) {
+                } else if (batch.hasActiveListing) {
                   suffix = `— Already Active on Marketplace`;
                 } else if (batch.availableStockKg <= 0) {
                   suffix = `— Depleted (0 kg)`;

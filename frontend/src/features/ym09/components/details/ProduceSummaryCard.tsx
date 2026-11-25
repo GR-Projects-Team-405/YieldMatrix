@@ -1,8 +1,27 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Sprout, Layers, Calendar, Tag, Pencil, Maximize2, X } from 'lucide-react';
-import type { ProduceListingDetailView } from '../../types/produce';
-import { getPlaceholderImageForCategory } from '../../constants/produceConstants';
+import {
+  Archive,
+  Calendar,
+  ImageOff,
+  Layers,
+  MapPin,
+  Maximize2,
+  PauseCircle,
+  Pencil,
+  PlayCircle,
+  Sprout,
+  Tag,
+  X,
+} from 'lucide-react';
+import { ConfirmDialog } from '../../../../components/ConfirmDialog';
+import {
+  getAvailableListingStatusActions,
+  IMAGE_UNAVAILABLE_MESSAGE,
+  type ListingStatusActionOption,
+} from '../../constants/produceConstants';
+import { updateProduceListingStatus } from '../../services/produceApi';
+import type { ListingStatus, ProduceListingDetailView } from '../../types/produce';
 import {
   formatDisplayDateColombo,
   formatListingStatusLabel,
@@ -17,21 +36,43 @@ function formatColomboDateRange(fromStr?: string, untilStr?: string): string {
   return `${start} – ${end}`;
 }
 
+function getActionButtonIcon(targetStatus: ListingStatus) {
+  switch (targetStatus) {
+    case 'active':
+      return <PlayCircle size={15} aria-hidden="true" />;
+    case 'paused':
+      return <PauseCircle size={15} aria-hidden="true" />;
+    case 'closed':
+    default:
+      return <Archive size={15} aria-hidden="true" />;
+  }
+}
+
 interface ProduceSummaryCardProps {
   listing: ProduceListingDetailView;
   onEditListing?: () => void;
+  onStatusUpdated?: (completedAction: ListingStatusActionOption) => void;
+  onStatusError?: (message: string) => void;
 }
 
-export function ProduceSummaryCard({ listing, onEditListing }: ProduceSummaryCardProps) {
+export function ProduceSummaryCard({
+  listing,
+  onEditListing,
+  onStatusUpdated,
+  onStatusError,
+}: ProduceSummaryCardProps) {
   const navigate = useNavigate();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [pendingAction, setPendingAction] = useState<ListingStatusActionOption | null>(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+
   const lightboxTitleId = useId();
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setImageError(false);
-  }, [listing.id, listing.imageUrl]);
+  }, [listing.id, listing.imageUrl, listing.status]);
 
   useEffect(() => {
     if (!lightboxOpen) return;
@@ -56,32 +97,62 @@ export function ProduceSummaryCard({ listing, onEditListing }: ProduceSummaryCar
 
   const handleEdit = onEditListing || (() => navigate(`/farmer/produce/${listing.id}/edit`));
 
-  const fallbackImage = getPlaceholderImageForCategory(listing.category);
-  const imageSrc = !imageError && listing.imageUrl ? listing.imageUrl : fallbackImage;
+  const hasValidImage = Boolean(!imageError && listing.imageUrl);
   const statusTone = getListingStatusTone(listing.status);
   const statusLabel = formatListingStatusLabel(listing.status);
   const priceDisplay = formatLkrTotal(listing.unitPriceCents);
+  const statusActions = getAvailableListingStatusActions(listing.status, listing.cropName);
+
+  const handleConfirmStatusChange = async () => {
+    if (!pendingAction || statusUpdating) return;
+    const completedAction = pendingAction;
+    setStatusUpdating(true);
+
+    try {
+      await updateProduceListingStatus(listing.id, completedAction.targetStatus);
+      setPendingAction(null);
+      onStatusUpdated?.(completedAction);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Failed to update produce listing status.';
+      setPendingAction(null);
+      onStatusError?.(msg);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
 
   return (
     <>
       <section className="ym09-summary-card">
         {/* Left Column: Produce Image Box */}
         <div className="ym09-summary-image-box">
-          <img
-            src={imageSrc}
-            alt={listing.cropName}
-            className="ym09-summary-image"
-            onError={() => setImageError(true)}
-          />
-          <button
-            type="button"
-            onClick={() => setLightboxOpen(true)}
-            className="ym09-image-expand-btn"
-            aria-label={`Expand ${listing.cropName} image preview`}
-            title="Expand produce image"
-          >
-            <Maximize2 size={16} aria-hidden="true" />
-          </button>
+          {hasValidImage ? (
+            <>
+              <img
+                src={listing.imageUrl}
+                alt={listing.cropName}
+                className="ym09-summary-image"
+                onError={() => setImageError(true)}
+              />
+              <button
+                type="button"
+                onClick={() => setLightboxOpen(true)}
+                className="ym09-image-expand-btn"
+                aria-label={`Expand ${listing.cropName} image preview`}
+                title="Expand produce image"
+              >
+                <Maximize2 size={16} aria-hidden="true" />
+              </button>
+            </>
+          ) : (
+            <div className="ym09-image-unavailable-fill">
+              <ImageOff size={28} strokeWidth={1.5} color="var(--muted)" aria-hidden="true" />
+              <span className="ym09-image-unavailable-text">{IMAGE_UNAVAILABLE_MESSAGE}</span>
+            </div>
+          )}
         </div>
 
         {/* Middle Column: Title, Status & Metadata */}
@@ -138,14 +209,30 @@ export function ProduceSummaryCard({ listing, onEditListing }: ProduceSummaryCar
 
         {/* Right Column: Actions & Highlight Price Box */}
         <div className="ym09-summary-actions-col">
-          <button
-            type="button"
-            onClick={handleEdit}
-            className="ym09-edit-listing-btn"
-          >
-            <Pencil size={15} aria-hidden="true" />
-            <span>Edit Listing</span>
-          </button>
+          <div className="ym09-summary-action-btns">
+            <button
+              type="button"
+              onClick={handleEdit}
+              className="ym09-edit-listing-btn"
+              disabled={statusUpdating}
+            >
+              <Pencil size={15} aria-hidden="true" />
+              <span>Edit Listing</span>
+            </button>
+
+            {statusActions.map((action) => (
+              <button
+                key={action.targetStatus}
+                type="button"
+                onClick={() => setPendingAction(action)}
+                className="ym09-status-action-btn"
+                disabled={statusUpdating}
+              >
+                {getActionButtonIcon(action.targetStatus)}
+                <span>{action.label}</span>
+              </button>
+            ))}
+          </div>
 
           <div className="ym09-price-box">
             <div className="ym09-price-box-icon">
@@ -161,8 +248,8 @@ export function ProduceSummaryCard({ listing, onEditListing }: ProduceSummaryCar
         </div>
       </section>
 
-      {/* Lightbox Modal Dialog */}
-      {lightboxOpen && (
+      {/* Lightbox Modal Dialog (only opened when real imageUrl is present) */}
+      {lightboxOpen && hasValidImage && (
         <div
           className="ym09-modal-overlay"
           role="dialog"
@@ -186,17 +273,31 @@ export function ProduceSummaryCard({ listing, onEditListing }: ProduceSummaryCar
             </h3>
             <div className="ym09-lightbox-stage">
               <img
-                src={imageSrc}
+                src={listing.imageUrl}
                 alt={listing.cropName}
                 className="ym09-lightbox-image"
               />
             </div>
             <p className="ym09-lightbox-caption">
-              Standard certified agricultural commodity visual for {listing.cropName} ({listing.category}).
+              {listing.cropName} ({listing.category}) from {listing.farmName}.
             </p>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        title={pendingAction?.confirmTitle || 'Update listing status'}
+        description={pendingAction?.confirmDescription || ''}
+        confirmLabel={pendingAction?.confirmLabel || 'Confirm'}
+        busy={statusUpdating}
+        onCancel={() => {
+          if (!statusUpdating) {
+            setPendingAction(null);
+          }
+        }}
+        onConfirm={handleConfirmStatusChange}
+      />
     </>
   );
 }

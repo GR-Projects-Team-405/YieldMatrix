@@ -1,17 +1,48 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, MoreHorizontal, PauseCircle, Pencil, Trash2 } from 'lucide-react';
+import {
+  Archive,
+  Eye,
+  MoreHorizontal,
+  PauseCircle,
+  Pencil,
+  PlayCircle,
+} from 'lucide-react';
+import {
+  getAvailableListingStatusActions,
+  type ListingStatusActionOption,
+} from '../constants/produceConstants';
+import type { ListingStatus } from '../types/produce';
 
 interface ProduceActionMenuProps {
   produceName: string;
   listingId: string;
+  currentStatus: ListingStatus;
+  onSelectStatusAction?: (action: ListingStatusActionOption) => void;
+}
+
+function getActionIcon(targetStatus: ListingStatus) {
+  switch (targetStatus) {
+    case 'active':
+      return <PlayCircle size={14} aria-hidden="true" />;
+    case 'paused':
+      return <PauseCircle size={14} aria-hidden="true" />;
+    case 'closed':
+    default:
+      return <Archive size={14} aria-hidden="true" />;
+  }
 }
 
 /**
  * Accessible context action menu for produce cards and table rows.
  * Supports keyboard navigation (ArrowDown, ArrowUp, Home, End, Escape) and focus return.
  */
-export function ProduceActionMenu({ produceName, listingId }: ProduceActionMenuProps) {
+export function ProduceActionMenu({
+  produceName,
+  listingId,
+  currentStatus,
+  onSelectStatusAction,
+}: ProduceActionMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -19,6 +50,10 @@ export function ProduceActionMenu({ produceName, listingId }: ProduceActionMenuP
   const focusFirstOnOpenRef = useRef(false);
   const menuId = useId();
   const navigate = useNavigate();
+
+  const statusActions = onSelectStatusAction
+    ? getAvailableListingStatusActions(currentStatus, produceName)
+    : [];
 
   const getEnabledMenuItems = (): HTMLButtonElement[] => {
     if (!menuPopoverRef.current) return [];
@@ -155,33 +190,21 @@ export function ProduceActionMenu({ produceName, listingId }: ProduceActionMenuP
             <span>Edit listing</span>
           </button>
 
-          <button
-            type="button"
-            role="menuitem"
-            disabled
-            aria-disabled="true"
-            title="Pause Listing action requires backend workflow implementation"
-            className="ym09-action-menu-item"
-          >
-            <PauseCircle size={14} aria-hidden="true" />
-            <span>
-              Pause listing <small style={{ fontSize: '10px', color: 'var(--muted)' }}>(Pending backend)</small>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            role="menuitem"
-            disabled
-            aria-disabled="true"
-            title="Archive action requires backend workflow implementation"
-            className="ym09-action-menu-item"
-          >
-            <Trash2 size={14} aria-hidden="true" />
-            <span>
-              Archive <small style={{ fontSize: '10px', color: 'var(--muted)' }}>(Pending backend)</small>
-            </span>
-          </button>
+          {statusActions.map((action) => (
+            <button
+              key={action.targetStatus}
+              type="button"
+              role="menuitem"
+              className="ym09-action-menu-item"
+              onClick={() => {
+                setOpen(false);
+                onSelectStatusAction?.(action);
+              }}
+            >
+              {getActionIcon(action.targetStatus)}
+              <span>{action.label}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>

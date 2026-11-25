@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MapPin, Package, Sprout } from 'lucide-react';
+import { ImageOff, MapPin, Package, Sprout } from 'lucide-react';
+import {
+  IMAGE_UNAVAILABLE_MESSAGE,
+  type ListingStatusActionOption,
+} from '../constants/produceConstants';
 import type { ProduceListingView } from '../types/produce';
 import {
   formatKg,
@@ -11,6 +15,10 @@ import { ProduceActionMenu } from './ProduceActionMenu';
 
 interface ProduceCardProps {
   listing: ProduceListingView;
+  onSelectStatusAction?: (
+    listing: ProduceListingView,
+    action: ListingStatusActionOption
+  ) => void;
 }
 
 /**
@@ -18,7 +26,7 @@ interface ProduceCardProps {
  * Avoids nested interactive ARIA roles: the crop heading Link and ProduceActionMenu
  * are independent focusable controls, while pointer clicks on card whitespace open Details.
  */
-export function ProduceCard({ listing }: ProduceCardProps) {
+export function ProduceCard({ listing, onSelectStatusAction }: ProduceCardProps) {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
 
@@ -56,9 +64,9 @@ export function ProduceCard({ listing }: ProduceCardProps) {
           />
         ) : (
           <div className="ym09-produce-card-fallback">
-            <Sprout size={36} strokeWidth={1.5} aria-hidden="true" />
+            <ImageOff size={28} strokeWidth={1.5} color="var(--muted)" aria-hidden="true" />
             <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--muted)' }}>
-              {listing.cropName}
+              {IMAGE_UNAVAILABLE_MESSAGE}
             </span>
           </div>
         )}
@@ -124,7 +132,16 @@ export function ProduceCard({ listing }: ProduceCardProps) {
         </div>
 
         <div onClick={(e) => e.stopPropagation()}>
-          <ProduceActionMenu produceName={listing.cropName} listingId={listing.id} />
+          <ProduceActionMenu
+            produceName={listing.cropName}
+            listingId={listing.id}
+            currentStatus={listing.status}
+            onSelectStatusAction={
+              onSelectStatusAction
+                ? (action) => onSelectStatusAction(listing, action)
+                : undefined
+            }
+          />
         </div>
       </div>
     </article>

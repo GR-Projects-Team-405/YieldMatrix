@@ -1,5 +1,6 @@
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
+import type { ListingStatusActionOption } from '../constants/produceConstants';
 import type { ProduceListingView } from '../types/produce';
 import { ProduceCard } from './ProduceCard';
 
@@ -7,13 +8,22 @@ interface ProduceGridProps {
   listings: ProduceListingView[];
   loading?: boolean;
   onResetFilters: () => void;
+  onSelectStatusAction?: (
+    listing: ProduceListingView,
+    action: ListingStatusActionOption
+  ) => void;
 }
 
 /**
  * Responsive 4-column grid container for produce listing cards.
  * Handles loading skeletons and empty filter states.
  */
-export function ProduceGrid({ listings, loading = false, onResetFilters }: ProduceGridProps) {
+export function ProduceGrid({
+  listings,
+  loading = false,
+  onResetFilters,
+  onSelectStatusAction,
+}: ProduceGridProps) {
   if (loading) {
     return (
       <div
@@ -52,7 +62,11 @@ export function ProduceGrid({ listings, loading = false, onResetFilters }: Produ
   return (
     <div className="ym09-produce-grid">
       {listings.map((listing) => (
-        <ProduceCard key={listing.id} listing={listing} />
+        <ProduceCard
+          key={listing.id}
+          listing={listing}
+          onSelectStatusAction={onSelectStatusAction}
+        />
       ))}
     </div>
   );

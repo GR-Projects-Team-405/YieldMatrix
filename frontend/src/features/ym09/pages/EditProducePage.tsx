@@ -1,71 +1,32 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
 import { ProduceListingForm } from '../components/add-produce/ProduceListingForm';
 import { getProduceListingById } from '../services/produceApi';
 import { mapListingToFormState } from '../utils/produceFormDefaults';
-import {
-  DEV_SAMPLE_PRODUCE,
-  ENABLE_DEV_SAMPLE_DATA,
-  SAMPLE_HARVEST_BATCHES,
-} from '../constants/produceConstants';
 import type { ProduceListingView } from '../types/produce';
 
 /**
  * Edit Produce Listing Page (/farmer/produce/:id/edit)
- * Loads an existing produce listing, locks harvest source fields when active holds exist,
- * and allows updating permitted parameters (Quantity, Pricing, Dates, Image).
+ * Loads an existing produce listing from backend (or explicit dev sample mode),
+ * keeps Farm, Batch, Crop, and Grade fixed to preserve original batch traceability,
+ * and allows updating Quantity, Pricing, and Availability dates.
  */
 export function EditProducePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // Initialize synchronously from sample data if available to prevent loading flicker
-  const [listing, setListing] = useState<ProduceListingView | null>(() => {
-    if (ENABLE_DEV_SAMPLE_DATA && id) {
-      const found = DEV_SAMPLE_PRODUCE.find((item) => item.id === id);
-      return found ? { ...found } : null;
-    }
-    return null;
-  });
-
-  const [error, setError] = useState<string | null>(() => {
-    if (ENABLE_DEV_SAMPLE_DATA && id) {
-      const found = DEV_SAMPLE_PRODUCE.find((item) => item.id === id);
-      if (!found) {
-        return `Produce listing with ID "${id}" was not found.`;
-      }
-    }
-    return null;
-  });
-
-  const [loading, setLoading] = useState<boolean>(() => !listing && !error);
-  const loadedIdRef = useRef<string | null>(
-    ENABLE_DEV_SAMPLE_DATA && id ? id : null
-  );
+  const [listing, setListing] = useState<ProduceListingView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let active = true;
 
     if (!id) {
-      loadedIdRef.current = null;
       setListing(null);
-      setError('No produce listing ID provided');
-      setLoading(false);
-      return;
-    }
-
-    if (loadedIdRef.current === id) {
-      setLoading(false);
-      return;
-    }
-
-    if (ENABLE_DEV_SAMPLE_DATA) {
-      const found = DEV_SAMPLE_PRODUCE.find((item) => item.id === id);
-      loadedIdRef.current = id;
-      setListing(found ? { ...found } : null);
-      setError(found ? null : `Produce listing with ID "${id}" was not found.`);
+      setError('No produce listing ID provided.');
       setLoading(false);
       return;
     }
@@ -79,13 +40,12 @@ export function EditProducePage() {
           throw new Error(`Produce listing with ID "${listingId}" was not found.`);
         }
         if (active) {
-          loadedIdRef.current = listingId;
           setListing(found);
         }
       } catch (err: unknown) {
         if (active) {
-          loadedIdRef.current = null;
-          const message = err instanceof Error ? err.message : 'Failed to load listing';
+          setListing(null);
+          const message = err instanceof Error ? err.message : 'Failed to load listing.';
           setError(message);
         }
       } finally {
@@ -101,9 +61,7 @@ export function EditProducePage() {
     };
   }, [id]);
 
-  const initialFormData = listing
-    ? mapListingToFormState(listing, SAMPLE_HARVEST_BATCHES)
-    : undefined;
+  const initialFormData = listing ? mapListingToFormState(listing) : undefined;
 
   if (loading) {
     return (

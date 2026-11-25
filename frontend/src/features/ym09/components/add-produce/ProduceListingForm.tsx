@@ -49,6 +49,9 @@ export function ProduceListingForm({
     activeImageUrl,
     availableFarms,
     harvestBatches,
+    dependenciesLoading,
+    dependencyNotice,
+    isSampleDependencies,
     isSourceLocked,
     lockReason,
     minAvailableKg,
@@ -60,7 +63,7 @@ export function ProduceListingForm({
     handlePriceChange,
     handleFromDateChange,
     handleUntilDateChange,
-    handleImageKeyChange,
+    handleStatusChange,
     handleSubmit,
     closeSuccessModal,
   } = useProduceListingForm({
@@ -122,10 +125,14 @@ export function ProduceListingForm({
           {/* LEFT COLUMN: Form Sections */}
           <div className="ym09-form-sections-col">
             <ProduceInformationForm
+              mode={mode}
               formState={formState}
               errors={errors}
               farms={availableFarms}
               harvestBatches={harvestBatches}
+              dependenciesLoading={dependenciesLoading}
+              dependencyNotice={dependencyNotice}
+              isSamplePreview={isSampleDependencies}
               isSourceLocked={isSourceLocked}
               lockReason={lockReason}
               onFarmChange={handleFarmChange}
@@ -142,24 +149,23 @@ export function ProduceListingForm({
             />
 
             <AvailabilityForm
+              mode={mode}
               formState={formState}
               errors={errors}
               onFromChange={handleFromDateChange}
               onUntilChange={handleUntilDateChange}
+              onStatusChange={handleStatusChange}
             />
           </div>
 
-          {/* RIGHT COLUMN: Live Listing Preview, Image Selector & Action Buttons */}
+          {/* RIGHT COLUMN: Live Listing Preview, Media Note & Action Buttons */}
           <div className="ym09-preview-col">
             <ListingPreviewCard
               formState={formState}
               activeImageUrl={activeImageUrl}
             />
 
-            <ProduceImageSelector
-              selectedKey={formState.selectedImageKey}
-              onSelectKey={handleImageKeyChange}
-            />
+            <ProduceImageSelector imageUrl={activeImageUrl} />
 
             {/* Action Buttons: Cancel and Submit Button (Publish or Update) */}
             <div className="ym09-action-buttons-row">

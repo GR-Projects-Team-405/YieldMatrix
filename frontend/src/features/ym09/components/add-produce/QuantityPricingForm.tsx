@@ -68,7 +68,7 @@ export function QuantityPricingForm({
             <input
               id="produce-quantity"
               type="number"
-              min={minAvailableKg || 1}
+              min={minAvailableKg && minAvailableKg > 0 ? minAvailableKg : 0.001}
               step="any"
               max={maxAvailableKg || undefined}
               placeholder="e.g. 100"
@@ -90,7 +90,7 @@ export function QuantityPricingForm({
             maxAvailableKg !== undefined && (
               <span id="produce-quantity-hint" className="ym09-field-hint">
                 {minAvailableKg && minAvailableKg > 0
-                  ? `Max batch stock: ${maxAvailableKg} kg (min ${minAvailableKg} kg committed)`
+                  ? `Max batch stock: ${maxAvailableKg} kg (min ${minAvailableKg} kg held/committed)`
                   : `Max batch stock: ${maxAvailableKg} kg`}
               </span>
             )
@@ -108,14 +108,14 @@ export function QuantityPricingForm({
             <input
               id="produce-price"
               type="number"
-              min="1"
+              min="0.01"
               step="any"
               placeholder="e.g. 320"
               value={formState.unitPrice}
               onChange={handlePriceInput}
               className="ym-input--unit"
               aria-invalid={errors.unitPrice ? true : undefined}
-              aria-describedby={errors.unitPrice ? 'produce-price-error' : 'produce-price-hint'}
+              aria-describedby={errors.unitPrice ? 'produce-price-error' : undefined}
             />
             <span id="produce-price-unit" className="ym-unit">
               / kg

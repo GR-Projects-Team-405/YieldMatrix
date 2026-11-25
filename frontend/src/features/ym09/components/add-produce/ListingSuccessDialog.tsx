@@ -66,13 +66,19 @@ export function ListingSuccessDialog({
           id="success-modal-title"
           style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', margin: '0 0 8px 0' }}
         >
-          {mode === 'edit' ? 'Listing Updated Successfully' : 'Listing Published Successfully'}
+          {mode === 'edit'
+            ? 'Listing Updated Successfully'
+            : formState.status === 'draft'
+              ? 'Listing Draft Saved'
+              : 'Listing Published Successfully'}
         </h3>
 
         <p style={{ fontSize: '14px', color: 'var(--muted)', lineHeight: 1.6, margin: '0 0 16px 0' }}>
           {mode === 'edit'
             ? 'The produce listing details have been updated in-place. Listing ID and historical integrity are preserved.'
-            : 'Your harvest listing has been published to the marketplace and is now discoverable.'}
+            : formState.status === 'draft'
+              ? 'Your produce listing has been saved as a draft. You can activate it when ready to publish to buyers.'
+              : 'Your harvest listing has been published to the marketplace and is now discoverable.'}
         </p>
 
         {/* Summary Details */}

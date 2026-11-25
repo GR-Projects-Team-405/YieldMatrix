@@ -1,12 +1,7 @@
 import axios from 'axios';
 import api from '../../../services/api';
-import {
-  DEV_SAMPLE_PRODUCE,
-  DEV_SAMPLE_SUMMARY,
-  ENABLE_DEV_SAMPLE_DATA,
-  SAMPLE_HARVEST_BATCHES,
-} from '../constants/produceConstants';
 import type {
+  ListingStatus,
   ProduceApiResponse,
   ProduceCategory,
   ProduceFilterState,
@@ -23,7 +18,6 @@ import type {
 
 export interface FetchMyProduceOptions {
   signal?: AbortSignal;
-  useSampleData?: boolean;
 }
 
 const VALID_PRODUCE_CATEGORIES: ReadonlySet<Exclude<ProduceCategory, 'All'>> = new Set([
@@ -38,6 +32,56 @@ function createAbortError(): Error {
   const err = new Error('Request aborted');
   err.name = 'AbortError';
   return err;
+}
+
+/**
+ * Extracts a clean user-facing error message from an Axios/API or runtime error.
+ */
+export function extractApiErrorMessage(err: unknown, fallbackMessage: string): string {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data as
+      | { error?: unknown; message?: unknown; fields?: Record<string, unknown> }
+      | undefined;
+
+    if (data && typeof data === 'object') {
+      const baseMsg =
+        typeof data.error === 'string' && data.error.trim()
+          ? data.error.trim()
+          : typeof data.message === 'string' && data.message.trim()
+            ? data.message.trim()
+            : '';
+
+      if (data.fields && typeof data.fields === 'object') {
+        const fieldMessages = Object.values(data.fields).filter(
+          (val): val is string => typeof val === 'string' && val.trim().length > 0
+        );
+        if (fieldMessages.length > 0) {
+          return baseMsg ? `${baseMsg}: ${fieldMessages.join(' ')}` : fieldMessages.join(' ');
+        }
+      }
+
+      if (baseMsg) {
+        return baseMsg;
+      }
+    }
+
+    if (err.message) {
+      return err.message;
+    }
+  }
+
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+
+  return fallbackMessage;
+}
+
+function toUtcRangeIso(dateStr: string, boundary: 'start' | 'end'): string {
+  const trimmed = (dateStr || '').trim();
+  if (!trimmed) return '';
+  if (trimmed.includes('T')) return trimmed;
+  return boundary === 'start' ? `${trimmed}T00:00:00Z` : `${trimmed}T23:59:59Z`;
 }
 
 /**
@@ -154,7 +198,22 @@ function normalizeLiveListing(raw: Record<string, unknown>): ProduceListingView 
     reservedKg,
     committedKg,
     status: (raw.status as ProduceListingView['status']) || 'active',
-    imageUrl: typeof raw.imageUrl === 'string' ? raw.imageUrl : undefined,
+    batchNumber:
+      typeof raw.batchNumber === 'string' && raw.batchNumber.trim()
+        ? raw.batchNumber.trim()
+        : undefined,
+    actualKg:
+      raw.actualKg !== undefined && raw.actualKg !== null
+        ? Number(raw.actualKg)
+        : undefined,
+    sellableKg:
+      raw.sellableKg !== undefined && raw.sellableKg !== null
+        ? Number(raw.sellableKg)
+        : undefined,
+    imageUrl:
+      typeof raw.imageUrl === 'string' && raw.imageUrl.trim()
+        ? raw.imageUrl.trim()
+        : undefined,
     validFrom: String(raw.validFrom ?? ''),
     validUntil: String(raw.validUntil ?? ''),
     createdAt: String(raw.createdAt ?? ''),
@@ -270,33 +329,9 @@ function applyClientProduceFilters(
   };
 }
 
-async function waitAbortable(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) {
-    throw createAbortError();
-  }
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(createAbortError());
-    };
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
-}
-
 /**
- * Fetches the authenticated farmer's produce listings and page-level summary metrics.
- *
- * When explicit development sample mode is active (`options.useSampleData ?? ENABLE_DEV_SAMPLE_DATA`),
- * returns the curated sample listings and `DEV_SAMPLE_SUMMARY` with `isSampleData: true`.
- *
- * When live API mode is active, queries `GET /api/ym09/produce` with AbortSignal support
- * and normalizes the live payload, computing summary metrics from real API records when omitted.
+ * Fetches the authenticated farmer's produce listings and page-level summary metrics
+ * strictly from `GET /api/ym09/produce` with AbortSignal support.
  * Errors propagate cleanly and NEVER silently fall back to sample data.
  */
 export async function fetchMyProduce(
@@ -307,43 +342,27 @@ export async function fetchMyProduce(
     throw createAbortError();
   }
 
-  const shouldUseSampleData = options.useSampleData ?? ENABLE_DEV_SAMPLE_DATA;
-
-  if (shouldUseSampleData) {
-    await waitAbortable(150, options.signal);
-
-    const categoryCounts = computeCategoryCounts(DEV_SAMPLE_PRODUCE);
-    const farms = extractUniqueFarms(DEV_SAMPLE_PRODUCE);
-    const { paginatedListings, total, page } = applyClientProduceFilters(
-      DEV_SAMPLE_PRODUCE,
-      filters
-    );
-
-    return {
-      listings: paginatedListings,
-      summary: DEV_SAMPLE_SUMMARY,
-      total,
-      page,
-      pageSize: filters.pageSize,
-      farms,
-      categoryCounts,
-      isSampleData: true,
-    };
-  }
-
   // Live API call: GET /api/ym09/produce
   const trimmedSearch = filters.search.trim();
-  const response = await api.get<unknown>('/ym09/produce', {
-    params: {
-      search: trimmedSearch || undefined,
-      category: filters.category !== 'All' ? filters.category : undefined,
-      status: filters.status !== 'all' ? filters.status : undefined,
-      farm: filters.farm !== 'all' ? filters.farm : undefined,
-      page: filters.page,
-      pageSize: filters.pageSize,
-    },
-    signal: options.signal,
-  });
+  let response;
+  try {
+    response = await api.get<unknown>('/ym09/produce', {
+      params: {
+        search: trimmedSearch || undefined,
+        category: filters.category !== 'All' ? filters.category : undefined,
+        status: filters.status !== 'all' ? filters.status : undefined,
+        farm: filters.farm !== 'all' ? filters.farm : undefined,
+        page: filters.page,
+        pageSize: filters.pageSize,
+      },
+      signal: options.signal,
+    });
+  } catch (err: unknown) {
+    if (isRequestAbortedError(err)) {
+      throw err;
+    }
+    throw new Error(extractApiErrorMessage(err, 'Failed to fetch produce listings.'));
+  }
 
   const payload = response?.data as
     | (Partial<ProduceApiResponse> & { success?: boolean; data?: unknown[] })
@@ -376,7 +395,6 @@ export async function fetchMyProduce(
       pageSize: filters.pageSize,
       farms,
       categoryCounts,
-      isSampleData: false,
     };
   }
 
@@ -399,7 +417,6 @@ export async function fetchMyProduce(
       pageSize: typeof payload.pageSize === 'number' ? payload.pageSize : filters.pageSize,
       farms,
       categoryCounts,
-      isSampleData: false,
     };
   }
 
@@ -407,309 +424,186 @@ export async function fetchMyProduce(
 }
 
 /**
- * Retrieves a single produce listing by its unique UUID / identifier.
- * Used by EditProducePage to load existing listing details for editing.
+ * Retrieves a single produce listing by its unique UUID / identifier
+ * from `GET /api/ym09/produce/:id`. Used by EditProducePage.
  */
 export async function getProduceListingById(id: string): Promise<ProduceListingView | null> {
-  if (ENABLE_DEV_SAMPLE_DATA) {
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    const found = DEV_SAMPLE_PRODUCE.find((item) => item.id === id);
-    return found ? { ...found } : null;
-  }
-
-  // Live API call: GET /api/ym09/produce/:id
   try {
-    const response = await api.get<ProduceListingView>(`/ym09/produce/${id}`);
-    return response.data;
-  } catch {
-    return null;
+    const response = await api.get<{ success?: boolean; data?: Record<string, unknown> }>(
+      `/ym09/produce/${id}`
+    );
+    const raw =
+      response?.data && typeof response.data === 'object' && 'data' in response.data
+        ? response.data.data
+        : (response?.data as unknown as Record<string, unknown> | undefined);
+
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('Invalid response received from produce listing endpoint.');
+    }
+
+    return normalizeLiveListing(raw as Record<string, unknown>);
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) {
+      return null;
+    }
+    throw new Error(extractApiErrorMessage(err, 'Failed to load produce listing.'));
   }
 }
 
 /**
- * Updates an existing produce listing in-place.
- * In development sample-data mode, mutates DEV_SAMPLE_PRODUCE in-place,
- * preserving listing.id and preventing duplicates.
- * In live mode, calls PUT /api/ym09/produce/:id.
+ * Updates an existing produce listing in-place via `PUT /api/ym09/produce/:id`.
  */
 export async function updateProduceListing(
   id: string,
   formData: ProduceListingFormState
 ): Promise<ProduceListingView> {
-  if (ENABLE_DEV_SAMPLE_DATA) {
-    await new Promise((resolve) => setTimeout(resolve, 80));
-
-    const index = DEV_SAMPLE_PRODUCE.findIndex((item) => item.id === id);
-    if (index === -1) {
-      throw new Error(`Produce listing with ID "${id}" was not found.`);
-    }
-
-    const existing = DEV_SAMPLE_PRODUCE[index];
-    // reservedKg already includes uncollected committed/disputed quantities per live backend DR-01
-    const activeHolds = existing.reservedKg || 0;
-
-    // Business rule: Reassignment blocked if active reservations or commitments exist
-    if (formData.batchId !== existing.batchId && activeHolds > 0) {
-      throw new Error(
-        `Cannot change harvest batch on a listing with active reservations or commitments (${activeHolds} kg held).`
-      );
-    }
-
-    // Verify target batch eligibility
-    const targetBatch = SAMPLE_HARVEST_BATCHES.find((b) => b.id === formData.batchId);
-    if (!targetBatch) {
-      throw new Error('Selected harvest batch does not exist.');
-    }
-    if (targetBatch.status !== 'harvested') {
-      throw new Error('Harvest batch must be in harvested status before listing.');
-    }
-
-    const totalQty = typeof formData.totalQuantity === 'number' ? formData.totalQuantity : 0;
-    const unitPrice = typeof formData.unitPrice === 'number' ? formData.unitPrice : 0;
-
-    // Check stock ceiling on reassignment
-    if (formData.batchId !== existing.batchId) {
-      if (totalQty > targetBatch.availableStockKg) {
-        throw new Error(
-          `Offered quantity (${totalQty} kg) exceeds batch available stock (${targetBatch.availableStockKg} kg).`
-        );
+  try {
+    const response = await api.put<{ success?: boolean; data?: Record<string, unknown> }>(
+      `/ym09/produce/${id}`,
+      {
+        offeredKg: Number(formData.totalQuantity),
+        unitPriceCents: Math.round((Number(formData.unitPrice) || 0) * 100),
+        validFrom: toUtcRangeIso(formData.availableFrom, 'start'),
+        validUntil: toUtcRangeIso(formData.availableUntil, 'end'),
       }
+    );
+
+    const raw =
+      response?.data && typeof response.data === 'object' && 'data' in response.data
+        ? response.data.data
+        : (response?.data as unknown as Record<string, unknown> | undefined);
+
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('Unexpected response received when updating produce listing.');
     }
 
-    // In-place mutation (preserves existing ID and array index!)
-    const updatedListing: ProduceListingView = {
-      ...existing,
-      batchId: formData.batchId,
-      farmId: formData.farmId,
-      farmName: formData.farmName,
+    const mergedRaw: Record<string, unknown> = {
       cropName: formData.cropName,
       category: formData.category,
       gradeName: formData.gradeName,
-      offeredKg: totalQty,
-      availableKg: Math.max(0, totalQty - activeHolds),
-      unitPriceCents: Math.round(unitPrice * 100),
-      validFrom: formData.availableFrom ? `${formData.availableFrom}T00:00:00Z` : existing.validFrom,
-      validUntil: formData.availableUntil ? `${formData.availableUntil}T23:59:59Z` : existing.validUntil,
+      farmId: formData.farmId,
+      farmName: formData.farmName,
+      batchNumber: formData.batchNumber,
+      ...raw,
     };
 
-    DEV_SAMPLE_PRODUCE[index] = updatedListing;
-    return updatedListing;
+    return normalizeLiveListing(mergedRaw);
+  } catch (err: unknown) {
+    throw new Error(extractApiErrorMessage(err, 'Failed to update produce listing.'));
   }
-
-  // Live API call: PUT /api/ym09/produce/:id
-  const response = await api.put<ProduceListingView>(`/ym09/produce/${id}`, {
-    batchId: formData.batchId,
-    farmId: formData.farmId,
-    offeredKg: formData.totalQuantity,
-    unitPriceCents: Math.round((Number(formData.unitPrice) || 0) * 100),
-    validFrom: formData.availableFrom,
-    validUntil: formData.availableUntil,
-  });
-
-  return response.data;
 }
 
 /**
- * Creates a new produce listing.
- * In development sample-data mode, prepends to DEV_SAMPLE_PRODUCE.
- * In live mode, calls POST /api/ym09/produce.
+ * Updates a produce listing's lifecycle status (`active`, `paused`, `closed`)
+ * via `PATCH /api/ym09/produce/:id/status`.
+ */
+export async function updateProduceListingStatus(
+  id: string,
+  status: ListingStatus
+): Promise<ProduceListingView> {
+  try {
+    const response = await api.patch<{ success?: boolean; data?: Record<string, unknown> }>(
+      `/ym09/produce/${id}/status`,
+      { status }
+    );
+    const raw =
+      response?.data && typeof response.data === 'object' && 'data' in response.data
+        ? response.data.data
+        : (response?.data as unknown as Record<string, unknown> | undefined);
+
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('Unexpected response received when updating listing status.');
+    }
+
+    return normalizeLiveListing(raw);
+  } catch (err: unknown) {
+    throw new Error(extractApiErrorMessage(err, 'Failed to update listing status.'));
+  }
+}
+
+/**
+ * Creates a new produce listing via `POST /api/ym09/produce`.
  */
 export async function createProduceListing(
   formData: ProduceListingFormState
 ): Promise<ProduceListingView> {
-  if (ENABLE_DEV_SAMPLE_DATA) {
-    await new Promise((resolve) => setTimeout(resolve, 80));
+  const initialStatus: ListingStatus = formData.status === 'draft' ? 'draft' : 'active';
 
-    const targetBatch = SAMPLE_HARVEST_BATCHES.find((b) => b.id === formData.batchId);
-    if (!targetBatch) {
-      throw new Error('Selected harvest batch does not exist.');
+  try {
+    const response = await api.post<{ success?: boolean; data?: Record<string, unknown> }>(
+      '/ym09/produce',
+      {
+        farmId: formData.farmId,
+        batchId: formData.batchId,
+        offeredKg: Number(formData.totalQuantity),
+        unitPriceCents: Math.round((Number(formData.unitPrice) || 0) * 100),
+        validFrom: toUtcRangeIso(formData.availableFrom, 'start'),
+        validUntil: toUtcRangeIso(formData.availableUntil, 'end'),
+        status: initialStatus,
+      }
+    );
+
+    const raw =
+      response?.data && typeof response.data === 'object' && 'data' in response.data
+        ? response.data.data
+        : (response?.data as unknown as Record<string, unknown> | undefined);
+
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('Unexpected response received when creating produce listing.');
     }
-    if (targetBatch.status !== 'harvested') {
-      throw new Error('Harvest batch must be in harvested status before listing.');
-    }
 
-    const newId = `prod-${String(DEV_SAMPLE_PRODUCE.length + 1).padStart(3, '0')}`;
-    const totalQty = typeof formData.totalQuantity === 'number' ? formData.totalQuantity : 0;
-    const unitPrice = typeof formData.unitPrice === 'number' ? formData.unitPrice : 0;
-
-    const newListing: ProduceListingView = {
-      id: newId,
-      batchId: formData.batchId,
-      farmId: formData.farmId,
-      farmName: formData.farmName,
-      cropName: formData.cropName,
-      category: formData.category,
-      gradeName: formData.gradeName,
-      district: 'Nuwara Eliya',
-      unitPriceCents: Math.round(unitPrice * 100),
-      offeredKg: totalQty,
-      availableKg: totalQty,
-      reservedKg: 0,
-      committedKg: 0,
-      status: 'active',
-      validFrom: formData.availableFrom ? `${formData.availableFrom}T00:00:00Z` : new Date().toISOString(),
-      validUntil: formData.availableUntil ? `${formData.availableUntil}T23:59:59Z` : new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    };
-
-    DEV_SAMPLE_PRODUCE.unshift(newListing);
-    return newListing;
+    return normalizeLiveListing(raw);
+  } catch (err: unknown) {
+    throw new Error(extractApiErrorMessage(err, 'Failed to create produce listing.'));
   }
-
-  // Live API call: POST /api/ym09/produce
-  const response = await api.post<ProduceListingView>('/ym09/produce', {
-    batchId: formData.batchId,
-    farmId: formData.farmId,
-    offeredKg: formData.totalQuantity,
-    unitPriceCents: Math.round((Number(formData.unitPrice) || 0) * 100),
-    validFrom: formData.availableFrom,
-    validUntil: formData.availableUntil,
-  });
-
-  return response.data;
 }
 
 /**
- * Retrieves comprehensive details for a single produce listing.
- * In development sample mode, returns enriched mock details.
- * In live backend mode, calls GET /api/ym09/produce/:id/details.
- * NEVER silently falls back to sample data if live API fails.
+ * Retrieves comprehensive details for a single produce listing from
+ * `GET /api/ym09/produce/:id/details`. Errors propagate and are never replaced
+ * with development sample data.
  */
 export async function getProduceListingDetails(id: string): Promise<ProduceListingDetailView | null> {
-  if (ENABLE_DEV_SAMPLE_DATA && id.startsWith('prod-')) {
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    const found = DEV_SAMPLE_PRODUCE.find((item) => item.id === id);
-    if (!found) return null;
+  try {
+    const response = await api.get<{
+      success?: boolean;
+      data?: Record<string, unknown>;
+    }>(`/ym09/produce/${id}/details`);
 
-    if (id === 'prod-001') {
-      return {
-        ...found,
-        batchNumber: 'HB-2026-001',
-        description:
-          'Fresh, high quality tomatoes from our current harvest. Grade A with uniform size and good shelf life. Suitable for retail and bulk orders.',
-        updatedAt: '2026-11-05T14:17:00Z',
-        allocations: [
-          {
-            id: 'AL-2026-014',
-            orderId: 'ORD-2026-009',
-            buyerName: 'FreshMart Shop',
-            allocatedKg: 60,
-            agreedUnitPriceCents: 32000,
-            agreedValueCents: 1920000,
-            status: 'supplier_accepted',
-            displayStatus: 'Confirmed',
-            allocatedOn: '2026-11-05T09:40:00Z',
-          },
-          {
-            id: 'AL-2026-015',
-            orderId: 'ORD-2026-010',
-            buyerName: 'City Foods',
-            allocatedKg: 40,
-            agreedUnitPriceCents: 32000,
-            agreedValueCents: 1280000,
-            status: 'held',
-            displayStatus: 'Pending',
-            allocatedOn: '2026-11-06T14:15:00Z',
-          },
-        ],
-        orders: [
-          {
-            id: 'ORD-2026-009',
-            buyerName: 'FreshMart Shop',
-            orderKg: 40,
-            orderValueCents: 1280000,
-            status: 'delivered',
-            displayStatus: 'Completed',
-            orderDate: '2026-11-07T11:05:00Z',
-          },
-          {
-            id: 'ORD-2026-010',
-            buyerName: 'City Foods',
-            orderKg: 20,
-            orderValueCents: 640000,
-            status: 'in_fulfilment',
-            displayStatus: 'Processing',
-            orderDate: '2026-11-08T16:20:00Z',
-          },
-        ],
-        priceTrend: [
-          { timestamp: '2026-11-05T09:40:00Z', unitPriceCents: 30000, dateLabel: '05 Nov' },
-          { timestamp: '2026-11-07T11:05:00Z', unitPriceCents: 32000, dateLabel: '07 Nov' },
-          { timestamp: '2026-11-09T14:00:00Z', unitPriceCents: 34000, dateLabel: '09 Nov' },
-          { timestamp: '2026-11-11T14:31:00Z', unitPriceCents: 32000, dateLabel: '11 Nov' },
-          { timestamp: '2026-11-13T09:17:00Z', unitPriceCents: 32000, dateLabel: '13 Nov' },
-        ],
-        priceHistory: [
-          { id: 'ph-5', timestamp: '2026-11-17T10:24:00Z', unitPriceCents: 32000, previousUnitPriceCents: 32000, deltaCents: 0 },
-          { id: 'ph-4', timestamp: '2026-11-13T09:17:00Z', unitPriceCents: 32000, previousUnitPriceCents: 34000, deltaCents: -2000 },
-          { id: 'ph-3', timestamp: '2026-11-11T14:31:00Z', unitPriceCents: 34000, previousUnitPriceCents: 32000, deltaCents: 2000 },
-          { id: 'ph-2', timestamp: '2026-11-07T11:05:00Z', unitPriceCents: 32000, previousUnitPriceCents: 30000, deltaCents: 2000 },
-          { id: 'ph-1', timestamp: '2026-11-05T09:40:00Z', unitPriceCents: 30000, previousUnitPriceCents: undefined, deltaCents: 0 },
-        ],
-        activityLog: [
-          {
-            id: 'act-1',
-            eventType: 'price_update',
-            title: 'Listing price updated',
-            description: 'Price changed from LKR 300 / kg to LKR 320 / kg.',
-            timestamp: '2026-11-17T10:24:00Z',
-          },
-          {
-            id: 'act-2',
-            eventType: 'allocation_confirmed',
-            title: 'Allocation confirmed',
-            description: '60 kg allocated to FreshMart Shop (AL-2026-014).',
-            timestamp: '2026-11-15T16:10:00Z',
-          },
-          {
-            id: 'act-3',
-            eventType: 'order_completed',
-            title: 'Order completed',
-            description: '40 kg order completed by City Foods (ORD-2026-009).',
-            timestamp: '2026-11-11T11:59:00Z',
-          },
-          {
-            id: 'act-4',
-            eventType: 'listing_updated',
-            title: 'Listing updated',
-            description: 'Description was updated.',
-            timestamp: '2026-11-07T09:17:00Z',
-          },
-          {
-            id: 'act-5',
-            eventType: 'listing_created',
-            title: 'Listing created',
-            description: `Produce listing published with ${found.offeredKg} kg at LKR ${(found.unitPriceCents / 100).toFixed(0)} / kg.`,
-            timestamp: '2026-11-05T09:40:00Z',
-          },
-        ],
-      };
+    const raw = response?.data?.data;
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('Invalid response format from produce listing details endpoint.');
     }
 
-    // Default minimal detail view for other sample items (tests empty states)
+    const baseListing = normalizeLiveListing(raw);
     return {
-      ...found,
-      batchNumber: `HB-2026-${id.slice(5).padStart(3, '0')}`,
-      description: undefined, // Demonstrates empty description state
-      updatedAt: found.createdAt,
-      allocations: [], // Demonstrates empty allocations table
-      orders: [], // Demonstrates empty orders table
-      priceTrend: [], // Demonstrates empty price trend chart
-      priceHistory: [], // Demonstrates empty price history table
-      activityLog: [
-        {
-          id: `act-init-${id}`,
-          eventType: 'listing_created',
-          title: 'Listing created',
-          description: `Produce listing published with ${found.offeredKg} kg at LKR ${(found.unitPriceCents / 100).toFixed(0)} / kg.`,
-          timestamp: found.createdAt,
-        },
-      ],
+      ...baseListing,
+      batchNumber:
+        typeof raw.batchNumber === 'string' && raw.batchNumber.trim()
+          ? raw.batchNumber.trim()
+          : `HB-${baseListing.batchId.slice(0, 8).toUpperCase()}`,
+      updatedAt:
+        typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      allocations: Array.isArray(raw.allocations)
+        ? (raw.allocations as ListingAllocationRecord[])
+        : [],
+      orders: Array.isArray(raw.orders)
+        ? (raw.orders as ListingOrderRecord[])
+        : [],
+      priceTrend: Array.isArray(raw.priceTrend)
+        ? (raw.priceTrend as PriceTrendPoint[])
+        : [],
+      priceHistory: Array.isArray(raw.priceHistory)
+        ? (raw.priceHistory as PriceChangeRecord[])
+        : [],
+      activityLog: Array.isArray(raw.activityLog)
+        ? (raw.activityLog as ActivityEventRecord[])
+        : [],
     };
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) {
+      return null;
+    }
+    throw new Error(extractApiErrorMessage(err, 'Failed to load produce listing details.'));
   }
-
-  // Live API call: GET /api/ym09/produce/:id/details
-  // If request fails (e.g. 404, 500, network error), error propagates and is not silently masked
-  const response = await api.get<{ success: boolean; data: ProduceListingDetailView }>(`/ym09/produce/${id}/details`);
-  return response.data.data;
 }

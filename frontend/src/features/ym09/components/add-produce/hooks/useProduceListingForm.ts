@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  PRODUCE_PLACEHOLDERS,
-  SAMPLE_HARVEST_BATCHES,
-} from '../../../constants/produceConstants';
-import {
   createProduceListing,
   updateProduceListing,
 } from '../../../services/produceApi';
 import {
+  fetchEligibleHarvestBatches,
+  fetchFarmerFarms,
+} from '../../../services/produceDependenciesApi';
+import {
   areProduceFormStatesEqual,
-  getAvailableFarms,
   getInitialProduceFormState,
-  getPlaceholderKeyForCategory,
 } from '../../../utils/produceFormDefaults';
 import {
   calculateStockValidationBounds,
@@ -20,13 +18,11 @@ import {
 } from '../../../utils/produceFormValidation';
 import type {
   AddProduceValidationErrors,
+  FarmerFarmOption,
   HarvestBatchOption,
   ProduceListingFormState,
   ProduceListingView,
-  ProducePlaceholderKey,
 } from '../../../types/produce';
-
-const AVAILABLE_FARMS = getAvailableFarms(SAMPLE_HARVEST_BATCHES);
 
 export interface UseProduceListingFormParams {
   mode: 'create' | 'edit';
@@ -40,9 +36,12 @@ export interface UseProduceListingFormReturn {
   isSubmitting: boolean;
   submitError: string | null;
   showSuccessModal: boolean;
-  activeImageUrl: string;
-  availableFarms: Array<{ id: string; name: string }>;
+  activeImageUrl?: string;
+  availableFarms: FarmerFarmOption[];
   harvestBatches: HarvestBatchOption[];
+  dependenciesLoading: boolean;
+  dependencyNotice: string | null;
+  isSampleDependencies: boolean;
   isSourceLocked: boolean;
   lockReason?: string;
   minAvailableKg: number;
@@ -54,29 +53,34 @@ export interface UseProduceListingFormReturn {
   handlePriceChange: (unitPrice: number | '') => void;
   handleFromDateChange: (availableFrom: string) => void;
   handleUntilDateChange: (availableUntil: string) => void;
-  handleImageKeyChange: (selectedImageKey: ProducePlaceholderKey) => void;
+  handleStatusChange: (status: 'active' | 'draft') => void;
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
   closeSuccessModal: () => void;
 }
 
 /**
  * Custom hook encapsulating state, validation, stock calculations,
- * source-lock enforcement, and submission lifecycle for ProduceListingForm.
+ * source-lock enforcement, dependency loading, and submission lifecycle for ProduceListingForm.
  */
 export function useProduceListingForm({
   mode,
   initialData,
   existingListing,
 }: UseProduceListingFormParams): UseProduceListingFormReturn {
+  const [availableFarms, setAvailableFarms] = useState<FarmerFarmOption[]>([]);
+  const [harvestBatches, setHarvestBatches] = useState<HarvestBatchOption[]>([]);
+  const [dependenciesLoading, setDependenciesLoading] = useState<boolean>(mode === 'create');
+  const [dependencyNotice, setDependencyNotice] = useState<string | null>(null);
+  const [isSampleDependencies, setIsSampleDependencies] = useState<boolean>(false);
+
   const [formState, setFormState] = useState<ProduceListingFormState>(() =>
-    getInitialProduceFormState(mode, SAMPLE_HARVEST_BATCHES, initialData)
+    getInitialProduceFormState(mode, [], initialData)
   );
   const [errors, setErrors] = useState<AddProduceValidationErrors>({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Track user modification and last synced external entity to safely handle async initialData
   const isDirtyRef = useRef(false);
   const isSubmittingRef = useRef(false);
   const currentEntityId = initialData?.listingId ?? existingListing?.id;
@@ -90,13 +94,72 @@ export function useProduceListingForm({
     initialData,
   });
 
+  // Load YM07 farms and YM08 eligible harvest batches in create mode
+  useEffect(() => {
+    if (mode !== 'create') {
+      setDependenciesLoading(false);
+      setDependencyNotice(null);
+      setIsSampleDependencies(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadDependencies() {
+      setDependenciesLoading(true);
+      try {
+        const [farmsResult, batchesResult] = await Promise.all([
+          fetchFarmerFarms({ signal: controller.signal }),
+          fetchEligibleHarvestBatches({ signal: controller.signal }),
+        ]);
+
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+
+        setAvailableFarms(farmsResult.items);
+        setHarvestBatches(batchesResult.items);
+        setIsSampleDependencies(
+          Boolean(farmsResult.isSampleData || batchesResult.isSampleData)
+        );
+
+        const messages = [farmsResult.message, batchesResult.message].filter(
+          (msg): msg is string => Boolean(msg)
+        );
+        setDependencyNotice(messages.length > 0 ? messages.join(' ') : null);
+      } catch (err: unknown) {
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Failed to load certified farms and harvest batches.';
+        setAvailableFarms([]);
+        setHarvestBatches([]);
+        setIsSampleDependencies(false);
+        setDependencyNotice(message);
+      } finally {
+        if (active && !controller.signal.aborted) {
+          setDependenciesLoading(false);
+        }
+      }
+    }
+
+    loadDependencies();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [mode]);
+
   useEffect(() => {
     const prev = syncedContextRef.current;
     const modeChanged = prev.mode !== mode;
     const entityChanged = prev.entityId !== currentEntityId;
     const dataChanged = !areProduceFormStatesEqual(prev.initialData, initialData);
 
-    // Full reset when switching between create/edit or loading a different listing ID
     if (modeChanged || entityChanged) {
       syncedContextRef.current = {
         mode,
@@ -104,14 +167,13 @@ export function useProduceListingForm({
         initialData,
       };
       isDirtyRef.current = false;
-      setFormState(getInitialProduceFormState(mode, SAMPLE_HARVEST_BATCHES, initialData));
+      setFormState(getInitialProduceFormState(mode, [], initialData));
       setErrors({});
       setSubmitError(null);
       setShowSuccessModal(false);
       return;
     }
 
-    // Populate async initialData for the same entity only if the user hasn't started editing
     if (dataChanged && initialData && !isDirtyRef.current) {
       syncedContextRef.current = {
         mode,
@@ -129,7 +191,7 @@ export function useProduceListingForm({
     existingListing
   );
 
-  const currentBatch = SAMPLE_HARVEST_BATCHES.find((b) => b.id === formState.batchId);
+  const currentBatch = harvestBatches.find((b) => b.id === formState.batchId);
 
   const { minAvailableKg, maxAvailableKg } = calculateStockValidationBounds({
     mode,
@@ -138,9 +200,7 @@ export function useProduceListingForm({
     activeHolds,
   });
 
-  const activeImageUrl =
-    PRODUCE_PLACEHOLDERS[formState.selectedImageKey]?.imageUrl ||
-    PRODUCE_PLACEHOLDERS.vegetables.imageUrl;
+  const activeImageUrl = existingListing?.imageUrl;
 
   const estimatedValue =
     typeof formState.totalQuantity === 'number' && typeof formState.unitPrice === 'number'
@@ -184,7 +244,6 @@ export function useProduceListingForm({
   const handleBatchChange = (batch: HarvestBatchOption) => {
     if (isSourceLocked) return;
     isDirtyRef.current = true;
-    const autoImageKey = getPlaceholderKeyForCategory(batch.category);
 
     setFormState((prev) => ({
       ...prev,
@@ -197,7 +256,6 @@ export function useProduceListingForm({
       category: batch.category,
       gradeId: batch.gradeId,
       gradeName: batch.gradeName,
-      selectedImageKey: autoImageKey,
       totalQuantity:
         typeof prev.totalQuantity === 'number' && prev.totalQuantity <= batch.availableStockKg
           ? prev.totalQuantity
@@ -230,9 +288,10 @@ export function useProduceListingForm({
     clearErrorFields(['availableUntil']);
   };
 
-  const handleImageKeyChange = (selectedImageKey: ProducePlaceholderKey) => {
+  const handleStatusChange = (status: 'active' | 'draft') => {
+    if (mode !== 'create') return;
     isDirtyRef.current = true;
-    setFormState((prev) => ({ ...prev, selectedImageKey }));
+    setFormState((prev) => ({ ...prev, status }));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -241,10 +300,11 @@ export function useProduceListingForm({
       return;
     }
 
-    const validationErrors = validateProduceListingForm(formState, {
-      minAvailableKg,
-      maxAvailableKg,
-    });
+    const validationErrors = validateProduceListingForm(
+      formState,
+      { minAvailableKg, maxAvailableKg },
+      mode
+    );
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) {
       return;
@@ -255,14 +315,20 @@ export function useProduceListingForm({
     setSubmitError(null);
 
     try {
+      let savedListing: ProduceListingView;
       if (mode === 'edit') {
         if (!existingListing) {
           throw new Error('Existing listing context is required to update this produce listing.');
         }
-        await updateProduceListing(existingListing.id, formState);
+        savedListing = await updateProduceListing(existingListing.id, formState);
       } else {
-        await createProduceListing(formState);
+        savedListing = await createProduceListing(formState);
       }
+      setFormState((prev) => ({
+        ...prev,
+        listingId: savedListing.id,
+        status: savedListing.status,
+      }));
       setShowSuccessModal(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save produce listing';
@@ -284,8 +350,11 @@ export function useProduceListingForm({
     submitError,
     showSuccessModal,
     activeImageUrl,
-    availableFarms: AVAILABLE_FARMS,
-    harvestBatches: SAMPLE_HARVEST_BATCHES,
+    availableFarms,
+    harvestBatches,
+    dependenciesLoading,
+    dependencyNotice,
+    isSampleDependencies,
     isSourceLocked,
     lockReason,
     minAvailableKg,
@@ -297,7 +366,7 @@ export function useProduceListingForm({
     handlePriceChange,
     handleFromDateChange,
     handleUntilDateChange,
-    handleImageKeyChange,
+    handleStatusChange,
     handleSubmit,
     closeSuccessModal,
   };

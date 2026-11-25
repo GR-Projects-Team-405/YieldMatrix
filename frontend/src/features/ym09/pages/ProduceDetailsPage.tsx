@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
+import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
+import type { ListingStatusActionOption } from '../constants/produceConstants';
 import type { ProduceListingDetailView, ListingDetailsTabId } from '../types/produce';
 import { getProduceListingDetails } from '../services/produceApi';
 import { ProduceDetailsHeader } from '../components/details/ProduceDetailsHeader';
@@ -14,13 +16,25 @@ import { PriceHistoryTab } from '../components/details/PriceHistoryTab';
 import { ActivityTab } from '../components/details/ActivityTab';
 import '../styles/produceDetails.css';
 
+function getStatusSuccessMessage(action: ListingStatusActionOption): string {
+  switch (action.targetStatus) {
+    case 'paused':
+      return 'Listing paused successfully. Buyers can no longer place new orders while existing commitments remain preserved.';
+    case 'closed':
+      return 'Listing archived successfully. It is now closed and hidden from the marketplace.';
+    case 'active':
+    default:
+      return 'Listing activated successfully and is now visible to buyers on the marketplace.';
+  }
+}
+
 /**
  * YM09 – Produce Listing Details Page
  * Developer: Imalka Randev
  * Route: /farmer/produce/:id
  *
  * Provides a comprehensive, tabbed interface showcasing:
- * - Listing Overview & description
+ * - Listing Overview
  * - Active Allocations & Orders
  * - Price Trend & Price Change History
  * - Complete Activity Log in Asia/Colombo time
@@ -32,17 +46,42 @@ export default function ProduceDetailsPage() {
   const [listing, setListing] = useState<ProduceListingDetailView | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusFeedback, setStatusFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<ListingDetailsTabId>('overview');
   const [reloadCounter, setReloadCounter] = useState<number>(0);
+  const loadedEntityIdRef = useRef<string | undefined>(undefined);
 
   const handleRetry = useCallback(() => {
     setReloadCounter((prev) => prev + 1);
   }, []);
 
+  const handleStatusUpdated = useCallback((completedAction: ListingStatusActionOption) => {
+    setStatusFeedback({
+      type: 'success',
+      message: getStatusSuccessMessage(completedAction),
+    });
+    setReloadCounter((prev) => prev + 1);
+  }, []);
+
+  const handleStatusError = useCallback((message: string) => {
+    setStatusFeedback({
+      type: 'error',
+      message,
+    });
+  }, []);
+
   useEffect(() => {
     let active = true;
+    const isSameEntityRefresh = loadedEntityIdRef.current === id;
 
-    setActiveTab('overview');
+    if (!isSameEntityRefresh) {
+      setActiveTab('overview');
+      setStatusFeedback(null);
+      setListing(null);
+    }
 
     if (!id) {
       setListing(null);
@@ -53,10 +92,13 @@ export default function ProduceDetailsPage() {
 
     async function loadDetails(listingId: string) {
       try {
-        setLoading(true);
+        if (!isSameEntityRefresh) {
+          setLoading(true);
+        }
         setError(null);
         const data = await getProduceListingDetails(listingId);
         if (active) {
+          loadedEntityIdRef.current = listingId;
           setListing(data);
         }
       } catch (err: unknown) {
@@ -78,8 +120,8 @@ export default function ProduceDetailsPage() {
     };
   }, [id, reloadCounter]);
 
-  // Loading Skeleton State
-  if (loading) {
+  // Loading Skeleton State (initial load only; background status reloads preserve page context)
+  if (loading && !listing) {
     return (
       <div
         className="ym09-produce-details-page"
@@ -147,10 +189,18 @@ export default function ProduceDetailsPage() {
         onBack={() => navigate('/farmer/produce')}
       />
 
+      {statusFeedback && (
+        <div className="ym09-details-status-feedback">
+          <Alert type={statusFeedback.type}>{statusFeedback.message}</Alert>
+        </div>
+      )}
+
       {/* 2. Top Produce Summary Hero Card */}
       <ProduceSummaryCard
         listing={listing}
         onEditListing={() => navigate(`/farmer/produce/${listing.id}/edit`)}
+        onStatusUpdated={handleStatusUpdated}
+        onStatusError={handleStatusError}
       />
 
       {/* 3. Authoritative Metric Strip */}

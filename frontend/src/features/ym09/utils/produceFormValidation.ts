@@ -16,10 +16,32 @@ export interface StockValidationBounds {
   maxAvailableKg?: number;
 }
 
+const DATE_ONLY_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function hasAtMostDecimals(value: number, maxDecimals: number): boolean {
+  if (!Number.isFinite(value)) return false;
+  const factor = 10 ** maxDecimals;
+  return Math.abs(value * factor - Math.round(value * factor)) < 1e-6;
+}
+
+function isValidCalendarDate(dateStr: string): boolean {
+  const match = DATE_ONLY_REGEX.exec(dateStr.trim());
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
+
 /**
- * Determines whether harvest source fields (Farm / Batch) must be locked during edit.
- * Per backend DR-01 semantics, `reservedKg` already includes active reservations
- * and uncollected committed/disputed stock; `committedKg` is an informational subset.
+ * Determines whether harvest source fields (Farm / Batch / Crop / Grade) are locked.
+ * In Edit mode, Farm, Harvest Batch, Crop, and Grade are always fixed to protect
+ * original harvest batch traceability and historical buyer allocations.
  */
 export function getHarvestSourceLockState(
   mode: 'create' | 'edit',
@@ -27,10 +49,19 @@ export function getHarvestSourceLockState(
 ): HarvestSourceLockState {
   const activeHolds = existingListing?.reservedKg || 0;
   const committedSubset = existingListing?.committedKg || 0;
-  const isSourceLocked = mode === 'edit' && activeHolds > 0;
+  const isSourceLocked = mode === 'edit';
 
   if (!isSourceLocked) {
     return { activeHolds, isSourceLocked: false, lockReason: undefined };
+  }
+
+  if (activeHolds <= 0) {
+    return {
+      activeHolds: 0,
+      isSourceLocked: true,
+      lockReason:
+        'Farm, Harvest Batch, Crop, and Grade are fixed when editing an existing listing to preserve original batch traceability and order history.',
+    };
   }
 
   const effectiveCommitted = Math.min(activeHolds, committedSubset);
@@ -44,22 +75,12 @@ export function getHarvestSourceLockState(
   return {
     activeHolds,
     isSourceLocked: true,
-    lockReason: `Harvest source cannot be changed because this listing has ${parts.join(' and ')}. Reassigning batches under active holds is prevented to protect order allocations and traceability.`,
+    lockReason: `Farm, Harvest Batch, Crop, and Grade are locked (${parts.join(' and ')}). Original harvest linkage and historical allocations are preserved.`,
   };
 }
 
 /**
- * Computes permissible [minAvailableKg, maxAvailableKg] stock bounds (Rule DR-01 & Safe Reassignment).
- *
- * - CREATE mode:
- *     Max allowable = batch.availableStockKg (unencumbered sellable stock in batch)
- *     Min allowable = 1 kg
- * - EDIT mode (Same batch as existing listing):
- *     Max allowable = batch.availableStockKg + existingListing.availableKg
- *     Min allowable = activeHolds > 0 ? activeHolds : 1
- * - EDIT mode (Reassigned to another batch when activeHolds === 0):
- *     Max allowable = batch.availableStockKg (new batch unencumbered stock)
- *     Min allowable = 1 kg
+ * Computes permissible [minAvailableKg, maxAvailableKg] stock bounds (Rule DR-01).
  */
 export function calculateStockValidationBounds(params: {
   mode: 'create' | 'edit';
@@ -71,22 +92,19 @@ export function calculateStockValidationBounds(params: {
 
   if (mode === 'edit' && existingListing) {
     const isSameBatch = Boolean(currentBatch && currentBatch.id === existingListing.batchId);
-
-    if (isSameBatch && currentBatch) {
-      return {
-        minAvailableKg: activeHolds > 0 ? activeHolds : 1,
-        maxAvailableKg: currentBatch.availableStockKg + existingListing.availableKg,
-      };
-    }
+    const maxFromBatch =
+      isSameBatch && currentBatch
+        ? currentBatch.availableStockKg + existingListing.availableKg
+        : existingListing.sellableKg;
 
     return {
-      minAvailableKg: 1,
-      maxAvailableKg: currentBatch ? currentBatch.availableStockKg : undefined,
+      minAvailableKg: activeHolds > 0 ? activeHolds : 0,
+      maxAvailableKg: maxFromBatch,
     };
   }
 
   return {
-    minAvailableKg: 1,
+    minAvailableKg: 0,
     maxAvailableKg: currentBatch ? currentBatch.availableStockKg : undefined,
   };
 }
@@ -96,7 +114,8 @@ export function calculateStockValidationBounds(params: {
  */
 export function validateProduceListingForm(
   formState: ProduceListingFormState,
-  bounds: StockValidationBounds
+  bounds: StockValidationBounds,
+  mode: 'create' | 'edit' = 'create'
 ): AddProduceValidationErrors {
   const newErrors: AddProduceValidationErrors = {};
   const { minAvailableKg, maxAvailableKg } = bounds;
@@ -104,34 +123,59 @@ export function validateProduceListingForm(
   if (!formState.farmId) {
     newErrors.farmId = 'Please select a certified farm.';
   }
-  if (!formState.cropId) {
-    newErrors.cropId = 'Please select a crop type.';
-  }
   if (!formState.batchId) {
     newErrors.batchId = 'Please select an eligible harvest batch.';
   }
-  if (!formState.gradeId) {
-    newErrors.gradeId = 'Please select a quality grade.';
+  if (mode === 'create') {
+    if (!formState.cropId && !formState.cropName) {
+      newErrors.cropId = 'Crop is derived automatically from the selected harvest batch.';
+    }
+    if (!formState.gradeId && !formState.gradeName) {
+      newErrors.gradeId = 'Grade is derived automatically from the selected harvest batch.';
+    }
   }
 
-  if (formState.totalQuantity === '' || formState.totalQuantity <= 0) {
+  if (
+    formState.totalQuantity === '' ||
+    typeof formState.totalQuantity !== 'number' ||
+    !Number.isFinite(formState.totalQuantity) ||
+    formState.totalQuantity <= 0
+  ) {
     newErrors.totalQuantity = 'Quantity must be greater than 0 kg.';
-  } else if (minAvailableKg !== undefined && formState.totalQuantity < minAvailableKg) {
+  } else if (!hasAtMostDecimals(formState.totalQuantity, 3)) {
+    newErrors.totalQuantity = 'Quantity supports up to 3 decimal places (e.g. 25.5 kg).';
+  } else if (minAvailableKg > 0 && formState.totalQuantity < minAvailableKg) {
     newErrors.totalQuantity = `Quantity cannot be reduced below active reserved/committed holds (${minAvailableKg} kg).`;
   } else if (maxAvailableKg !== undefined && formState.totalQuantity > maxAvailableKg) {
-    newErrors.totalQuantity = `Quantity cannot exceed permissible batch stock (${maxAvailableKg} kg).`;
+    newErrors.totalQuantity = `Quantity cannot exceed permissible batch sellable stock (${maxAvailableKg} kg).`;
   }
 
-  if (formState.unitPrice === '' || formState.unitPrice <= 0) {
+  if (
+    formState.unitPrice === '' ||
+    typeof formState.unitPrice !== 'number' ||
+    !Number.isFinite(formState.unitPrice) ||
+    formState.unitPrice <= 0
+  ) {
     newErrors.unitPrice = 'Price per kg must be greater than LKR 0.';
+  } else if (!hasAtMostDecimals(formState.unitPrice, 2) || Math.round(formState.unitPrice * 100) <= 0) {
+    newErrors.unitPrice = 'Price per kg must be a valid LKR amount (up to 2 decimal places).';
   }
 
   if (!formState.availableFrom) {
     newErrors.availableFrom = 'Available start date is required.';
+  } else if (!isValidCalendarDate(formState.availableFrom)) {
+    newErrors.availableFrom = 'Please enter a valid start date.';
   }
+
   if (!formState.availableUntil) {
     newErrors.availableUntil = 'Available expiry date is required.';
-  } else if (formState.availableFrom && formState.availableUntil < formState.availableFrom) {
+  } else if (!isValidCalendarDate(formState.availableUntil)) {
+    newErrors.availableUntil = 'Please enter a valid expiry date.';
+  } else if (
+    formState.availableFrom &&
+    isValidCalendarDate(formState.availableFrom) &&
+    formState.availableUntil < formState.availableFrom
+  ) {
     newErrors.availableUntil = 'Available until date cannot be earlier than start date.';
   }
 

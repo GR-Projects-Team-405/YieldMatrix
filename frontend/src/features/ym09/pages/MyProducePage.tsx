@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { ProduceFilters } from '../components/ProduceFilters';
 import { ProduceGrid } from '../components/ProduceGrid';
 import { ProduceHeader } from '../components/ProduceHeader';
@@ -11,16 +12,19 @@ import {
   DEFAULT_PAGE_SIZE,
   SEARCH_DEBOUNCE_MS,
   STATUS_FILTER_OPTIONS,
+  type ListingStatusActionOption,
 } from '../constants/produceConstants';
 import {
   fetchMyProduce,
   isRequestAbortedError,
+  updateProduceListingStatus,
   type FetchMyProduceOptions,
 } from '../services/produceApi';
 import type {
   ProduceApiResponse,
   ProduceCategory,
   ProduceFilterState,
+  ProduceListingView,
   ProduceViewMode,
 } from '../types/produce';
 import '../styles/produceDetails.css';
@@ -31,7 +35,6 @@ export interface MyProducePageProps {
     filters: ProduceFilterState,
     options?: FetchMyProduceOptions
   ) => Promise<ProduceApiResponse>;
-  useSampleData?: boolean;
 }
 
 const EMPTY_CATEGORY_COUNTS: Record<ProduceCategory, number> = {
@@ -48,16 +51,14 @@ const EMPTY_CATEGORY_COUNTS: Record<ProduceCategory, number> = {
  *
  * Implements:
  * - Page header with description and "+ Add Produce" action
- * - 4 Page-level summary metrics computed from real data (or explicit unavailable/loading state)
+ * - 4 Page-level summary metrics computed strictly from real API data
  * - Category filter pills with item counts
  * - Debounced search input preserving typed text and resetting pagination on search changes
  * - AbortController + monotonic request-sequence protection against stale search responses & unmounts
- * - Explicit separation between development sample data and live API data
  */
 export default function MyProducePage({
   debounceMs = SEARCH_DEBOUNCE_MS,
   fetcher = fetchMyProduce,
-  useSampleData,
 }: MyProducePageProps) {
   const [searchInput, setSearchInput] = useState<string>('');
   const [viewMode, setViewMode] = useState<ProduceViewMode>('grid');
@@ -74,6 +75,12 @@ export default function MyProducePage({
   const [data, setData] = useState<ProduceApiResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusUpdating, setStatusUpdating] = useState<boolean>(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    listing: ProduceListingView;
+    action: ListingStatusActionOption;
+  } | null>(null);
   const [retryToken, setRetryToken] = useState<number>(0);
 
   const isMountedRef = useRef<boolean>(true);
@@ -125,7 +132,6 @@ export default function MyProducePage({
 
     fetcher(requestFilters, {
       signal: controller.signal,
-      useSampleData,
     })
       .then((response) => {
         if (
@@ -169,7 +175,6 @@ export default function MyProducePage({
     filters.pageSize,
     retryToken,
     fetcher,
-    useSampleData,
   ]);
 
   // Handlers for filter interactions
@@ -228,22 +233,45 @@ export default function MyProducePage({
     setRetryToken((prev) => prev + 1);
   };
 
+  const handleSelectStatusAction = (
+    listing: ProduceListingView,
+    action: ListingStatusActionOption
+  ) => {
+    setStatusError(null);
+    setPendingStatusChange({ listing, action });
+  };
+
+  const handleConfirmStatusChange = async () => {
+    if (!pendingStatusChange || statusUpdating) return;
+    setStatusUpdating(true);
+    setStatusError(null);
+
+    try {
+      await updateProduceListingStatus(
+        pendingStatusChange.listing.id,
+        pendingStatusChange.action.targetStatus
+      );
+      setPendingStatusChange(null);
+      setRetryToken((prev) => prev + 1);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Failed to update produce listing status.';
+      setStatusError(msg);
+      setPendingStatusChange(null);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
   const currentSummary = !error && data ? data.summary : null;
   const currentCategoryCounts = !error && data ? data.categoryCounts : EMPTY_CATEGORY_COUNTS;
   const availableFarms = !error && data ? data.farms : [];
 
   return (
     <div className="ym09-my-produce-page">
-      {/* 1. Explicit Development Sample Data Notice */}
-      {!error && data?.isSampleData && (
-        <Alert type="info">
-          <strong>DEVELOPMENT PREVIEW:</strong> Displaying {data.total} illustrative sample produce{' '}
-          {data.total === 1 ? 'listing' : 'listings'}. Sample data mode is separate from live API endpoint{' '}
-          <code>/api/ym09/produce</code>.
-        </Alert>
-      )}
-
-      {/* 2. Real API Connection Error State */}
+      {/* 1. Real API Connection or Status Mutation Error State */}
       {error && (
         <div style={{ display: 'grid', gap: '12px' }} data-testid="my-produce-error">
           <Alert type="error">{error}</Alert>
@@ -253,6 +281,12 @@ export default function MyProducePage({
             </Button>
           </div>
         </div>
+      )}
+
+      {statusError && (
+        <Alert type="error">
+          <strong>Unable to update status:</strong> {statusError}
+        </Alert>
       )}
 
       {/* 3. Page Header with Title, Description and "+ Add Produce" Button */}
@@ -289,12 +323,14 @@ export default function MyProducePage({
             listings={data?.listings || []}
             loading={loading}
             onResetFilters={handleResetFilters}
+            onSelectStatusAction={handleSelectStatusAction}
           />
         ) : (
           <ProduceTable
             listings={data?.listings || []}
             loading={loading}
             onResetFilters={handleResetFilters}
+            onSelectStatusAction={handleSelectStatusAction}
           />
         ))}
 
@@ -307,6 +343,20 @@ export default function MyProducePage({
           onPageChange={handlePageChange}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingStatusChange)}
+        title={pendingStatusChange?.action.confirmTitle || 'Update listing status'}
+        description={pendingStatusChange?.action.confirmDescription || ''}
+        confirmLabel={pendingStatusChange?.action.confirmLabel || 'Confirm'}
+        busy={statusUpdating}
+        onCancel={() => {
+          if (!statusUpdating) {
+            setPendingStatusChange(null);
+          }
+        }}
+        onConfirm={handleConfirmStatusChange}
+      />
     </div>
   );
 }

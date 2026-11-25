@@ -300,71 +300,48 @@ input.ym09-source-control:read-only:focus {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
-.ym09-image-selector-row {
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 12px;
-  align-items: stretch;
-}
-
-.ym09-image-selected-box {
-  position: relative;
-  width: 90px;
-  height: 90px;
+.ym09-image-unavailable-card {
   border-radius: 12px;
-  overflow: hidden;
-  border: 2px solid var(--green);
-  box-shadow: 0 2px 8px rgba(49, 90, 66, 0.15);
+  border: 1px dashed var(--border);
+  background-color: var(--canvas);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
 }
 
-.ym09-image-dropzone {
+.ym09-image-unavailable-content {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  border: 2px dashed #a3c4a8;
-  background-color: var(--soft);
-  padding: 12px;
-  text-align: center;
-  cursor: default;
-  user-select: none;
-}
-
-.ym09-image-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
+  text-align: center;
 }
 
-.ym09-image-option {
-  padding: 0;
-  margin: 0;
+.ym09-image-unavailable-fill {
   width: 100%;
-  aspect-ratio: 1;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background: none;
-  cursor: pointer;
-  position: relative;
-  opacity: 0.72;
-  transition: opacity 0.15s ease, border-color 0.15s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--canvas);
+  padding: 16px;
+  text-align: center;
 }
 
-.ym09-image-option:hover {
-  opacity: 0.95;
-  border-color: var(--green);
+.ym09-image-unavailable-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
-.ym09-image-option:focus-visible {
-  outline: 2px solid var(--green);
-  outline-offset: 2px;
-}
-
-.ym09-image-option--selected {
-  border: 2px solid var(--green);
-  opacity: 1;
+.ym09-image-unavailable-subtext {
+  font-size: 11.5px;
+  color: var(--muted);
 }
 
 .ym09-action-buttons-row {

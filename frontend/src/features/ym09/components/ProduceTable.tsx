@@ -1,8 +1,13 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { ImageOff } from 'lucide-react';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { Table, TableRow } from '../../../components/Table';
+import {
+  IMAGE_UNAVAILABLE_MESSAGE,
+  type ListingStatusActionOption,
+} from '../constants/produceConstants';
 import type { ProduceListingView } from '../types/produce';
 import {
   formatDisplayDateColombo,
@@ -15,6 +20,10 @@ interface ProduceTableProps {
   listings: ProduceListingView[];
   loading?: boolean;
   onResetFilters: () => void;
+  onSelectStatusAction?: (
+    listing: ProduceListingView,
+    action: ListingStatusActionOption
+  ) => void;
 }
 
 /**
@@ -22,7 +31,12 @@ interface ProduceTableProps {
  * Keeps standard table row semantics (no role="button" on <tr>) while providing
  * keyboard-accessible Link and ProduceActionMenu controls plus row pointer click navigation.
  */
-export function ProduceTable({ listings, loading = false, onResetFilters }: ProduceTableProps) {
+export function ProduceTable({
+  listings,
+  loading = false,
+  onResetFilters,
+  onSelectStatusAction,
+}: ProduceTableProps) {
   const navigate = useNavigate();
 
   const handleRowClick = (e: React.MouseEvent, listingId: string) => {
@@ -85,12 +99,16 @@ export function ProduceTable({ listings, loading = false, onResetFilters }: Prod
                 {listing.imageUrl ? (
                   <img
                     src={listing.imageUrl}
-                    alt=""
+                    alt={listing.cropName}
                     className="ym09-table-thumb"
                   />
                 ) : (
-                  <div className="ym09-table-thumb-fallback" aria-hidden="true">
-                    {listing.cropName.slice(0, 2).toUpperCase()}
+                  <div
+                    className="ym09-table-thumb-fallback"
+                    title={IMAGE_UNAVAILABLE_MESSAGE}
+                    aria-label={IMAGE_UNAVAILABLE_MESSAGE}
+                  >
+                    <ImageOff size={15} aria-hidden="true" />
                   </div>
                 )}
                 <div>
@@ -148,7 +166,16 @@ export function ProduceTable({ listings, loading = false, onResetFilters }: Prod
 
             {/* 9. Actions (stops row click propagation) */}
             <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-              <ProduceActionMenu produceName={listing.cropName} listingId={listing.id} />
+              <ProduceActionMenu
+                produceName={listing.cropName}
+                listingId={listing.id}
+                currentStatus={listing.status}
+                onSelectStatusAction={
+                  onSelectStatusAction
+                    ? (action) => onSelectStatusAction(listing, action)
+                    : undefined
+                }
+              />
             </td>
           </TableRow>
         ))}

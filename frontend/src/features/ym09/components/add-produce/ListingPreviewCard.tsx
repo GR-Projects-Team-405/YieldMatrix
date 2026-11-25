@@ -1,20 +1,50 @@
-import { Eye, MapPin, Package, CalendarDays, Info, ArrowUpRight } from 'lucide-react';
-import type { AddProduceFormState } from '../../types/produce';
-import { formatDateRangePreview, formatKg } from '../../utils/produceFormatters';
+import { useEffect, useState } from 'react';
+import { Eye, MapPin, Package, CalendarDays, Info, ArrowUpRight, ImageOff } from 'lucide-react';
+import { IMAGE_UNAVAILABLE_MESSAGE } from '../../constants/produceConstants';
+import type { AddProduceFormState, ListingStatus } from '../../types/produce';
+import {
+  formatDateRangePreview,
+  formatKg,
+  formatListingStatusLabel,
+} from '../../utils/produceFormatters';
 
 interface ListingPreviewCardProps {
   formState: AddProduceFormState;
-  activeImageUrl: string;
+  activeImageUrl?: string;
+}
+
+function getPreviewStatusDotColor(status: ListingStatus): string {
+  switch (status) {
+    case 'active':
+      return '#15803D';
+    case 'draft':
+      return '#D97706';
+    case 'expired':
+      return '#B91C1C';
+    case 'paused':
+    case 'closed':
+    default:
+      return '#6B7280';
+  }
 }
 
 export function ListingPreviewCard({ formState, activeImageUrl }: ListingPreviewCardProps) {
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [activeImageUrl]);
+
   const cropTitle = formState.cropName || 'Produce Listing';
   const category = formState.category || 'Vegetables';
-  const grade = formState.gradeName || 'Grade A';
+  const grade = formState.gradeName || 'Grade pending';
   const farm = formState.farmName || 'Certified Farm';
   const price = typeof formState.unitPrice === 'number' && formState.unitPrice > 0 ? formState.unitPrice : 0;
   const quantity = typeof formState.totalQuantity === 'number' && formState.totalQuantity > 0 ? formState.totalQuantity : 0;
   const dateRange = formatDateRangePreview(formState.availableFrom, formState.availableUntil);
+  const previewStatus: ListingStatus = formState.status || 'active';
+  const statusLabel = formatListingStatusLabel(previewStatus);
+  const hasImage = Boolean(!imageError && activeImageUrl);
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
@@ -49,16 +79,24 @@ export function ListingPreviewCard({ formState, activeImageUrl }: ListingPreview
       <div className="ym-content-card ym09-listing-preview-card ym09-preview-card">
         {/* Produce Image Container with Status Badge */}
         <div className="ym09-preview-media">
-          <img
-            src={activeImageUrl}
-            alt={cropTitle}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: 'block',
-            }}
-          />
+          {hasImage ? (
+            <img
+              src={activeImageUrl}
+              alt={cropTitle}
+              onError={() => setImageError(true)}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block',
+              }}
+            />
+          ) : (
+            <div className="ym09-image-unavailable-fill">
+              <ImageOff size={28} strokeWidth={1.5} color="var(--muted)" aria-hidden="true" />
+              <span className="ym09-image-unavailable-text">{IMAGE_UNAVAILABLE_MESSAGE}</span>
+            </div>
+          )}
 
           <div className="ym09-preview-badge">
             <span
@@ -66,11 +104,11 @@ export function ListingPreviewCard({ formState, activeImageUrl }: ListingPreview
                 width: '6px',
                 height: '6px',
                 borderRadius: '50%',
-                backgroundColor: '#D97706',
+                backgroundColor: getPreviewStatusDotColor(previewStatus),
               }}
               aria-hidden="true"
             />
-            <span>Draft</span>
+            <span>{statusLabel}</span>
           </div>
         </div>
 
@@ -93,97 +131,67 @@ export function ListingPreviewCard({ formState, activeImageUrl }: ListingPreview
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                fontSize: '13px',
+                fontSize: '12.5px',
                 color: 'var(--muted)',
                 marginTop: '4px',
               }}
             >
-              <ArrowUpRight size={14} color="var(--accent-text)" aria-hidden="true" />
               <span>{category}</span>
-              <span aria-hidden="true">•</span>
+              <span>•</span>
               <span>{grade}</span>
             </div>
+          </div>
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '13px',
-                color: 'var(--muted)',
-                marginTop: '4px',
-              }}
-            >
-              <MapPin size={14} color="var(--muted)" aria-hidden="true" />
+          <div style={{ display: 'grid', gap: '6px', fontSize: '13px', color: 'var(--text)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MapPin size={15} color="var(--green)" aria-hidden="true" />
               <span>{farm}</span>
             </div>
-          </div>
 
-          <div
-            style={{
-              fontSize: '22px',
-              fontWeight: 700,
-              color: 'var(--green)',
-              letterSpacing: '-0.02em',
-              margin: '2px 0',
-            }}
-          >
-            LKR {price.toLocaleString('en-US')} / kg
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '12px',
-              paddingTop: '12px',
-              borderTop: '1px solid var(--border)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <Package size={16} color="var(--muted)" style={{ marginTop: '2px' }} aria-hidden="true" />
-              <div>
-                <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Quantity
-                </span>
-                <strong style={{ fontSize: '13px', color: 'var(--text)' }}>
-                  {formatKg(quantity)}
-                </strong>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Package size={15} color="var(--green)" aria-hidden="true" />
+              <span>Available: {formatKg(quantity)}</span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <CalendarDays size={16} color="var(--muted)" style={{ marginTop: '2px' }} aria-hidden="true" />
-              <div>
-                <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Available
-                </span>
-                <strong style={{ fontSize: '12px', color: 'var(--text)' }}>
-                  {dateRange}
-                </strong>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CalendarDays size={15} color="var(--green)" aria-hidden="true" />
+              <span>{dateRange}</span>
+            </div>
+          </div>
+
+          {/* Highlighted Pricing Bar */}
+          <div className="ym09-preview-price-bar">
+            <span className="ym09-preview-price-label">Price per kg</span>
+            <div className="ym09-preview-price-value">
+              <span className="ym09-preview-price-num">
+                LKR {price > 0 ? price.toLocaleString('en-US') : '—'}
+              </span>
+              {price > 0 && <span className="ym09-preview-price-unit"> / kg</span>}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Review Notice Box */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '10px',
-          padding: '12px 16px',
-          borderRadius: '12px',
-          backgroundColor: 'var(--canvas)',
-          border: '1px solid var(--border)',
-          fontSize: '13px',
-          color: 'var(--muted)',
-          lineHeight: 1.4,
-        }}
-      >
-        <Info size={16} color="var(--muted)" style={{ marginTop: '2px', flexShrink: 0 }} aria-hidden="true" />
-        <span>The listing will be reviewed and published to the marketplace.</span>
+        {/* Footer Info Note */}
+        <div className="ym09-preview-footer">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--muted)', fontSize: '11.5px' }}>
+            <Info size={14} color="var(--muted)" aria-hidden="true" />
+            <span>Prices update automatically based on grade</span>
+          </div>
+
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              color: 'var(--muted)',
+            }}
+          >
+            <span>Preview</span>
+            <ArrowUpRight size={13} aria-hidden="true" />
+          </span>
+        </div>
       </div>
     </div>
   );

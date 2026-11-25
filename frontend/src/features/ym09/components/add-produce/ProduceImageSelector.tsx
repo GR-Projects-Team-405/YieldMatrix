@@ -1,110 +1,54 @@
-import { UploadCloud, Check } from 'lucide-react';
-import { PRODUCE_PLACEHOLDERS } from '../../constants/produceConstants';
-import type { ProducePlaceholderKey } from '../../types/produce';
+import { useEffect, useState } from 'react';
+import { ImageOff } from 'lucide-react';
+import { IMAGE_UNAVAILABLE_MESSAGE } from '../../constants/produceConstants';
 
 interface ProduceImageSelectorProps {
-  selectedKey: ProducePlaceholderKey;
-  onSelectKey: (key: ProducePlaceholderKey) => void;
+  imageUrl?: string;
 }
 
-export function ProduceImageSelector({ selectedKey, onSelectKey }: ProduceImageSelectorProps) {
-  const currentPlaceholder = PRODUCE_PLACEHOLDERS[selectedKey];
+/**
+ * Displays the current listing image status without synthetic placeholder artwork
+ * or unimplemented upload controls.
+ */
+export function ProduceImageSelector({ imageUrl }: ProduceImageSelectorProps) {
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [imageUrl]);
+
+  const hasValidImage = Boolean(!imageError && imageUrl);
 
   return (
-    <div style={{ display: 'grid', gap: '14px' }}>
-      {/* Thumbnail and Upload Dropzone Row */}
-      <div className="ym09-image-selector-row">
-        {/* Active Selected Image Thumbnail */}
-        <div className="ym09-image-selected-box">
-          <img
-            src={currentPlaceholder.imageUrl}
-            alt={currentPlaceholder.label}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: 'block',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              top: '6px',
-              right: '6px',
-              width: '20px',
-              height: '20px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--surface)',
-              color: 'var(--green)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-            }}
-            title="Selected agricultural placeholder"
-          >
-            <Check size={12} strokeWidth={3} aria-hidden="true" />
-          </div>
+    <section
+      className="ym-content-card ym09-form-section"
+      aria-label="Produce image status"
+    >
+      <div style={{ display: 'grid', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+          <strong style={{ fontSize: '14px', color: 'var(--text)' }}>Produce Image</strong>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Backend media pending</span>
         </div>
 
-        {/* Illustrative Upload Dropzone Box */}
-        <div
-          title="Image upload is scheduled for a future backend storage stage. Local verified placeholder is active."
-          className="ym09-image-dropzone"
-        >
-          <UploadCloud size={24} color="var(--green)" aria-hidden="true" />
-          <strong style={{ fontSize: '13px', color: 'var(--text)', marginTop: '4px' }}>
-            Upload Images
-          </strong>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-            PNG, JPG (Max 5 MB)
-          </span>
-          <span style={{ fontSize: '10px', color: 'var(--accent-text)', marginTop: '2px', fontWeight: 500 }}>
-            (Future stage • using verified placeholder)
-          </span>
+        <div className="ym09-image-unavailable-card">
+          {hasValidImage ? (
+            <img
+              src={imageUrl}
+              alt="Produce listing"
+              onError={() => setImageError(true)}
+              style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '10px', display: 'block' }}
+            />
+          ) : (
+            <div className="ym09-image-unavailable-content">
+              <ImageOff size={24} color="var(--muted)" aria-hidden="true" />
+              <span className="ym09-image-unavailable-text">{IMAGE_UNAVAILABLE_MESSAGE}</span>
+              <span className="ym09-image-unavailable-subtext">
+                Image upload and storage will be integrated in a future release.
+              </span>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* 5 Agricultural Placeholders Switcher */}
-      <div>
-        <span
-          style={{
-            fontSize: '12px',
-            fontWeight: 600,
-            color: 'var(--muted)',
-            display: 'block',
-            marginBottom: '8px',
-          }}
-        >
-          Choose Agricultural Placeholder:
-        </span>
-
-        <div className="ym09-image-grid" role="group" aria-label="Choose agricultural placeholder image">
-          {(Object.keys(PRODUCE_PLACEHOLDERS) as ProducePlaceholderKey[]).map((key) => {
-            const item = PRODUCE_PLACEHOLDERS[key];
-            const isSelected = selectedKey === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => onSelectKey(key)}
-                title={`Select ${item.label}`}
-                aria-label={`Select ${item.label}`}
-                aria-pressed={isSelected}
-                className={`ym09-image-option ${
-                  isSelected ? 'ym09-image-option--selected' : ''
-                }`}
-              >
-                <img
-                  src={item.imageUrl}
-                  alt={item.label}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    </section>
   );
 }

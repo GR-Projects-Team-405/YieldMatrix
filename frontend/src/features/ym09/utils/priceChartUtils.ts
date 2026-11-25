@@ -1,5 +1,5 @@
 import type { PriceChangeRecord, PriceTrendPoint } from '../types/produce';
-import { formatDisplayDateColombo } from './produceFormatters';
+import { formatLkrPrice, formatLkrTotal, formatDisplayDateColombo } from './produceFormatters';
 
 export type TimeframeFilter = '7d' | '30d' | 'all';
 
@@ -153,20 +153,12 @@ export function getTimeframeCutoffMs(
 /**
  * Formats an amount in cents to LKR string without rounding away fractional values.
  */
-export function formatLkrAmount(cents: number): string {
-  const lkr = cents / 100;
-  const formatted = Number.isInteger(lkr)
-    ? lkr.toLocaleString('en-US')
-    : lkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `LKR ${formatted}`;
-}
+export const formatLkrAmount = formatLkrTotal;
 
 /**
  * Formats a Colombo price rate cleanly without misleading rounding of fractional LKR values.
  */
-export function formatCompactLkrRate(unitPriceCents: number): string {
-  return `${formatLkrAmount(unitPriceCents)} / kg`;
-}
+export const formatCompactLkrRate = formatLkrPrice;
 
 /**
  * Builds an axis-friendly short date label from a Colombo-formatted date string ("05 Nov 2026").

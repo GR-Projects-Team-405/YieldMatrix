@@ -2,17 +2,21 @@ import { CalendarDays } from 'lucide-react';
 import type { AddProduceFormState, AddProduceValidationErrors } from '../../types/produce';
 
 interface AvailabilityFormProps {
+  mode?: 'create' | 'edit';
   formState: AddProduceFormState;
   errors: AddProduceValidationErrors;
   onFromChange: (val: string) => void;
   onUntilChange: (val: string) => void;
+  onStatusChange?: (status: 'active' | 'draft') => void;
 }
 
 export function AvailabilityForm({
+  mode = 'create',
   formState,
   errors,
   onFromChange,
   onUntilChange,
+  onStatusChange,
 }: AvailabilityFormProps) {
   return (
     <section className="ym-content-card ym09-form-section">
@@ -20,7 +24,7 @@ export function AvailabilityForm({
       <div className="ym09-section-badge">
         <span className="ym09-section-badge-num">3</span>
         <CalendarDays size={16} aria-hidden="true" />
-        <span>Availability</span>
+        <span>Availability{mode === 'create' ? ' & Initial Status' : ''}</span>
       </div>
 
       <div className="ym09-availability-grid">
@@ -75,6 +79,30 @@ export function AvailabilityForm({
           )}
         </div>
       </div>
+
+      {mode === 'create' && onStatusChange && (
+        <div className="ym-field" style={{ marginTop: '14px' }}>
+          <label htmlFor="produce-initial-status" className="ym09-field-label">
+            <span>Initial Listing Status</span>
+          </label>
+          <div className="ym-input-wrap">
+            <select
+              id="produce-initial-status"
+              value={formState.status === 'draft' ? 'draft' : 'active'}
+              onChange={(e) =>
+                onStatusChange(e.target.value === 'draft' ? 'draft' : 'active')
+              }
+              className="ym09-source-control ym09-source-control--editable"
+            >
+              <option value="active">Active — Publish immediately to marketplace</option>
+              <option value="draft">Draft — Save without publishing</option>
+            </select>
+          </div>
+          <span className="ym09-field-hint">
+            Only one active listing per harvest batch is permitted on the marketplace.
+          </span>
+        </div>
+      )}
     </section>
   );
 }

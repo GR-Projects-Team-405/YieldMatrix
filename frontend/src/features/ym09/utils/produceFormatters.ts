@@ -1,22 +1,24 @@
 import type { ListingStatus } from '../types/produce';
 
 /**
+ * Formats integer LKR cents to a total value string without rounding away fractional LKR.
+ * Example: 14500000 cents -> "LKR 145,000", 32050 cents -> "LKR 320.50"
+ */
+export function formatLkrTotal(cents: number): string {
+  const lkr = cents / 100;
+  const formatted = Number.isInteger(lkr)
+    ? lkr.toLocaleString('en-US')
+    : lkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `LKR ${formatted}`;
+}
+
+/**
  * Formats integer LKR cents to a standard per-kg price string.
  * Example: 32000 cents -> "LKR 320 / kg"
  * Currency calculations must use integer cents (DR-06).
  */
 export function formatLkrPrice(cents: number): string {
-  const rupees = Math.round(cents / 100);
-  return `LKR ${rupees.toLocaleString('en-US')} / kg`;
-}
-
-/**
- * Formats integer LKR cents to a total value string.
- * Example: 14500000 cents -> "LKR 145,000"
- */
-export function formatLkrTotal(cents: number): string {
-  const rupees = Math.round(cents / 100);
-  return `LKR ${rupees.toLocaleString('en-US')}`;
+  return `${formatLkrTotal(cents)} / kg`;
 }
 
 /**
@@ -165,7 +167,7 @@ const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
  * Formats an ISO date string (YYYY-MM-DD or UTC ISO) to "D MMM YYYY".
  * Example: "2026-11-10" -> "10 Nov 2026"
  */
-export function formatDisplayDate(dateStr: string): string {
+function formatDisplayDate(dateStr: string): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return dateStr;
@@ -205,10 +207,8 @@ export function formatDateRangePreview(fromStr: string, untilStr: string): strin
  * Returns today's date formatted as YYYY-MM-DD for native HTML date inputs.
  */
 export function getTodayDateInputString(): string {
-  // Use fixed base date for reproducible demo matching screenshot (10 Nov 2026) or fallback to today
   const date = new Date();
-  // Ensure default year matches 2026 project timeline
-  const year = date.getFullYear() < 2026 ? 2026 : date.getFullYear();
+  const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
@@ -221,7 +221,7 @@ export function getFutureDateInputString(days: number = 15, baseDateStr?: string
   const base = baseDateStr ? new Date(baseDateStr) : new Date();
   if (isNaN(base.getTime())) return getTodayDateInputString();
   const future = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
-  const year = future.getFullYear() < 2026 ? 2026 : future.getFullYear();
+  const year = future.getFullYear();
   const month = String(future.getMonth() + 1).padStart(2, '0');
   const day = String(future.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;

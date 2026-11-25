@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, FileText } from 'lucide-react';
+import { DollarSign } from 'lucide-react';
 import { ProduceListingDetailView } from '../../types/produce';
 import {
   formatDisplayDateColombo,
@@ -18,11 +18,10 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ listing }) => {
     !listing.validFrom && !listing.validUntil
       ? '—'
       : `${formatDisplayDateColombo(listing.validFrom)} – ${formatDisplayDateColombo(listing.validUntil)}`;
-  const hasDescription = Boolean(listing.description && listing.description.trim().length > 0);
 
   return (
     <div className="ym09-overview-stack" data-testid="overview-tab">
-      {/* Section 1: Listing Information (Full width, 2-column layout on desktop) */}
+      {/* Listing Information (Full width, 2-column layout on desktop) */}
       <section className="ym09-details-card" aria-labelledby="listing-info-title">
         <header className="ym09-details-card-header">
           <h3 id="listing-info-title" className="ym09-details-card-title">
@@ -90,28 +89,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ listing }) => {
             </table>
           </div>
         </div>
-      </section>
-
-      {/* Section 2: Description (Full width directly below Listing Information) */}
-      <section className="ym09-details-card" aria-labelledby="listing-desc-title">
-        <header className="ym09-details-card-header">
-          <h3 id="listing-desc-title" className="ym09-details-card-title">
-            <FileText size={20} aria-hidden="true" />
-            Description
-          </h3>
-        </header>
-
-        {hasDescription ? (
-          <p className="ym09-description-text">
-            {listing.description}
-          </p>
-        ) : (
-          <div className="ym09-description-empty">
-            <p className="ym09-description-empty-text">
-              No description provided for this listing.
-            </p>
-          </div>
-        )}
       </section>
     </div>
   );
