@@ -14,7 +14,9 @@ import {
   ShieldCheck,
   User,
   Sprout,
-  DollarSign
+  DollarSign,
+  XCircle,
+  Info
 } from 'lucide-react';
 import api from '../../services/api';
 import type { BuyerOrder, OrderDisplayStatus, FarmerAllocation, OrderDetailsApiResponse } from './types';
@@ -237,8 +239,31 @@ export const OrderDetailsPage: React.FC = () => {
             <Truck size={14} />
             Track Delivery
           </button>
+
+          {/* Cancel Order Button */}
+          {order.displayStatus !== 'Delivered' && order.displayStatus !== 'Canceled' && (
+            <button
+              type="button"
+              onClick={() => navigate(`/buyer/orders/${order.id}/cancel`)}
+              className="h-[36px] px-3 bg-white border border-[#A51C19]/30 hover:border-[#A51C19] hover:bg-[#FCEBEA] text-[#A51C19] text-[13px] font-semibold rounded-[8px] transition-all inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
+              title="Cancel Order"
+            >
+              <XCircle size={14} />
+              Cancel Order
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Cancellation Notice if Canceled */}
+      {order.displayStatus === 'Canceled' && (
+        <div className="p-3.5 bg-[#FCEBEA] border border-[#A51C19]/20 rounded-[8px] text-xs shadow-2xs">
+          <span className="font-semibold text-[#A51C19] block mb-0.5">
+            Cancellation Notice:
+          </span>
+          <p className="text-[#A51C19]">{order.cancellationReason || 'This order has been cancelled and smart escrow funds are being returned.'}</p>
+        </div>
+      )}
 
       {/* 3. Product Overview Card with Image, Quantity, Date & Price */}
       <div className="bg-white border border-[#E0E7E1] rounded-[8px] p-5 shadow-[0_1px_3px_rgba(38,58,49,0.03)]">
@@ -308,7 +333,7 @@ export const OrderDetailsPage: React.FC = () => {
         </div>
 
         {/* Cancellation Notice if Applicable */}
-        {order.cancellationReason && (
+        {order.displayStatus === 'Canceled' && order.cancellationReason && (
           <div className="mt-4 p-3 bg-[#FCEBEA] border border-[#A51C19]/20 rounded-[8px] text-xs">
             <span className="font-semibold text-[#A51C19] block mb-0.5">
               Cancellation Reason:

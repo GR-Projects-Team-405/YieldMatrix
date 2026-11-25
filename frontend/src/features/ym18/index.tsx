@@ -4,6 +4,7 @@ import { MyOrdersPage } from './MyOrdersPage';
 import { OrderDetailsPage } from './OrderDetailsPage';
 import { OrderTimelinePage } from './OrderTimelinePage';
 import { DeliveryTrackingPage } from './DeliveryTrackingPage';
+import { CancelOrderPage } from './CancelOrderPage';
 
 export default function YM18() {
   return (
@@ -18,6 +19,7 @@ export default function YM18() {
         <Route path=":orderId" element={<OrderDetailsPage />} />
         <Route path=":orderId/timeline" element={<OrderTimelinePage />} />
         <Route path=":orderId/delivery" element={<DeliveryTrackingPage />} />
+        <Route path=":orderId/cancel" element={<CancelOrderPage />} />
         <Route path="*" element={<MyOrdersPage />} />
       </Routes>
     </div>

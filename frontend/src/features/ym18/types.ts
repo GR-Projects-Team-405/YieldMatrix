@@ -234,3 +234,34 @@ export interface DeliveryTrackingApiResponse {
   };
   requestId: string;
 }
+
+export type CancellationReason =
+  | 'Ordered by mistake'
+  | 'No longer required'
+  | 'Delivery delay'
+  | 'Incorrect order details'
+  | 'Other';
+
+export interface CancelOrderPayload {
+  reason: CancellationReason | string;
+  additionalDetails?: string;
+}
+
+export interface CancelOrderApiResponse {
+  success: boolean;
+  cancellationStatus: 'cancelled' | 'pending_approval' | 'already_cancelled' | 'not_allowed' | 'duplicate_pending';
+  requiresApproval: boolean;
+  message: string;
+  order: {
+    id: string;
+    orderCode: string;
+    operationKey: string;
+    status: string;
+    displayStatus: OrderDisplayStatus;
+    cancellationReason?: string;
+  };
+  refundNotice: string;
+  existingReason?: string;
+  submittedAt?: string;
+  requestId: string;
+}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Calendar, ChevronLeft, ChevronRight, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { Search, Calendar, ChevronLeft, ChevronRight, X, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import api from '../../services/api';
 import { OrdersTable } from './OrdersTable';
 import { OrderDetailsModal } from './OrderDetailsModal';
@@ -15,9 +16,19 @@ const STATUS_FILTERS: { label: string; value: string; key: keyof OrdersApiRespon
 ];
 
 export const MyOrdersPage: React.FC = () => {
+  const location = useLocation();
   const [orders, setOrders] = useState<BuyerOrder[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(
+    (location.state as any)?.successMessage || null
+  );
+
+  useEffect(() => {
+    if ((location.state as any)?.successMessage) {
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Filter and pagination state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -166,6 +177,24 @@ export const MyOrdersPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Success Notification Banner */}
+      {successBanner && (
+        <div className="bg-[#EAF2E8] border border-[#315A42]/30 rounded-[8px] p-3.5 text-xs text-[#315A42] flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={16} className="text-[#315A42] shrink-0" />
+            <span className="font-semibold">{successBanner}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessBanner(null)}
+            className="text-[#315A42] hover:opacity-75 font-bold cursor-pointer"
+            aria-label="Dismiss message"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* 2. Status Filter Buttons: 36px height, compact 12px padding, 8px radius */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-none">

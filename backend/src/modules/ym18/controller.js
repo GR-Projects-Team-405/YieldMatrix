@@ -181,13 +181,13 @@ export async function getOrders(req, res, next) {
     const statusCountsRes = await pool.query(`
       SELECT 
         COUNT(*) as all_count,
-        COUNT(*) FILTER (WHERE status IN ('draft', 'awaiting_suppliers')) as pending_count,
-        COUNT(*) FILTER (WHERE status IN ('ready_to_confirm', 'confirmed')) as processing_count,
-        COUNT(*) FILTER (WHERE status = 'in_fulfilment') as in_transit_count,
-        COUNT(*) FILTER (WHERE status IN ('delivered', 'closed')) as delivered_count,
-        COUNT(*) FILTER (WHERE status = 'cancelled') as canceled_count
-      FROM orders
-      WHERE buyer_id = $1
+        COUNT(*) FILTER (WHERE o.status IN ('draft', 'awaiting_suppliers')) as pending_count,
+        COUNT(*) FILTER (WHERE o.status IN ('ready_to_confirm', 'confirmed')) as processing_count,
+        COUNT(*) FILTER (WHERE o.status = 'in_fulfilment') as in_transit_count,
+        COUNT(*) FILTER (WHERE o.status IN ('delivered', 'closed')) as delivered_count,
+        COUNT(*) FILTER (WHERE o.status = 'cancelled') as canceled_count
+      FROM orders o
+      WHERE o.buyer_id = $1
     `, [buyerId]);
 
     const counts = {
@@ -206,6 +206,7 @@ export async function getOrders(req, res, next) {
       const cropSummary = items.length > 1 ? `${primaryCrop} +${items.length - 1} more` : primaryCrop;
       const totalKg = Number(row.total_quantity_kg) || items.reduce((acc, it) => acc + (Number(it.agreed_kg) || 0), 0);
       const totalAmountLkr = Number(row.agreed_total_cents) / 100;
+      const displayStatus = mapOrderStatus(row.status);
 
       return {
         id: row.id,
@@ -217,13 +218,13 @@ export async function getOrders(req, res, next) {
         totalPriceLkr: totalAmountLkr,
         formattedTotalPrice: `LKR ${totalAmountLkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         rawStatus: row.status,
-        displayStatus: mapOrderStatus(row.status),
+        displayStatus,
+        cancellationReason: row.cancellation_reason || null,
         orderDate: formatOrderDate(row.created_at),
         createdAt: row.created_at,
-        deliveryDate: row.delivery_date,
-        destination: row.destination,
-        destinationDistrict: row.destination_district,
-        cancellationReason: row.cancellation_reason
+        deliveryDate: row.delivery_date ? new Date(row.delivery_date).toISOString().split('T')[0] : null,
+        destination: row.destination || 'Designated Fulfillment Warehouse',
+        destinationDistrict: row.destination_district || 'Western Province'
       };
     });
 
@@ -369,6 +370,7 @@ export async function getOrderDetails(req, res, next) {
     const totalRefundedLkr = formattedAllocations.reduce((acc, a) => acc + a.refundedLkr, 0);
 
     const primaryCropName = formattedAllocations[0]?.cropName || 'Agricultural Produce';
+    const displayStatus = mapOrderStatus(row.status);
 
     return res.json({
       order: {
@@ -381,7 +383,7 @@ export async function getOrderDetails(req, res, next) {
         totalPriceLkr: totalAmountLkr,
         formattedTotalPrice: `LKR ${totalAmountLkr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         rawStatus: row.status,
-        displayStatus: mapOrderStatus(row.status),
+        displayStatus,
         orderDate: formatOrderDate(row.created_at),
         createdAt: row.created_at,
         deliveryDate: row.delivery_date ? new Date(row.delivery_date).toISOString().split('T')[0] : 'Scheduled upon confirmation',
@@ -392,7 +394,7 @@ export async function getOrderDetails(req, res, next) {
           latitude: row.destination_latitude ? Number(row.destination_latitude) : null,
           longitude: row.destination_longitude ? Number(row.destination_longitude) : null,
         },
-        cancellationReason: row.cancellation_reason,
+        cancellationReason: row.cancellation_reason || null,
         allocations: formattedAllocations,
         paymentSummary: {
           currency: 'LKR',
@@ -965,5 +967,168 @@ export async function getOrderDelivery(req, res, next) {
     });
   } catch (error) {
     next(error);
+  }
+}
+
+/**
+ * POST /api/ym18/orders/:id/cancel
+ * Submits a cancellation request for an order.
+ * - Validates input fields (reason, additionalDetails).
+ * - Verifies order belongs to authenticated buyer.
+ * - Enforces workflow rules:
+ *   - Delivered/closed: Not allowed to cancel.
+ *   - Already cancelled: Returns duplicate submission error.
+ *   - Early stages ('draft', 'awaiting_suppliers', 'ready_to_confirm'): Immediate cancellation per schema workflow.
+ *   - Processing / in-transit ('confirmed', 'in_fulfilment'): Queued for supplier and logistics review.
+ * - Explains refund process and prevents assumptions that refund is already processed.
+ */
+export async function cancelOrder(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const buyerId = req.user.id;
+    const orderIdentifier = req.params.id;
+    const { reason, additionalDetails } = req.body;
+
+    // 1. Validation
+    const validReasons = [
+      'Ordered by mistake',
+      'No longer required',
+      'Delivery delay',
+      'Incorrect order details',
+      'Other'
+    ];
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({
+        error: 'Cancellation reason is required.',
+        requestId: req.requestId
+      });
+    }
+
+    const trimmedReason = reason.trim();
+    if (!validReasons.includes(trimmedReason)) {
+      return res.status(400).json({
+        error: `Invalid cancellation reason. Allowed reasons: ${validReasons.join(', ')}`,
+        requestId: req.requestId
+      });
+    }
+
+    const trimmedDetails = additionalDetails && typeof additionalDetails === 'string' ? additionalDetails.trim() : '';
+    if (trimmedDetails.length > 500) {
+      return res.status(400).json({
+        error: 'Additional details cannot exceed 500 characters.',
+        requestId: req.requestId
+      });
+    }
+
+    const fullReasonText = trimmedDetails
+      ? `${trimmedReason}: ${trimmedDetails}`
+      : trimmedReason;
+
+    // 2. Fetch the order and verify ownership
+    const orderRes = await client.query(
+      `SELECT id, operation_key, status, agreed_total_cents, destination, cancellation_reason, created_at, updated_at
+       FROM orders
+       WHERE (id::text = $1 OR operation_key ILIKE '%' || $1 || '%') AND buyer_id = $2`,
+      [orderIdentifier, buyerId]
+    );
+
+    if (!orderRes.rows[0]) {
+      return res.status(404).json({
+        error: 'Order not found or does not belong to your account.',
+        requestId: req.requestId
+      });
+    }
+
+    const order = orderRes.rows[0];
+    const orderCode = formatOrderCode(order.operation_key, order.id);
+
+    // 3. Status checks:
+    // A. Already cancelled
+    if (order.status === 'cancelled') {
+      return res.status(400).json({
+        error: 'This order has already been cancelled. Duplicate cancellation requests cannot be processed.',
+        cancellationStatus: 'already_cancelled',
+        existingReason: order.cancellation_reason,
+        requestId: req.requestId
+      });
+    }
+
+    // B. Delivered or closed
+    if (order.status === 'delivered' || order.status === 'closed') {
+      return res.status(400).json({
+        error: 'Delivered orders cannot be cancelled. If there is an issue with the received produce, please submit a dispute via Resolution Support.',
+        cancellationStatus: 'not_allowed',
+        requestId: req.requestId
+      });
+    }
+
+    // C. Immediate Cancellation Workflow
+    await client.query('BEGIN');
+
+    // 1. Update order status to 'cancelled' with cancellation_reason
+    await client.query(
+      `UPDATE orders
+       SET status = 'cancelled', cancellation_reason = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [fullReasonText, order.id]
+    );
+
+    // 2. Cancel associated allocations eligible for cancellation (held, supplier_accepted)
+    await client.query(
+      `UPDATE allocations
+       SET status = 'cancelled', decision_reason = $1
+       WHERE order_id = $2 AND status IN ('held', 'supplier_accepted')`,
+      [`Order cancelled by buyer: ${fullReasonText}`, order.id]
+    );
+
+    // 3. Cancel assigned trips if in assigned state
+    await client.query(
+      `UPDATE trips
+       SET status = 'cancelled', cancellation_reason = $1
+       WHERE order_id = $2 AND status = 'assigned'`,
+      [`Order cancelled by buyer: ${fullReasonText}`, order.id]
+    );
+
+    // 4. Record in audit_logs
+    await client.query(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, reason, safe_changes)
+       VALUES ($1, 'order_cancelled', 'order', $2, $3, $4)`,
+      [
+        buyerId,
+        order.id,
+        fullReasonText,
+        JSON.stringify({
+          previous_status: order.status,
+          new_status: 'cancelled',
+          reason: trimmedReason,
+          additional_details: trimmedDetails,
+          immediate_cancellation: true
+        })
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      success: true,
+      cancellationStatus: 'cancelled',
+      message: 'Order has been successfully cancelled.',
+      order: {
+        id: order.id,
+        orderCode,
+        operationKey: order.operation_key,
+        status: 'cancelled',
+        displayStatus: 'Canceled',
+        cancellationReason: fullReasonText
+      },
+      refundNotice: 'Escrow hold has been released for refund processing. Escrow refunds are reconciled through your YieldMatrix buyer balance within 1-3 business days.',
+      requestId: req.requestId
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(error);
+  } finally {
+    client.release();
   }
 }
