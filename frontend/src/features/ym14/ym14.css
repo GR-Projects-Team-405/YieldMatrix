@@ -602,7 +602,588 @@
   gap: 12px;
 }
 
-/* Mobile Responsiveness Fine-Tuning */
+/* Rule Banners (Screens 4 & 5) */
+.ym14-rule-banner {
+  background: #fdf6ec;
+  border: 1px solid #f9d8a6;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #854500;
+}
+
+[data-theme='dark'] .ym14-rule-banner {
+  background: #2b1d0c;
+  border-color: #5c3b12;
+  color: #f7a24c;
+}
+
+.ym14-rule-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+}
+
+.ym14-rule-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ym14-rule-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(133, 69, 0, 0.2);
+}
+
+[data-theme='dark'] .ym14-rule-timer {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(247, 162, 76, 0.3);
+}
+
+/* 4-Stage Stepper (Screen 4: Commitment Details) */
+.ym14-stepper-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.ym14-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  gap: 12px;
+}
+
+.ym14-step-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.ym14-step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.ym14-step-circle.completed {
+  background: var(--green);
+  color: #ffffff;
+}
+
+.ym14-step-circle.active {
+  background: var(--surface);
+  color: var(--accent-text);
+  border: 2px solid var(--green);
+  box-shadow: 0 0 0 4px var(--soft);
+}
+
+.ym14-step-circle.upcoming {
+  background: var(--canvas);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.ym14-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ym14-step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ym14-step-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ym14-step-line {
+  height: 2px;
+  flex: 1;
+  background: var(--border);
+  margin: 0 8px;
+}
+
+.ym14-step-line.completed {
+  background: var(--green);
+}
+
+@media (max-width: 768px) {
+  .ym14-stepper {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .ym14-step-line {
+    display: none;
+  }
+}
+
+/* Key-Value Specifications Table (Screen 4) */
+.ym14-spec-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ym14-spec-table tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.ym14-spec-table tr:last-child {
+  border-bottom: none;
+}
+
+.ym14-spec-table td {
+  padding: 12px 0;
+  font-size: 13px;
+}
+
+.ym14-spec-table td.label {
+  color: var(--muted);
+  width: 40%;
+  font-weight: 500;
+}
+
+.ym14-spec-table td.value {
+  color: var(--text);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Audit Anchor Box (Screen 4) */
+.ym14-audit-box {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.ym14-audit-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Offer Comparison Grid (Screen 2: YM14_02) */
+.ym14-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.ym14-compare-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ym14-compare-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+.ym14-compare-badge-row {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.ym14-compare-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ym14-compare-badge.recommended {
+  background: var(--soft);
+  color: var(--accent-text);
+  border: 1px solid #c0d8bd;
+}
+
+.ym14-compare-badge.full-match {
+  background: #e8f2f8;
+  color: #245b80;
+  border: 1px solid #bcd8ec;
+}
+
+.ym14-compare-badge.expired {
+  background: #f3f4f2;
+  color: #718277;
+  border: 1px solid #dcdfd9;
+}
+
+[data-theme='dark'] .ym14-compare-badge.full-match {
+  background: #1c3242;
+  color: #92c5e8;
+  border-color: #2f5068;
+}
+
+[data-theme='dark'] .ym14-compare-badge.expired {
+  background: #252e28;
+  color: #8c9c91;
+  border-color: #3f4e43;
+}
+
+.ym14-compare-supplier-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ym14-compare-supplier-caption {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ym14-compare-supplier-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ym14-compare-district {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ym14-compare-meta-strip {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.ym14-compare-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ym14-compare-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ym14-compare-section-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.ym14-compare-sub {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ym14-compare-sub.positive {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.ym14-compare-sub.negative {
+  color: #b42318;
+}
+
+.ym14-compare-sub.neutral {
+  color: var(--muted);
+}
+
+.ym14-compare-line-total {
+  background: var(--canvas);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.ym14-compare-line-total strong {
+  font-size: 16px;
+  color: var(--text);
+}
+
+.ym14-compare-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+.ym14-compare-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ym14-compare-detail-row span.label {
+  color: var(--muted);
+}
+
+.ym14-compare-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.ym14-compare-actions .ym-button {
+  flex: 1;
+}
+
+/* Commitments Directory (Screen 3: YM14_03) */
+.ym14-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.ym14-filters-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.ym14-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 40px;
+  width: min(340px, 100%);
+}
+
+.ym14-search-box input {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ym14-search-box input::placeholder {
+  color: var(--muted);
+}
+
+.ym14-filter-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  max-width: 100%;
+  padding-bottom: 4px;
+}
+
+.ym14-tab-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.ym14-tab-btn:hover {
+  background: var(--canvas);
+  color: var(--text);
+}
+
+.ym14-tab-btn.active {
+  background: #263a31;
+  color: #ffffff;
+  border-color: #263a31;
+  font-weight: 600;
+}
+
+[data-theme='dark'] .ym14-tab-btn.active {
+  background: #315a42;
+  border-color: #315a42;
+}
+
+/* 4-Column Diff Table (Screen 5: Harvest Change Review) */
+.ym14-diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ym14-diff-table th {
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  background: var(--canvas);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.ym14-diff-table td {
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.ym14-diff-table tr:hover {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.ym14-variance-tag {
+  font-weight: 600;
+}
+
+.ym14-variance-tag.shortage {
+  color: #b42318;
+}
+
+.ym14-variance-tag.shift {
+  color: #b56208;
+}
+
+.ym14-variance-tag.refund {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.ym14-variance-tag.neutral {
+  color: var(--muted);
+}
+
+/* Grower Quote Box (Screen 5) */
+.ym14-quote-box {
+  background: var(--canvas);
+  border-left: 4px solid var(--accent-text);
+  border-radius: 0 8px 8px 0;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ym14-quote-author {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.ym14-photo-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Financial Impact Box (Screen 5) */
+.ym14-impact-box {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.ym14-impact-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.ym14-impact-val {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ym14-impact-val.green {
+  color: var(--accent-text);
+}
+
+.ym14-impact-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 @media (max-width: 640px) {
   .ym14-title-row h1 {
     font-size: 20px;

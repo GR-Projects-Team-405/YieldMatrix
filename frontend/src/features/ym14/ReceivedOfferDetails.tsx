@@ -85,18 +85,22 @@ export default function ReceivedOfferDetails() {
     let mounted = true;
     async function loadOffer() {
       const offerId = id || 'OFF-2026-0842';
+      const localStatus = localStorage.getItem(`ym14_offer_${offerId}`);
       setLoading(true);
       try {
         const res = await api.get(`/ym14/offers/${offerId}`);
         if (mounted && res.data?.offer) {
-          setOffer(res.data.offer);
+          const finalStatus = localStatus || res.data.offer.status;
+          setOffer({ ...res.data.offer, status: finalStatus as any });
         }
       } catch (_err) {
         // Safe offline fallback
         if (mounted) {
+          const finalStatus = localStatus || defaultMockOffer.status;
           setOffer({
             ...defaultMockOffer,
             reference: offerId.startsWith('OFF-') ? offerId : `OFF-${offerId.substring(0, 4).toUpperCase()}`,
+            status: finalStatus as any,
           });
         }
       } finally {
@@ -138,6 +142,9 @@ export default function ReceivedOfferDetails() {
   // Handle Accept Offer (FR-YM14-01 / FR-YM14-03)
   const handleAcceptConfirm = async () => {
     setActionBusy(true);
+    const offerKey = offer.reference || offer.id;
+    localStorage.setItem(`ym14_offer_${offerKey}`, 'accepted');
+    localStorage.setItem(`ym14_offer_${id || 'OFF-2026-0842'}`, 'accepted');
     try {
       const res = await api.post(`/ym14/offers/${offer.reference || offer.id}/accept`, {
         operationKey: `op-accept-${offer.reference}-${Date.now()}`,
@@ -180,6 +187,9 @@ export default function ReceivedOfferDetails() {
     }
     setDeclineError('');
     setActionBusy(true);
+    const offerKey = offer.reference || offer.id;
+    localStorage.setItem(`ym14_offer_${offerKey}`, 'rejected');
+    localStorage.setItem(`ym14_offer_${id || 'OFF-2026-0842'}`, 'rejected');
     try {
       await api.post(`/ym14/offers/${offer.reference || offer.id}/decline`, {
         reason: `${declineReason}${declineNotes ? ': ' + declineNotes : ''}`,

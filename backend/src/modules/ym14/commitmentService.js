@@ -11,6 +11,22 @@ const inMemoryCommitmentStates = new Map([
   ['COM-1041', { status: 'change_pending', quantityKg: 600, unitPriceCents: 22000, escrowHeldCents: 13200000 }],
 ]);
 
+function formatWindow(start, end) {
+  if (!start && !end) return 'Flexible Window';
+  try {
+    const s = start ? new Date(start) : null;
+    const e = end ? new Date(end) : null;
+    if (s && e && !isNaN(s.getTime()) && !isNaN(e.getTime())) {
+      const sStr = s.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      const eStr = e.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      return `${sStr} - ${eStr}`;
+    }
+    return `${start || ''} - ${end || ''}`;
+  } catch {
+    return `${start || ''} - ${end || ''}`;
+  }
+}
+
 /**
  * Fetch filterable, paginated produce commitments list for either buyer or farmer.
  *
@@ -66,7 +82,7 @@ export async function fetchCommitmentsList({
           grade: r.grade_name,
           expectedKg,
           agreedPricePerKgCents: agreedPrice,
-          harvestWindow: `${r.window_start} - ${r.window_end}`,
+          harvestWindow: formatWindow(r.window_start, r.window_end),
           status: r.status,
           changePending: isChangePending,
           actionType: isChangePending
@@ -103,12 +119,20 @@ export async function fetchCommitmentsList({
         ['proposed', 'accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status)
       ).length;
       const committedKg = rows
-        .filter((r) => ['accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status))
+        .filter((r) => ['proposed', 'accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status))
         .reduce((sum, r) => sum + parseFloat(r.quantity_kg), 0);
       const heldInEscrowCents = rows
         .filter((r) => ['accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status))
         .reduce((sum, r) => sum + Math.round(parseFloat(r.quantity_kg) * parseInt(r.agreed_unit_price_cents, 10)), 0);
       const actionRequiredCount = rows.filter((r) => r.status === 'change_pending').length;
+      const tabCounts = {
+        all: rows.length,
+        accepted: rows.filter((r) => r.status === 'accepted').length,
+        change_pending: rows.filter((r) => r.status === 'change_pending').length,
+        ready_to_fulfil: rows.filter((r) => r.status === 'ready_to_fulfil').length,
+        fulfilled: rows.filter((r) => r.status === 'fulfilled').length,
+        cancelled: rows.filter((r) => r.status === 'cancelled').length,
+      };
 
       return {
         stats: {
@@ -117,6 +141,7 @@ export async function fetchCommitmentsList({
           heldInEscrowCents,
           actionRequiredCount,
         },
+        tabCounts,
         commitments: paginatedItems,
         pagination: {
           page: pageNum,
@@ -179,6 +204,14 @@ export async function fetchCommitmentsList({
       heldInEscrowCents: 118025000, // LKR 1,180,250
       actionRequiredCount: items.filter((c) => c.changePending).length,
     },
+    tabCounts: {
+      all: mockCommitmentsList.length,
+      accepted: mockCommitmentsList.filter((c) => c.status === 'accepted').length,
+      change_pending: mockCommitmentsList.filter((c) => c.changePending || c.status === 'change_pending').length,
+      ready_to_fulfil: mockCommitmentsList.filter((c) => c.status === 'ready_to_fulfil').length,
+      fulfilled: mockCommitmentsList.filter((c) => c.status === 'fulfilled').length,
+      cancelled: mockCommitmentsList.filter((c) => c.status === 'cancelled').length,
+    },
     commitments: paginatedItems,
     pagination: {
       page: pageNum,
@@ -212,7 +245,7 @@ export async function fetchCommitmentById(commitmentId, userId, role) {
       JOIN grades g ON hb.grade_id = g.id
       JOIN users farmer ON fc.farmer_id = farmer.id
       JOIN users buyer ON fc.buyer_id = buyer.id
-      WHERE (fc.id::text = $1 OR fc.operation_key = $1)
+      WHERE (fc.id::text = $1 OR fc.operation_key = $1 OR fc.id::text ILIKE $1 || '%' OR fc.id::text ILIKE replace(replace($1, 'COM-', ''), 'com-', '') || '%')
         AND ${roleCondition}
     `;
 
