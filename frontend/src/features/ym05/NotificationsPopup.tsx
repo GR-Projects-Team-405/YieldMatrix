@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bell, CircleAlert, ClipboardCheck, CreditCard, Settings, Truck, UserRound, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 
 interface Notification {
@@ -45,6 +47,8 @@ function notificationDate(value: string) {
 }
 
 export default function NotificationsPopup({ open, onClose, workspaceLabel }: NotificationsPopupProps) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -69,6 +73,12 @@ export default function NotificationsPopup({ open, onClose, workspaceLabel }: No
     [filter, notifications],
   );
 
+  const openPreferences = () => {
+    if (!user) return;
+    onClose();
+    navigate(`/${user.role}/notifications?tab=preferences`);
+  };
+
   if (!open) return null;
 
   return <div className="notification-popup" role="dialog" aria-modal="false" aria-labelledby="notifications-title">
@@ -78,7 +88,7 @@ export default function NotificationsPopup({ open, onClose, workspaceLabel }: No
         <p>{workspaceLabel}&nbsp; · &nbsp;{unreadCount} unread</p>
       </div>
       <div className="notification-popup-actions">
-        <button type="button" className="notification-icon-button" aria-label="Notification settings" title="Notification settings"><Settings size={19} /></button>
+        <button type="button" className="notification-icon-button" aria-label="Notification settings" title="Notification settings" onClick={openPreferences}><Settings size={19} /></button>
         <button type="button" className="notification-icon-button" aria-label="Close notifications" onClick={onClose}><X size={22} /></button>
       </div>
     </header>

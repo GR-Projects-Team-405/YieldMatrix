@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, ChevronLeft, CircleAlert, ClipboardCheck, CreditCard, ExternalLink, Search, Truck, UserRound, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ContentCard } from '../../components/ContentCard';
 import { useAuth, type Role } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -24,12 +24,123 @@ interface NotificationResponse {
   totalCount: number;
 }
 
+type PreferenceMap = Record<string, boolean>;
+
+interface PreferencesResponse {
+  notificationPreferences: PreferenceMap;
+  marketAdvisoryPreferences: PreferenceMap;
+}
+
+interface PreferenceToggleProps {
+  label: string;
+  description: string;
+  enabled: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+}
+
+interface PreferenceActionsProps {
+  hasChanges: boolean;
+  disabled: boolean;
+  saving: boolean;
+  message: string | null;
+  onReset: () => void;
+  onSave: () => void;
+}
+
 const workspaceLabels: Record<Role, string> = {
   farmer: 'Farmer',
   buyer: 'Buyer / Shop',
   driver: 'Driver',
   admin: 'Admin',
 };
+
+const notificationTopicsByRole: Record<Role, { key: string; label: string }[]> = {
+  farmer: [
+    { key: 'farm_updates', label: 'Farm & account updates' },
+    { key: 'orders_commitments', label: 'Orders & commitments' },
+    { key: 'delivery_updates', label: 'Delivery updates' },
+    { key: 'market_advisories', label: 'Market advisories' },
+  ],
+  buyer: [
+    { key: 'orders_reservations', label: 'Orders & reservations' },
+    { key: 'delivery_updates', label: 'Delivery updates' },
+    { key: 'wallet_refunds', label: 'Wallet & refunds' },
+    { key: 'market_advisories', label: 'Market advisories' },
+  ],
+  driver: [
+    { key: 'delivery_requests', label: 'Delivery requests' },
+    { key: 'pickup_route_updates', label: 'Pickup & route updates' },
+    { key: 'earnings_settlements', label: 'Earnings & settlements' },
+    { key: 'account_updates', label: 'Account updates' },
+  ],
+  admin: [
+    { key: 'account_approvals', label: 'Account approvals' },
+    { key: 'order_delivery_issues', label: 'Order & delivery issues' },
+    { key: 'settlement_exceptions', label: 'Settlement exceptions' },
+    { key: 'security_audit', label: 'Security & audit' },
+  ],
+};
+
+const deliveryChannels = [
+  { key: 'in_app', label: 'In-app notifications', description: 'Show updates in your notification center.' },
+  { key: 'local_mail_sink', label: 'Email notifications', description: 'Email is handled by the configured local mail sink.' },
+  { key: 'sms', label: 'SMS notifications', description: 'SMS delivery is not configured.', unavailable: true },
+];
+
+const marketAdvisoryTopics = [
+  { key: 'price_changes', label: 'Price movements', description: 'Updates when relevant produce prices change.' },
+  { key: 'supply_demand', label: 'Supply & demand', description: 'Changes in produce availability and demand.' },
+  { key: 'new_opportunities', label: 'Market opportunities', description: 'Relevant new listings and buyer or supplier opportunities.' },
+  { key: 'weekly_summary', label: 'Weekly market summary', description: 'A weekly overview of market activity.' },
+];
+
+function defaultNotificationPreferences(role: Role): PreferenceMap {
+  const preferences: PreferenceMap = { in_app: true, local_mail_sink: true, sms: false };
+  notificationTopicsByRole[role].forEach(({ key }) => { preferences[key] = true; });
+  return preferences;
+}
+
+function defaultMarketAdvisoryPreferences(): PreferenceMap {
+  return marketAdvisoryTopics.reduce<PreferenceMap>((preferences, { key }) => {
+    preferences[key] = true;
+    return preferences;
+  }, {});
+}
+
+function mergePreferences(defaults: PreferenceMap, saved: PreferenceMap): PreferenceMap {
+  return Object.keys(defaults).reduce<PreferenceMap>((preferences, key) => {
+    preferences[key] = typeof saved?.[key] === 'boolean' ? saved[key] : defaults[key];
+    return preferences;
+  }, {});
+}
+
+function preferencesMatch(first: PreferenceMap, second: PreferenceMap) {
+  const keys = new Set([...Object.keys(first), ...Object.keys(second)]);
+  return Array.from(keys).every((key) => first[key] === second[key]);
+}
+
+function PreferenceToggle({ label, description, enabled, disabled = false, onChange }: PreferenceToggleProps) {
+  return <div className={`preference-toggle-row ${disabled ? 'is-disabled' : ''}`}>
+    <div className="preference-toggle-copy">
+      <strong>{label}</strong>
+      <p>{description}</p>
+    </div>
+    <button className={`preference-switch ${enabled ? 'is-on' : ''}`} type="button" role="switch" aria-label={label} aria-checked={enabled} disabled={disabled} onClick={onChange}>
+      <span />
+    </button>
+  </div>;
+}
+
+function PreferenceActions({ hasChanges, disabled, saving, message, onReset, onSave }: PreferenceActionsProps) {
+  return <footer className="preferences-actions">
+    <p className={hasChanges ? 'has-changes' : ''} role="status">{saving ? 'Saving preferences…' : hasChanges ? 'You have unsaved changes.' : message ?? 'All changes are saved.'}</p>
+    <div className="preferences-action-buttons">
+      <button className="preferences-reset-button" type="button" disabled={disabled || !hasChanges} onClick={onReset}>Reset</button>
+      <button className="preferences-save-button" type="button" disabled={disabled || !hasChanges} onClick={onSave}>{saving ? 'Saving…' : 'Save changes'}</button>
+    </div>
+  </footer>;
+}
 
 function notificationIcon(category: string) {
   const normalized = category.toLowerCase();
@@ -70,6 +181,8 @@ function fullDate(value: string) {
 
 export default function NotificationCenter() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -79,7 +192,24 @@ export default function NotificationCenter() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'inbox' | 'notificationPreferences' | 'marketAdvisoryPreferences'>('inbox');
+  const [notificationPreferences, setNotificationPreferences] = useState<PreferenceMap>({});
+  const [savedNotificationPreferences, setSavedNotificationPreferences] = useState<PreferenceMap>({});
+  const [marketAdvisoryPreferences, setMarketAdvisoryPreferences] = useState<PreferenceMap>({});
+  const [savedMarketAdvisoryPreferences, setSavedMarketAdvisoryPreferences] = useState<PreferenceMap>({});
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const [preferencesError, setPreferencesError] = useState<string | null>(null);
+  const [notificationPreferenceNotice, setNotificationPreferenceNotice] = useState<string | null>(null);
+  const [marketPreferenceNotice, setMarketPreferenceNotice] = useState<string | null>(null);
+  const [savingPreference, setSavingPreference] = useState<'notification' | 'market' | null>(null);
   const closeDetailsButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (requestedTab === 'preferences') setActiveTab('notificationPreferences');
+    else if (requestedTab === 'market-advisory-preferences') setActiveTab('marketAdvisoryPreferences');
+    else setActiveTab('inbox');
+  }, [requestedTab]);
 
   const loadNotifications = useCallback(async () => {
     setLoading(true);
@@ -99,6 +229,30 @@ export default function NotificationCenter() {
   useEffect(() => {
     void loadNotifications();
   }, [loadNotifications]);
+
+  const loadPreferences = useCallback(async () => {
+    if (!user) return;
+    setPreferencesLoading(true);
+    setPreferencesError(null);
+    try {
+      const { data } = await api.get<PreferencesResponse>('/ym05/preferences');
+      const savedNotifications = mergePreferences(defaultNotificationPreferences(user.role), data.notificationPreferences);
+      const savedAdvisories = mergePreferences(defaultMarketAdvisoryPreferences(), data.marketAdvisoryPreferences);
+      setNotificationPreferences(savedNotifications);
+      setSavedNotificationPreferences(savedNotifications);
+      setMarketAdvisoryPreferences(savedAdvisories);
+      setSavedMarketAdvisoryPreferences(savedAdvisories);
+      setPreferencesLoaded(true);
+    } catch {
+      setPreferencesError('Preferences could not be loaded. Please try again.');
+    } finally {
+      setPreferencesLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void loadPreferences();
+  }, [loadPreferences]);
 
   useEffect(() => {
     if (!selectedNotification) return;
@@ -156,10 +310,64 @@ export default function NotificationCenter() {
     if (notification.status !== 'read') void markAsRead(notification);
   };
 
+  const savePreferences = async (section: 'notification' | 'market') => {
+    if (!user || savingPreference) return;
+    const notificationsToSave = section === 'notification' ? notificationPreferences : savedNotificationPreferences;
+    const advisoriesToSave = section === 'market' ? marketAdvisoryPreferences : savedMarketAdvisoryPreferences;
+    setSavingPreference(section);
+    setPreferencesError(null);
+    try {
+      const { data } = await api.put<PreferencesResponse>('/ym05/preferences', {
+        notificationPreferences: notificationsToSave,
+        marketAdvisoryPreferences: advisoriesToSave,
+      });
+      if (section === 'notification') {
+        setNotificationPreferences(data.notificationPreferences);
+        setSavedNotificationPreferences(data.notificationPreferences);
+        setNotificationPreferenceNotice('Notification preferences saved.');
+      } else {
+        setMarketAdvisoryPreferences(data.marketAdvisoryPreferences);
+        setSavedMarketAdvisoryPreferences(data.marketAdvisoryPreferences);
+        setMarketPreferenceNotice('Market advisory preferences saved.');
+      }
+    } catch {
+      setPreferencesError('Your preferences could not be saved. Please try again.');
+    } finally {
+      setSavingPreference(null);
+    }
+  };
+
+  const toggleNotificationPreference = (key: string) => {
+    setNotificationPreferences((current) => ({ ...current, [key]: !current[key] }));
+    setNotificationPreferenceNotice(null);
+    setPreferencesError(null);
+  };
+
+  const toggleMarketAdvisoryPreference = (key: string) => {
+    setMarketAdvisoryPreferences((current) => ({ ...current, [key]: !current[key] }));
+    setMarketPreferenceNotice(null);
+    setPreferencesError(null);
+  };
+
+  const resetNotificationPreferences = () => {
+    setNotificationPreferences(savedNotificationPreferences);
+    setNotificationPreferenceNotice('Unsaved notification changes discarded.');
+    setPreferencesError(null);
+  };
+
+  const resetMarketAdvisoryPreferences = () => {
+    setMarketAdvisoryPreferences(savedMarketAdvisoryPreferences);
+    setMarketPreferenceNotice('Unsaved market advisory changes discarded.');
+    setPreferencesError(null);
+  };
+
   const channelCounts = useMemo(() => notifications.reduce<Partial<Record<Notification['channel'], number>>>((counts, notification) => {
     counts[notification.channel] = (counts[notification.channel] ?? 0) + 1;
     return counts;
   }, {}), [notifications]);
+  const preferenceControlsDisabled = preferencesLoading || !preferencesLoaded || savingPreference !== null;
+  const hasNotificationPreferenceChanges = !preferencesMatch(notificationPreferences, savedNotificationPreferences);
+  const hasMarketPreferenceChanges = !preferencesMatch(marketAdvisoryPreferences, savedMarketAdvisoryPreferences);
 
   if (!user) return null;
 
@@ -173,7 +381,13 @@ export default function NotificationCenter() {
       <span className="notification-center-role-badge">{workspaceLabels[user.role]}</span>
     </div>
 
-    <div className="notification-center-grid">
+    <div className="notification-center-tabs" role="tablist" aria-label="Notification center sections">
+      <button type="button" role="tab" id="notification-tab-inbox" aria-controls="notification-panel-inbox" aria-selected={activeTab === 'inbox'} className={activeTab === 'inbox' ? 'is-active' : ''} onClick={() => { setActiveTab('inbox'); setSelectedNotification(null); setSearchParams({}, { replace: true }); }}>Inbox</button>
+      <button type="button" role="tab" id="notification-tab-preferences" aria-controls="notification-panel-preferences" aria-selected={activeTab === 'notificationPreferences'} className={activeTab === 'notificationPreferences' ? 'is-active' : ''} onClick={() => { setActiveTab('notificationPreferences'); setSelectedNotification(null); setSearchParams({ tab: 'preferences' }, { replace: true }); }}>Notification preferences</button>
+      <button type="button" role="tab" id="notification-tab-market" aria-controls="notification-panel-market" aria-selected={activeTab === 'marketAdvisoryPreferences'} className={activeTab === 'marketAdvisoryPreferences' ? 'is-active' : ''} onClick={() => { setActiveTab('marketAdvisoryPreferences'); setSelectedNotification(null); setSearchParams({ tab: 'market-advisory-preferences' }, { replace: true }); }}>Market advisory preferences</button>
+    </div>
+
+    <div id="notification-panel-inbox" className="notification-center-grid notification-center-tab-panel" hidden={activeTab !== 'inbox'} role="tabpanel" aria-labelledby="notification-tab-inbox">
       <ContentCard className="notification-center-list-card">
         <div className="notification-center-card-title">
           <h3>Your notifications</h3>
@@ -239,8 +453,85 @@ export default function NotificationCenter() {
         </div>
         <div className="notification-center-control-note">
           <strong>Your account, your updates</strong>
-          <p>Notifications shown here are private to your signed-in account. Delivery preferences are not available in the current notification data.</p>
+          <p>Notifications shown here are private to your signed-in account. Manage delivery and market updates in the preferences tabs.</p>
         </div>
+      </ContentCard>
+    </div>
+
+    <div id="notification-panel-preferences" className="preferences-panel notification-center-tab-panel" hidden={activeTab !== 'notificationPreferences'} role="tabpanel" aria-labelledby="notification-tab-preferences">
+      <ContentCard className="preferences-card">
+        <div className="preferences-panel-heading">
+          <h2>Notification preferences</h2>
+          <p>Choose how you receive updates in your {workspaceLabels[user.role]} workspace.</p>
+        </div>
+        {preferencesError && <p className="preferences-error" role="alert">{preferencesError}<button type="button" onClick={() => void loadPreferences()}>Retry</button></p>}
+        {preferencesLoading ? <p className="preferences-loading" role="status">Loading your preferences…</p> : <>
+          <div className="preferences-layout">
+            <section className="preferences-group preferences-group-card">
+              <h3>Delivery channels</h3>
+              {deliveryChannels.map(({ key, label, description, unavailable }) => <PreferenceToggle
+                key={key}
+                label={label}
+                description={description}
+                enabled={notificationPreferences[key] ?? false}
+                disabled={preferenceControlsDisabled || unavailable}
+                onChange={() => toggleNotificationPreference(key)}
+              />)}
+            </section>
+            <section className="preferences-group preferences-group-card">
+              <h3>Notify me about</h3>
+              {notificationTopicsByRole[user.role].map(({ key, label }) => <PreferenceToggle
+                key={key}
+                label={label}
+                description={`Receive ${label.toLocaleLowerCase()} notifications.`}
+                enabled={notificationPreferences[key] ?? false}
+                disabled={preferenceControlsDisabled}
+                onChange={() => toggleNotificationPreference(key)}
+              />)}
+            </section>
+          </div>
+          <PreferenceActions
+            hasChanges={hasNotificationPreferenceChanges}
+            disabled={preferenceControlsDisabled}
+            saving={savingPreference === 'notification'}
+            message={notificationPreferenceNotice}
+            onReset={resetNotificationPreferences}
+            onSave={() => void savePreferences('notification')}
+          />
+        </>}
+      </ContentCard>
+    </div>
+
+    <div id="notification-panel-market" className="preferences-panel notification-center-tab-panel" hidden={activeTab !== 'marketAdvisoryPreferences'} role="tabpanel" aria-labelledby="notification-tab-market">
+      <ContentCard className="preferences-card">
+        <div className="preferences-panel-heading">
+          <h2>Market advisory preferences</h2>
+          <p>Choose which market updates are relevant to your {workspaceLabels[user.role]} workspace.</p>
+        </div>
+        {preferencesError && <p className="preferences-error" role="alert">{preferencesError}<button type="button" onClick={() => void loadPreferences()}>Retry</button></p>}
+        {preferencesLoading ? <p className="preferences-loading" role="status">Loading your preferences…</p> : <>
+          <section className="preferences-group preferences-group-card preferences-market-group">
+            <h3>Market updates</h3>
+            <div className="preference-options-grid">
+              {marketAdvisoryTopics.map(({ key, label, description }) => <PreferenceToggle
+                key={key}
+                label={label}
+                description={description}
+                enabled={marketAdvisoryPreferences[key] ?? false}
+                disabled={preferenceControlsDisabled}
+                onChange={() => toggleMarketAdvisoryPreference(key)}
+              />)}
+            </div>
+          </section>
+          <PreferenceActions
+            hasChanges={hasMarketPreferenceChanges}
+            disabled={preferenceControlsDisabled}
+            saving={savingPreference === 'market'}
+            message={marketPreferenceNotice}
+            onReset={resetMarketAdvisoryPreferences}
+            onSave={() => void savePreferences('market')}
+          />
+        </>}
       </ContentCard>
     </div>
     {selectedNotification && <div className="notification-detail-backdrop" onMouseDown={(event) => {
