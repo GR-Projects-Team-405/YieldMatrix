@@ -17,16 +17,16 @@ export default function ForgotPasswordPage() {
     if (!/^\S+@\S+\.\S+$/.test(value)) return setError('Enter a valid email address.');
     setError('');
 
-    // TODO (Tue 24 Nov): call the YM02 forgot-password API here.
+    // TODO: call the YM02 forgot-password API here.
     // Always show the same message, whether or not the email has an account.
     setSubmitted(true);
   }
 
   return (
     <AuthSplitLayout
-      label="Account access"
-      headline="Forgot your password?"
-      body="Enter your email and we will send you a link to reset it."
+      label="Account help"
+      headline="Locked out? Let's get you back in."
+      body="Enter your email and we'll send you a reset link."
     >
       {submitted ? (
         <ContentCard title="Check your email" subtitle="Reset instructions have been requested.">
@@ -35,23 +35,26 @@ export default function ForgotPasswordPage() {
               If an account exists for <strong>{email.trim()}</strong>, a password reset link has been sent.
               The link expires soon, so use it as soon as you can.
             </p>
-            <Link className="ym02-link" to="/account/login">Back to login</Link>
+            <Link className="ym02-link ym02-link--center" to="/account/login">Back to login</Link>
           </div>
         </ContentCard>
       ) : (
-        <ContentCard title="Reset your password" subtitle="We will email you a reset link.">
+        <ContentCard title="Forgot Password" subtitle="Enter your email and we'll send you a reset link">
           <form className="ym02-form" onSubmit={handleSubmit} noValidate>
-            <InputField
-              id="forgot-email"
-              label="Email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={error}
-            />
+            <div className="ym02-field-box">
+              <InputField
+                id="forgot-email"
+                label="Email address"
+                type="email"
+                autoComplete="email"
+                placeholder="Enter your email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={error}
+              />
+            </div>
             <Button type="submit" variant="primary">Send reset link</Button>
-            <Link className="ym02-link" to="/account/login">Back to login</Link>
+            <Link className="ym02-link ym02-link--center" to="/account/login">Back to login</Link>
           </form>
         </ContentCard>
       )}
