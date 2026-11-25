@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Clock3, History, MapPin, Package, Search } from 'lucide-react';
 import { Alert } from '../../components/Alert';
@@ -9,19 +9,53 @@ import { InputField } from '../../components/InputField';
 import { SelectField } from '../../components/SelectField';
 import { StatCard } from '../../components/StatCard';
 import { StatusBadge } from '../../components/StatusBadge';
-import { mockPickupStops, type PickupStop, type PickupStopStatus } from './mockPickupStops';
+import api from '../../services/api';
 import './ym23.css';
+
+type PickupStopStatus = 'pending' | 'completed' | 'exception';
+
+interface PickupStop {
+  id: string;
+  sequence: number;
+  farmName: string;
+  farmerName: string;
+  district: string;
+  crop: string;
+  committedKg: number;
+  pickupTime?: string | null;
+  status: PickupStopStatus;
+  requestId?: string;
+}
+
+interface PickupStopsResponse {
+  stops: PickupStop[];
+  requestId: string;
+}
 
 type StatusFilter = 'all' | PickupStopStatus;
 
 const statusOptions = [
   { value: 'all', label: 'All statuses' },
-  { value: 'upcoming', label: 'Upcoming' },
   { value: 'pending', label: 'Pending' },
   { value: 'completed', label: 'Completed' },
+  { value: 'exception', label: 'Exception' },
 ];
 
+function formatPickupTime(value: PickupStop['pickupTime']) {
+  if (!value || value.trim().toLowerCase() === 'not scheduled') return 'Not scheduled';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not scheduled';
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
 function PickupStopCard({ stop }: { stop: PickupStop }) {
+  const pickupTime = formatPickupTime(stop.pickupTime);
+
   return (
     <article className="ym23-stop-card">
       <div className="ym23-stop-main">
@@ -54,7 +88,7 @@ function PickupStopCard({ stop }: { stop: PickupStop }) {
         </div>
         <div>
           <span className="ym23-detail-label">Pickup time</span>
-          <strong>{stop.pickupTime}</strong>
+          <strong>{pickupTime}</strong>
         </div>
         <Link className="ym-button ym-button--outline ym23-details-link" to={`/driver/pickups/${stop.id}`}>
           View details <ArrowRight size={16} aria-hidden="true" />
@@ -67,14 +101,38 @@ function PickupStopCard({ stop }: { stop: PickupStop }) {
 export default function PickupStopsPage() {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [stops, setStops] = useState<PickupStop[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const completedCount = mockPickupStops.filter((stop) => stop.status === 'completed').length;
-  const pendingCount = mockPickupStops.length - completedCount;
-  const totalQuantity = mockPickupStops.reduce((total, stop) => total + stop.committedKg, 0);
-  const nextStop = mockPickupStops.find((stop) => stop.status !== 'completed');
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    api.get<PickupStopsResponse>('/ym23/pickup-stops', { signal: controller.signal })
+      .then(({ data }) => {
+        if (!Array.isArray(data.stops)) throw new Error('Invalid pickup stops response');
+        setStops(data.stops);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setError('Unable to load pickup stops. Please try again.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  const completedCount = stops.filter((stop) => stop.status === 'completed').length;
+  const pendingCount = stops.filter((stop) => stop.status === 'pending').length;
+  const totalQuantity = stops.reduce((total, stop) => total + stop.committedKg, 0);
+  const nextStop = stops.find((stop) => stop.status === 'pending');
   const normalizedQuery = query.trim().toLowerCase();
 
-  const visibleStops = useMemo(() => mockPickupStops.filter((stop) => {
+  const visibleStops = useMemo(() => stops.filter((stop) => {
     const matchesStatus = statusFilter === 'all' || stop.status === statusFilter;
     const searchableText = [
       stop.sequence,
@@ -82,11 +140,11 @@ export default function PickupStopsPage() {
       stop.farmerName,
       stop.district,
       stop.crop,
-      stop.pickupTime,
+      formatPickupTime(stop.pickupTime),
       stop.status,
     ].join(' ').toLowerCase();
     return matchesStatus && searchableText.includes(normalizedQuery);
-  }), [normalizedQuery, statusFilter]);
+  }), [normalizedQuery, statusFilter, stops]);
 
   function clearFilters() {
     setQuery('');
@@ -98,7 +156,7 @@ export default function PickupStopsPage() {
       <div className="ym23-page-header">
         <div>
           <p className="ym23-page-subtitle">View your assigned pickup locations and plan your route.</p>
-          <span className="ym23-demo-label">DEMO DATA · NOT LIVE TRIP DATA</span>
+          <span className="ym23-demo-label">ASSIGNED TRIP DATA</span>
         </div>
         <Link className="ym-button ym-button--outline ym23-history-link" to="/driver/pickups/history">
           <History size={16} aria-hidden="true" />
@@ -106,12 +164,23 @@ export default function PickupStopsPage() {
         </Link>
       </div>
 
-      <Alert type="info">This sample pickup schedule is for demonstration only. Live trip and pickup data is not connected yet.</Alert>
+      {loading ? (
+        <ContentCard className="ym23-empty-card">
+          <Alert type="info">Loading pickup stops...</Alert>
+        </ContentCard>
+      ) : error ? (
+        <ContentCard className="ym23-empty-card">
+          <Alert type="error">{error}</Alert>
+          <Button variant="outline" onClick={() => setReloadKey((key) => key + 1)}>Retry</Button>
+        </ContentCard>
+      ) : (
+        <>
+          <Alert type="info">Pickup stops are loaded from trips assigned to your driver account.</Alert>
 
       <section className="ym23-metrics" aria-label="Pickup summary">
         <div className="ym23-metric">
           <MapPin size={18} aria-hidden="true" />
-          <StatCard label="Total pickup stops" value={mockPickupStops.length} subtext="Across your assigned farms" />
+          <StatCard label="Total pickup stops" value={stops.length} subtext="Across your assigned farms" />
         </div>
         <div className="ym23-metric">
           <Package size={18} aria-hidden="true" />
@@ -132,7 +201,7 @@ export default function PickupStopsPage() {
           <div className="ym23-section-heading">
             <div>
               <h2 id="ym23-stops-heading">Today's stops</h2>
-              <p>{visibleStops.length} of {mockPickupStops.length} assigned farms</p>
+              <p>{visibleStops.length} of {stops.length} assigned farms</p>
             </div>
           </div>
 
@@ -162,9 +231,11 @@ export default function PickupStopsPage() {
           ) : (
             <ContentCard className="ym23-empty-card">
               <EmptyState
-                title="No pickup stops found"
-                description="Try a different search or status filter to find an assigned stop."
-                action={<Button variant="outline" onClick={clearFilters}>Clear filters</Button>}
+                title={stops.length ? 'No pickup stops found' : 'No pickup stops available'}
+                description={stops.length
+                  ? 'Try a different search or status filter to find an assigned stop.'
+                  : 'There are no pickup stops assigned to your driver account.'}
+                action={stops.length ? <Button variant="outline" onClick={clearFilters}>Clear filters</Button> : undefined}
               />
             </ContentCard>
           )}
@@ -178,24 +249,28 @@ export default function PickupStopsPage() {
               <h2>{nextStop.farmName}</h2>
               <p className="ym23-next-location">{nextStop.district}</p>
               <div className="ym23-next-details">
-                <div><span>Scheduled time</span><strong>{nextStop.pickupTime.replace('Today, ', '')}</strong></div>
+                <div><span>Scheduled time</span><strong>{formatPickupTime(nextStop.pickupTime)}</strong></div>
                 <div><span>Committed load</span><strong>{nextStop.committedKg} kg</strong></div>
               </div>
               <p className="ym23-next-note">Based on the assigned stop sequence.</p>
             </section>
+          ) : stops.length === 0 ? (
+            <ContentCard title="No pickup stops" subtitle="No stops are currently assigned to your driver account." />
+          ) : stops.every((stop) => stop.status === 'completed') ? (
+            <ContentCard title="Route complete" subtitle="All assigned pickup stops are marked completed." />
           ) : (
-            <ContentCard title="Route complete" subtitle="All sample pickup stops are marked completed." />
+            <ContentCard title="No pending pickups" subtitle="Review stops marked as exceptions in the pickup list." />
           )}
 
-          <ContentCard className="ym23-sequence-card" title="Pickup sequence" subtitle={`${completedCount} of ${mockPickupStops.length} completed`}>
-            <div className="ym23-progress-track" role="progressbar" aria-label="Pickup stops completed" aria-valuemin={0} aria-valuemax={mockPickupStops.length} aria-valuenow={completedCount}>
-              <span style={{ width: `${mockPickupStops.length ? (completedCount / mockPickupStops.length) * 100 : 0}%` }} />
+          <ContentCard className="ym23-sequence-card" title="Pickup sequence" subtitle={`${completedCount} of ${stops.length} completed`}>
+            <div className="ym23-progress-track" role="progressbar" aria-label="Pickup stops completed" aria-valuemin={0} aria-valuemax={stops.length} aria-valuenow={completedCount}>
+              <span style={{ width: `${stops.length ? (completedCount / stops.length) * 100 : 0}%` }} />
             </div>
             <ol className="ym23-sequence-list">
-              {mockPickupStops.map((stop) => (
+              {stops.map((stop) => (
                 <li key={stop.id} className={`ym23-sequence-item ym23-sequence-item--${stop.status}`}>
                   <span className="ym23-sequence-marker">{stop.status === 'completed' ? <CheckCircle2 size={16} aria-hidden="true" /> : String(stop.sequence).padStart(2, '0')}</span>
-                  <div><strong>{stop.farmName}</strong><span>{stop.pickupTime.replace('Today, ', '')} · {stop.status}</span></div>
+                  <div><strong>{stop.farmName}</strong><span>{formatPickupTime(stop.pickupTime)} · {stop.status}</span></div>
                   <span className="ym23-sequence-quantity">{stop.committedKg} kg</span>
                 </li>
               ))}
@@ -204,6 +279,8 @@ export default function PickupStopsPage() {
           </ContentCard>
         </aside>
       </div>
+        </>
+      )}
     </div>
   );
 }
