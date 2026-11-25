@@ -6,6 +6,9 @@ import AuditTrail from './AuditTrail';
 import AuditEventDetails from './AuditEventDetails';
 import './ym04.css';
 
+export { ReferenceDataOverview, CropManagement, GradeManagement, AuditTrail, AuditEventDetails };
+export * from './types';
+
 // YM04 · Chamasha Saminidi Stuwart · Reference data & audit
 // WorkspaceLayout owns the sidebar and topbar; middle content and subpage routes live here.
 //

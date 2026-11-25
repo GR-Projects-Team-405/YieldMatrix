@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import {
   ArrowLeft,
   Sprout,
@@ -15,27 +16,68 @@ import {
   ArrowRight,
   AlertTriangle,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
-import { getAuditEventById, AuditEventItem } from './auditMockData';
 import { Button } from '../../components/Button';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Alert } from '../../components/Alert';
 import { Table, TableRow } from '../../components/Table';
 import { Toast } from '../../components/Toast';
+import api from '../../services/api';
+import {
+  AuditEventItem,
+  formatColomboDate,
+  formatColomboExactDate,
+  getErrorMessage
+} from './types';
 
 export default function AuditEventDetails() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [event, setEvent] = useState<AuditEventItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Lookup the event from shared mock data
-  const event: AuditEventItem | undefined = useMemo(() => {
-    return getAuditEventById(eventId);
-  }, [eventId]);
+  // Fetch event details directly from live backend
+  const fetchEventDetails = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!eventId) {
+        setError('No audit event ID provided in URL.');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await api.get(`/ym04/audit-logs/${eventId}`, { signal });
+        const data = response.data;
+        const item: AuditEventItem = data.event || data;
+        setEvent(item);
+      } catch (err) {
+        if (axios.isCancel(err)) return;
+        setError(getErrorMessage(err, 'Failed to load audit event details.'));
+        setEvent(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [eventId]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchEventDetails(controller.signal);
+    return () => {
+      controller.abort();
+    };
+  }, [fetchEventDetails]);
 
   // Navigate back to the respective audit trail page
   const handleBack = () => {
@@ -56,10 +98,44 @@ export default function AuditEventDetails() {
     }
   };
 
-  // Fallback: Event Not Found
-  if (!event) {
+  // Loading State
+  if (loading) {
     return (
-      <div className="ym04-container" role="region" aria-label="Audit Event Details">
+      <div className="ym04-container" role="region" aria-label="Loading Audit Event">
+        <header className="ym04-event-header">
+          <div className="ym04-event-header-left">
+            <div className="ym04-event-header-icon" aria-hidden="true">
+              <Sprout size={22} strokeWidth={2} />
+            </div>
+            <div className="ym04-header">
+              <h1 className="ym04-title">Audit Event Details</h1>
+              <p className="ym04-subtitle">Loading audit event record...</p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="ym04-btn-back"
+            onClick={handleBack}
+            aria-label="Back to Audit Trail"
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            <span>Back to Audit Trail</span>
+          </Button>
+        </header>
+
+        <div className="ym04-card" style={{ padding: '64px', textAlign: 'center' }}>
+          <Loader2 size={36} className="ym04-spin" style={{ margin: '0 auto 16px', color: 'var(--primary)' }} />
+          <p style={{ color: 'var(--muted)' }}>Fetching event record from YieldMatrix audit log...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: Event Not Found or Error
+  if (error || !event) {
+    return (
+      <div className="ym04-container" role="region" aria-label="Audit Event Not Found">
         <div className="ym04-event-header">
           <div className="ym04-event-header-left">
             <div className="ym04-event-header-icon" aria-hidden="true">
@@ -88,33 +164,60 @@ export default function AuditEventDetails() {
           </div>
           <h2 className="ym04-not-found-title">Audit Event Not Found</h2>
           <Alert type="error">
-            No audit event could be found matching ID <strong>{eventId || 'unknown'}</strong>. The event might have been archived or the ID is incorrect.
+            {error || `No audit event could be found matching ID "${eventId || 'unknown'}".`}
           </Alert>
-          <Button
-            type="button"
-            variant="primary"
-            className="ym04-btn-back-primary"
-            onClick={handleBack}
-          >
-            <ArrowLeft size={16} aria-hidden="true" />
-            <span>Back to Audit Trail</span>
-          </Button>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '16px', justifyContent: 'center' }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fetchEventDetails()}
+            >
+              <RefreshCw size={14} style={{ marginRight: '6px' }} />
+              Retry
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="ym04-btn-back-primary"
+              onClick={handleBack}
+            >
+              <ArrowLeft size={16} aria-hidden="true" />
+              <span>Back to Audit Trail</span>
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Derive target label and record id
-  const targetLabel = event.targetType === 'Crop' ? 'Crop Name' : event.targetType === 'Grade' ? 'Grade Name' : 'Record Name';
-  const targetCategory = event.category || (event.targetType === 'Crop' ? 'Vegetable' : 'Quality Grade');
-  const recordId = event.targetRecordId || (event.targetType === 'Crop' ? 'CR001' : 'GR001');
-  const actionSummaryText = event.actionSummary || `Action: ${event.action} a ${event.targetType.toLowerCase()} in the system.`;
-  const changeDescText = event.changeDescription || `A new ${event.targetType.toLowerCase()} '${event.target}' was registered in the system.`;
-  const exactTimeText = event.exactTimestamp || `${event.dateTime}:15`;
-  const actorInfoText = `${event.actor} (${event.actorEmail || 'admin@yieldmatrix.lk'})`;
+  // Derive target label and values
+  const targetLabel =
+    event.targetType === 'Crop' ? 'Crop Name' : event.targetType === 'Grade' ? 'Grade Name' : 'Target Name';
+  const targetDisplayName = event.targetName || event.target || 'Unknown';
+  const recordId = event.targetRecordId || event.targetId || '—';
+  const changeDescText =
+    event.safeChanges?.changeDescription ||
+    event.changeDescription ||
+    `${event.action} operation recorded on ${targetDisplayName}.`;
+  const actionSummaryText = `Action: ${event.action} a ${event.targetType.toLowerCase()} in the system.`;
+  const colomboOccurredTime =
+    event.dateTime || formatColomboDate(event.occurredAt);
+  const exactOccurredTime =
+    event.exactTimestamp || formatColomboExactDate(event.occurredAt);
+  const recordedTime = formatColomboExactDate(event.recordedAt);
+  const actorName = event.actor || 'System';
+  const actorInfoText = `${actorName} (${event.actorEmail || (actorName === 'System' ? 'system-daemon' : 'admin@yieldmatrix.lk')})`;
+
+  // Extract previous and new values from safeChanges or top-level properties
+  const prevVals = event.safeChanges?.previousValues ?? event.previousValues;
+  const newVals = event.safeChanges?.newValues ?? event.newValues;
 
   return (
-    <div className="ym04-container ym04-event-details-view" role="region" aria-label={`Audit Event ${event.id} Details`}>
+    <div
+      className="ym04-container ym04-event-details-view"
+      role="region"
+      aria-label={`Audit Event ${event.id} Details`}
+    >
       {/* ------------------------------------------------------------------ */}
       {/* 1. Header with Breadcrumb / Back Action                            */}
       {/* ------------------------------------------------------------------ */}
@@ -157,7 +260,12 @@ export default function AuditEventDetails() {
             <div className="ym04-info-field">
               <span className="ym04-info-label">Event ID</span>
               <div className="ym04-info-value-wrap">
-                <strong className="ym04-info-value ym04-info-value--bold">{event.id}</strong>
+                <strong
+                  className="ym04-info-value ym04-info-value--bold"
+                  style={{ fontFamily: 'monospace', fontSize: '13px' }}
+                >
+                  {event.id}
+                </strong>
                 <button
                   type="button"
                   className="ym04-copy-btn"
@@ -175,7 +283,7 @@ export default function AuditEventDetails() {
               <span className="ym04-info-label">Target Record</span>
               <div className="ym04-info-value-wrap ym04-info-target">
                 <Sprout size={16} className="ym04-target-green-icon" aria-hidden="true" />
-                <strong className="ym04-info-value ym04-info-value--bold">{event.target}</strong>
+                <strong className="ym04-info-value ym04-info-value--bold">{targetDisplayName}</strong>
               </div>
             </div>
 
@@ -184,16 +292,16 @@ export default function AuditEventDetails() {
               <span className="ym04-info-label">Actor</span>
               <div className="ym04-info-value-wrap ym04-info-with-icon">
                 <User size={15} className="ym04-muted-icon" aria-hidden="true" />
-                <span className="ym04-info-value">{event.actor}</span>
+                <span className="ym04-info-value">{actorName}</span>
               </div>
             </div>
 
             {/* Row 2, Col 2: Date & Time */}
             <div className="ym04-info-field">
-              <span className="ym04-info-label">Date &amp; Time</span>
+              <span className="ym04-info-label">Date &amp; Time (Colombo)</span>
               <div className="ym04-info-value-wrap ym04-info-with-icon">
                 <Calendar size={15} className="ym04-muted-icon" aria-hidden="true" />
-                <span className="ym04-info-value">{event.dateTime}</span>
+                <span className="ym04-info-value">{colomboOccurredTime}</span>
               </div>
             </div>
 
@@ -201,7 +309,7 @@ export default function AuditEventDetails() {
             <div className="ym04-info-field">
               <span className="ym04-info-label">Action</span>
               <div className="ym04-info-value-wrap">
-                <span className={`ym04-badge-action ym04-badge-action--${event.action.toLowerCase()}`}>
+                <span className={`ym04-badge-action ym04-badge-action--${(event.action || '').toLowerCase()}`}>
                   {event.action}
                 </span>
               </div>
@@ -212,7 +320,7 @@ export default function AuditEventDetails() {
               <span className="ym04-info-label">Reason</span>
               <div className="ym04-info-value-wrap ym04-info-with-icon">
                 <Tag size={14} className="ym04-muted-icon" aria-hidden="true" />
-                <span className="ym04-info-value">{event.reason || 'New crop added to system'}</span>
+                <span className="ym04-info-value">{event.reason || '—'}</span>
               </div>
             </div>
           </div>
@@ -230,7 +338,6 @@ export default function AuditEventDetails() {
             </p>
           </div>
 
-          {/* Leaf watermark matching Figma design */}
           <div className="ym04-recorded-watermark" aria-hidden="true">
             <svg
               viewBox="0 0 100 100"
@@ -265,15 +372,17 @@ export default function AuditEventDetails() {
 
         <div className="ym04-table-wrap">
           <Table
-            headers={['Target Record ID', targetLabel, 'Category', 'Status']}
+            headers={['Target Record ID', targetLabel, 'Target Type', 'Audit Status']}
             className="ym04-summary-table"
           >
             <TableRow>
-              <td className="ym04-cell-record-id">{recordId}</td>
-              <td>{event.target}</td>
-              <td>{targetCategory}</td>
+              <td className="ym04-cell-record-id" style={{ fontFamily: 'monospace' }}>
+                {recordId}
+              </td>
+              <td>{targetDisplayName}</td>
+              <td>{event.targetType}</td>
               <td>
-                <StatusBadge status={event.recordStatus || 'Active'} />
+                <StatusBadge status={event.status || 'Success'} />
               </td>
             </TableRow>
           </Table>
@@ -296,26 +405,26 @@ export default function AuditEventDetails() {
             <div className="ym04-comparison-box ym04-comparison-box--previous">
               <div className="ym04-comparison-box-header">Previous Value</div>
               <div className="ym04-comparison-box-body">
-                {event.previousValues ? (
+                {prevVals && typeof prevVals === 'object' && Object.keys(prevVals).length > 0 ? (
                   <div className="ym04-kv-list">
-                    {Object.entries(event.previousValues).map(([key, val]) => (
+                    {Object.entries(prevVals).map(([key, val]) => (
                       <div key={key} className="ym04-kv-row">
                         <span className="ym04-kv-key">{key}</span>
                         <span className="ym04-kv-colon">:</span>
                         <span className="ym04-kv-val">
-                          {key === 'Status' ? (
-                            <StatusBadge status={val} />
+                          {typeof val === 'boolean' ? (
+                            <StatusBadge status={val ? 'Active' : 'Inactive'} />
+                          ) : key.toLowerCase().includes('status') || key.toLowerCase().includes('active') ? (
+                            <StatusBadge status={String(val)} />
                           ) : (
-                            val
+                            String(val ?? '—')
                           )}
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="ym04-comparison-empty">
-                    (No previous record)
-                  </div>
+                  <div className="ym04-comparison-empty">(No previous record)</div>
                 )}
               </div>
             </div>
@@ -327,21 +436,21 @@ export default function AuditEventDetails() {
 
             {/* New Value Box */}
             <div className="ym04-comparison-box ym04-comparison-box--new">
-              <div className="ym04-comparison-box-header ym04-comparison-box-header--new">
-                New Value
-              </div>
+              <div className="ym04-comparison-box-header ym04-comparison-box-header--new">New Value</div>
               <div className="ym04-comparison-box-body">
-                {event.newValues ? (
+                {newVals && typeof newVals === 'object' && Object.keys(newVals).length > 0 ? (
                   <div className="ym04-kv-list">
-                    {Object.entries(event.newValues).map(([key, val]) => (
+                    {Object.entries(newVals).map(([key, val]) => (
                       <div key={key} className="ym04-kv-row">
                         <span className="ym04-kv-key">{key}</span>
                         <span className="ym04-kv-colon">:</span>
                         <span className="ym04-kv-val">
-                          {key === 'Status' ? (
-                            <StatusBadge status={val} />
+                          {typeof val === 'boolean' ? (
+                            <StatusBadge status={val ? 'Active' : 'Inactive'} />
+                          ) : key.toLowerCase().includes('status') || key.toLowerCase().includes('active') ? (
+                            <StatusBadge status={String(val)} />
                           ) : (
-                            val
+                            String(val ?? '—')
                           )}
                         </span>
                       </div>
@@ -352,19 +461,12 @@ export default function AuditEventDetails() {
                     <div className="ym04-kv-row">
                       <span className="ym04-kv-key">{targetLabel}</span>
                       <span className="ym04-kv-colon">:</span>
-                      <span className="ym04-kv-val">{event.target}</span>
+                      <span className="ym04-kv-val">{targetDisplayName}</span>
                     </div>
                     <div className="ym04-kv-row">
-                      <span className="ym04-kv-key">Category</span>
+                      <span className="ym04-kv-key">Target Type</span>
                       <span className="ym04-kv-colon">:</span>
-                      <span className="ym04-kv-val">{targetCategory}</span>
-                    </div>
-                    <div className="ym04-kv-row">
-                      <span className="ym04-kv-key">Status</span>
-                      <span className="ym04-kv-colon">:</span>
-                      <span className="ym04-kv-val">
-                        <StatusBadge status={event.recordStatus || 'Active'} />
-                      </span>
+                      <span className="ym04-kv-val">{event.targetType}</span>
                     </div>
                   </div>
                 )}
@@ -384,9 +486,15 @@ export default function AuditEventDetails() {
 
           <div className="ym04-additional-list">
             <div className="ym04-additional-row">
-              <span className="ym04-add-label">Event Timestamp</span>
+              <span className="ym04-add-label">Occurred Time (Colombo)</span>
               <span className="ym04-add-colon">:</span>
-              <span className="ym04-add-val">{exactTimeText}</span>
+              <span className="ym04-add-val">{exactOccurredTime}</span>
+            </div>
+
+            <div className="ym04-additional-row">
+              <span className="ym04-add-label">Recorded Time (Colombo)</span>
+              <span className="ym04-add-colon">:</span>
+              <span className="ym04-add-val">{recordedTime}</span>
             </div>
 
             <div className="ym04-additional-row">
@@ -398,8 +506,20 @@ export default function AuditEventDetails() {
             <div className="ym04-additional-row">
               <span className="ym04-add-label">Target Record ID</span>
               <span className="ym04-add-colon">:</span>
-              <span className="ym04-add-val">{recordId}</span>
+              <span className="ym04-add-val" style={{ fontFamily: 'monospace' }}>
+                {recordId}
+              </span>
             </div>
+
+            {event.requestId && (
+              <div className="ym04-additional-row">
+                <span className="ym04-add-label">Request ID</span>
+                <span className="ym04-add-colon">:</span>
+                <span className="ym04-add-val" style={{ fontFamily: 'monospace' }}>
+                  {event.requestId}
+                </span>
+              </div>
+            )}
 
             <div className="ym04-additional-row">
               <span className="ym04-add-label">Change Description</span>

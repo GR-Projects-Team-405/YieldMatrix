@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import {
   Sprout,
   Check,
@@ -15,130 +16,29 @@ import {
   X,
   Eye,
   RefreshCw,
-  SlidersHorizontal,
-  CheckCircle2
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { InputField } from '../../components/InputField';
-import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Table, TableRow } from '../../components/Table';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
+import { Alert } from '../../components/Alert';
+import { EmptyState } from '../../components/EmptyState';
 import api from '../../services/api';
-
-export interface Crop {
-  id: string;
-  name: string;
-  emoji: string;
-  category: 'Cereal' | 'Vegetable' | 'Fruit' | 'Legume' | 'Cash Crop';
-  status: 'Active' | 'Inactive';
-  createdDate: string;
-  description?: string;
-  storageCondition?: string;
-}
-
-export interface Grade {
-  id: string;
-  name: string;
-  description: string;
-  status: 'Active' | 'Inactive';
-  criteria?: string;
-  inspectionThreshold?: string;
-}
-
-const INITIAL_CROPS: Crop[] = [
-  {
-    id: 'crop-1',
-    name: 'Rice',
-    emoji: '🌾',
-    category: 'Cereal',
-    status: 'Active',
-    createdDate: '05 Nov 2026',
-    description: 'Oryza sativa · Long-grain paddy cultivated across dry and intermediate agricultural zones.',
-    storageCondition: 'Moisture < 14%, dry aerated silo storage'
-  },
-  {
-    id: 'crop-2',
-    name: 'Maize',
-    emoji: '🌽',
-    category: 'Cereal',
-    status: 'Active',
-    createdDate: '05 Nov 2026',
-    description: 'Zea mays · High yield yellow corn cultivated for food processing and animal feed feedstocks.',
-    storageCondition: 'Cool, pest-controlled ambient warehouse'
-  },
-  {
-    id: 'crop-3',
-    name: 'Tomato',
-    emoji: '🍅',
-    category: 'Vegetable',
-    status: 'Active',
-    createdDate: '05 Nov 2026',
-    description: 'Solanum lycopersicum · High-perishable vegetable harvested for fresh markets and sauce processing.',
-    storageCondition: 'Cold-chain storage 10-12°C, 85-90% RH'
-  },
-  {
-    id: 'crop-4',
-    name: 'Carrot',
-    emoji: '🥕',
-    category: 'Vegetable',
-    status: 'Inactive',
-    createdDate: '05 Nov 2026',
-    description: 'Daucus carota · Root vegetable graded by taper, root diameter, and uniform orange hue.',
-    storageCondition: 'Cold-chain storage 0-4°C, 95% RH'
-  }
-];
-
-const INITIAL_GRADES: Grade[] = [
-  {
-    id: 'grade-1',
-    name: 'Grade A',
-    description: 'Premium Quality',
-    status: 'Active',
-    criteria: 'Zero defect tolerance, uniform size distribution, export-certified purity and moisture standard.',
-    inspectionThreshold: '>= 95% compliance score'
-  },
-  {
-    id: 'grade-2',
-    name: 'Grade B',
-    description: 'Standard Quality',
-    status: 'Active',
-    criteria: 'Minor superficial skin defects allowed, 100% sound flesh, standard wholesale & supermarket spec.',
-    inspectionThreshold: '80% - 94% compliance score'
-  },
-  {
-    id: 'grade-3',
-    name: 'Grade C',
-    description: 'Lower Quality',
-    status: 'Active',
-    criteria: 'Acceptable for processing, puree, pulping, milling, or localized community retail consumption.',
-    inspectionThreshold: '65% - 79% compliance score'
-  },
-  {
-    id: 'grade-4',
-    name: 'Grade D',
-    description: 'Special Category',
-    status: 'Inactive',
-    criteria: 'Heavily bruised or distressed produce restricted to industrial biomass or silage processing.',
-    inspectionThreshold: '< 65% compliance score'
-  }
-];
+import { Crop, Grade, OverviewData, getErrorMessage } from './types';
 
 export default function ReferenceDataOverview() {
   const navigate = useNavigate();
 
-  // State
-  const [crops, setCrops] = useState<Crop[]>(INITIAL_CROPS);
-  const [grades, setGrades] = useState<Grade[]>(INITIAL_GRADES);
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  // Live state
+  const [data, setData] = useState<OverviewData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [deactivateConfirm, setDeactivateConfirm] = useState<{
-    open: boolean;
-    type: 'crop' | 'grade';
-    id: string;
-    name: string;
-  } | null>(null);
 
   // Modals state
   const [selectedCrop, setSelectedCrop] = useState<Crop | null>(null);
@@ -148,149 +48,205 @@ export default function ReferenceDataOverview() {
 
   // New crop form state
   const [newCropName, setNewCropName] = useState('');
-  const [newCropEmoji, setNewCropEmoji] = useState('🌱');
-  const [newCropCategory, setNewCropCategory] = useState<'Cereal' | 'Vegetable' | 'Fruit' | 'Legume' | 'Cash Crop'>('Cereal');
-  const [newCropStatus, setNewCropStatus] = useState<'Active' | 'Inactive'>('Active');
-  const [newCropDesc, setNewCropDesc] = useState('');
+  const [newCropActive, setNewCropActive] = useState(true);
+  const [newCropReason, setNewCropReason] = useState('');
+  const [cropFormError, setCropFormError] = useState<string | null>(null);
+  const [isSubmittingCrop, setIsSubmittingCrop] = useState(false);
 
   // New grade form state
   const [newGradeName, setNewGradeName] = useState('');
   const [newGradeDesc, setNewGradeDesc] = useState('');
-  const [newGradeStatus, setNewGradeStatus] = useState<'Active' | 'Inactive'>('Active');
-  const [newGradeCriteria, setNewGradeCriteria] = useState('');
+  const [newGradeActive, setNewGradeActive] = useState(true);
+  const [newGradeReason, setNewGradeReason] = useState('');
+  const [gradeFormError, setGradeFormError] = useState<string | null>(null);
+  const [isSubmittingGrade, setIsSubmittingGrade] = useState(false);
+
+  // Deactivate confirmation dialog state
+  const [deactivateConfirm, setDeactivateConfirm] = useState<{
+    open: boolean;
+    type: 'crop' | 'grade';
+    id: string;
+    name: string;
+    busy?: boolean;
+  } | null>(null);
 
   // Close open action menu on outside click
   const menuContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
       if (menuContainerRef.current && !menuContainerRef.current.contains(event.target as Node)) {
-        setActiveMenuId(null);
+        setActionMenuId(null);
       }
     }
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  // Fetch initial data from backend if available
-  useEffect(() => {
-    let isMounted = true;
-    async function loadBackendStatus() {
-      try {
-        await api.get('/ym04/status');
-      } catch {
-        // Fallback to offline mock data cleanly
-      }
+  // Fetch live overview from backend
+  const fetchOverview = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.get('/ym04/overview', { signal });
+      setData(response.data);
+    } catch (err) {
+      if (axios.isCancel(err)) return;
+      setError(getErrorMessage(err, 'Failed to load reference data overview.'));
+    } finally {
+      setLoading(false);
     }
-    loadBackendStatus();
-    return () => { isMounted = false; };
   }, []);
 
-  // Stats calculation
-  const totalCropsCount = crops.length >= 4 ? 24 : crops.length;
-  const activeCropsCount = crops.length >= 4 ? 20 + (crops.filter(c => c.status === 'Active').length - 3) : crops.filter(c => c.status === 'Active').length;
-  const totalGradesCount = grades.length >= 4 ? '08' : String(grades.length).padStart(2, '0');
-  const activeGradesCount = grades.length >= 4 ? '06' : String(grades.filter(g => g.status === 'Active').length).padStart(2, '0');
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchOverview(controller.signal);
+    return () => {
+      controller.abort();
+    };
+  }, [fetchOverview]);
 
-  // Toggle crop status execution
-  const executeToggleCropStatus = (id: string) => {
-    setCrops(prev => prev.map(crop => {
-      if (crop.id === id) {
-        const nextStatus = crop.status === 'Active' ? 'Inactive' : 'Active';
-        setToastMessage(`Updated ${crop.name} status to ${nextStatus}`);
-        return { ...crop, status: nextStatus };
+  // Handle Add Crop submission
+  const handleAddCropSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCropName.trim()) {
+      setCropFormError('Crop name is required.');
+      return;
+    }
+    setCropFormError(null);
+    setIsSubmittingCrop(true);
+
+    try {
+      const payload: { name: string; active: boolean; reason?: string } = {
+        name: newCropName.trim(),
+        active: newCropActive
+      };
+      if (newCropReason.trim()) {
+        payload.reason = newCropReason.trim();
       }
-      return crop;
-    }));
-    setActiveMenuId(null);
+
+      await api.post('/ym04/crops', payload);
+      setToastMessage(`Crop "${newCropName.trim()}" created successfully!`);
+      setIsAddCropOpen(false);
+      setNewCropName('');
+      setNewCropActive(true);
+      setNewCropReason('');
+      fetchOverview();
+    } catch (err) {
+      setCropFormError(getErrorMessage(err, 'Failed to create crop.'));
+    } finally {
+      setIsSubmittingCrop(false);
+    }
   };
 
-  // Toggle crop status with confirmation on deactivation
-  const handleToggleCropStatus = (id: string) => {
-    const target = crops.find(c => c.id === id);
-    if (target && target.status === 'Active') {
+  // Handle Add Grade submission
+  const handleAddGradeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGradeName.trim()) {
+      setGradeFormError('Grade name is required.');
+      return;
+    }
+    setGradeFormError(null);
+    setIsSubmittingGrade(true);
+
+    try {
+      const payload: { name: string; description?: string | null; active: boolean; reason?: string } = {
+        name: newGradeName.trim(),
+        description: newGradeDesc.trim() || null,
+        active: newGradeActive
+      };
+      if (newGradeReason.trim()) {
+        payload.reason = newGradeReason.trim();
+      }
+
+      await api.post('/ym04/grades', payload);
+      setToastMessage(`Quality grade "${newGradeName.trim()}" created successfully!`);
+      setIsAddGradeOpen(false);
+      setNewGradeName('');
+      setNewGradeDesc('');
+      setNewGradeActive(true);
+      setNewGradeReason('');
+      fetchOverview();
+    } catch (err) {
+      setGradeFormError(getErrorMessage(err, 'Failed to create grade.'));
+    } finally {
+      setIsSubmittingGrade(false);
+    }
+  };
+
+  // Execute Toggle Crop status via PATCH
+  const executeToggleCropStatus = async (id: string, currentActive: boolean, name: string) => {
+    try {
+      const nextActive = !currentActive;
+      await api.patch(`/ym04/crops/${id}`, {
+        active: nextActive,
+        reason: nextActive ? `Activated crop ${name}` : `Deactivated crop ${name}`
+      });
+      setToastMessage(`Crop "${name}" set to ${nextActive ? 'Active' : 'Inactive'}.`);
+      fetchOverview();
+    } catch (err) {
+      setToastMessage(getErrorMessage(err, 'Failed to update crop status.'));
+    } finally {
+      setActionMenuId(null);
+      setDeactivateConfirm(null);
+    }
+  };
+
+  // Execute Toggle Grade status via PATCH
+  const executeToggleGradeStatus = async (id: string, currentActive: boolean, name: string) => {
+    try {
+      const nextActive = !currentActive;
+      await api.patch(`/ym04/grades/${id}`, {
+        active: nextActive,
+        reason: nextActive ? `Activated grade ${name}` : `Deactivated grade ${name}`
+      });
+      setToastMessage(`Grade "${name}" set to ${nextActive ? 'Active' : 'Inactive'}.`);
+      fetchOverview();
+    } catch (err) {
+      setToastMessage(getErrorMessage(err, 'Failed to update grade status.'));
+    } finally {
+      setActionMenuId(null);
+      setDeactivateConfirm(null);
+    }
+  };
+
+  // Handle click on Toggle Crop status
+  const handleToggleCropStatus = (crop: Crop) => {
+    if (crop.active) {
       setDeactivateConfirm({
         open: true,
         type: 'crop',
-        id: target.id,
-        name: target.name
+        id: crop.id,
+        name: crop.name
       });
-      setActiveMenuId(null);
+      setActionMenuId(null);
       return;
     }
-    executeToggleCropStatus(id);
+    executeToggleCropStatus(crop.id, crop.active, crop.name);
   };
 
-  // Toggle grade status execution
-  const executeToggleGradeStatus = (id: string) => {
-    setGrades(prev => prev.map(grade => {
-      if (grade.id === id) {
-        const nextStatus = grade.status === 'Active' ? 'Inactive' : 'Active';
-        setToastMessage(`Updated ${grade.name} status to ${nextStatus}`);
-        return { ...grade, status: nextStatus };
-      }
-      return grade;
-    }));
-    setActiveMenuId(null);
-  };
-
-  // Toggle grade status with confirmation on deactivation
-  const handleToggleGradeStatus = (id: string) => {
-    const target = grades.find(g => g.id === id);
-    if (target && target.status === 'Active') {
+  // Handle click on Toggle Grade status
+  const handleToggleGradeStatus = (grade: Grade) => {
+    if (grade.active) {
       setDeactivateConfirm({
         open: true,
         type: 'grade',
-        id: target.id,
-        name: target.name
+        id: grade.id,
+        name: grade.name
       });
-      setActiveMenuId(null);
+      setActionMenuId(null);
       return;
     }
-    executeToggleGradeStatus(id);
+    executeToggleGradeStatus(grade.id, grade.active, grade.name);
   };
 
-  // Handle Add Crop
-  const handleAddCropSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCropName.trim()) return;
+  // Summary counts from live API
+  const totalCropsCount = data?.totalCrops ?? data?.summary?.totalCrops ?? 0;
+  const activeCropsCount = data?.activeCrops ?? data?.summary?.activeCrops ?? 0;
+  const totalGradesCount = data?.totalGrades ?? data?.summary?.totalGrades ?? 0;
+  const activeGradesCount = data?.activeGrades ?? data?.summary?.activeGrades ?? 0;
 
-    const newCrop: Crop = {
-      id: `crop-${Date.now()}`,
-      name: newCropName.trim(),
-      emoji: newCropEmoji || '🌱',
-      category: newCropCategory,
-      status: newCropStatus,
-      createdDate: '19 Nov 2026',
-      description: newCropDesc || 'Registered agricultural commodity for YieldMatrix operations.'
-    };
-
-    setCrops(prev => [newCrop, ...prev]);
-    setIsAddCropOpen(false);
-    setNewCropName('');
-    setNewCropDesc('');
-    setToastMessage(`Crop "${newCrop.name}" registered successfully!`);
-  };
-
-  // Handle Add Grade
-  const handleAddGradeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newGradeName.trim()) return;
-
-    const newGrade: Grade = {
-      id: `grade-${Date.now()}`,
-      name: newGradeName.trim(),
-      description: newGradeDesc || 'Custom Produce Standard',
-      status: newGradeStatus,
-      criteria: newGradeCriteria || 'Defined by regional agronomic specifications.'
-    };
-
-    setGrades(prev => [newGrade, ...prev]);
-    setIsAddGradeOpen(false);
-    setNewGradeName('');
-    setNewGradeDesc('');
-    setNewGradeCriteria('');
-    setToastMessage(`Quality grade "${newGrade.name}" registered successfully!`);
-  };
+  const cropsList = data?.crops || [];
+  const gradesList = data?.grades || [];
 
   return (
     <div className="ym04-container" ref={menuContainerRef}>
@@ -303,6 +259,21 @@ export default function ReferenceDataOverview() {
           Manage crop types and produce grades used across the YieldMatrix platform.
         </p>
       </header>
+
+      {/* Global Error Banner with Retry */}
+      {error && (
+        <div className="ym04-alert-wrap" role="alert">
+          <Alert type="error">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', width: '100%' }}>
+              <span>{error}</span>
+              <Button variant="outline" onClick={() => fetchOverview()}>
+                <RefreshCw size={14} className={loading ? 'ym04-spin' : ''} style={{ marginRight: '6px' }} />
+                Retry
+              </Button>
+            </div>
+          </Alert>
+        </div>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* Top Stat Cards (4 Cards Grid)                                      */}
@@ -323,7 +294,7 @@ export default function ReferenceDataOverview() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Crops</span>
-              <strong className="ym04-stat-value">{totalCropsCount}</strong>
+              <strong className="ym04-stat-value">{loading ? '...' : totalCropsCount}</strong>
               <span className="ym04-stat-subtext">All registered crop types</span>
             </div>
           </div>
@@ -347,7 +318,7 @@ export default function ReferenceDataOverview() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Active Crops</span>
-              <strong className="ym04-stat-value">{activeCropsCount}</strong>
+              <strong className="ym04-stat-value">{loading ? '...' : activeCropsCount}</strong>
               <span className="ym04-stat-subtext">Currently available crops</span>
             </div>
           </div>
@@ -371,7 +342,9 @@ export default function ReferenceDataOverview() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Grades</span>
-              <strong className="ym04-stat-value">{totalGradesCount}</strong>
+              <strong className="ym04-stat-value">
+                {loading ? '...' : String(totalGradesCount).padStart(2, '0')}
+              </strong>
               <span className="ym04-stat-subtext">All registered produce grades</span>
             </div>
           </div>
@@ -395,7 +368,9 @@ export default function ReferenceDataOverview() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Active Grades</span>
-              <strong className="ym04-stat-value">{activeGradesCount}</strong>
+              <strong className="ym04-stat-value">
+                {loading ? '...' : String(activeGradesCount).padStart(2, '0')}
+              </strong>
               <span className="ym04-stat-subtext">Currently available grades</span>
             </div>
           </div>
@@ -421,7 +396,10 @@ export default function ReferenceDataOverview() {
             type="button"
             variant="primary"
             className="ym04-btn-add"
-            onClick={() => setIsAddCropOpen(true)}
+            onClick={() => {
+              setCropFormError(null);
+              setIsAddCropOpen(true);
+            }}
             aria-label="Add new crop type"
           >
             <Plus size={16} aria-hidden="true" />
@@ -430,86 +408,102 @@ export default function ReferenceDataOverview() {
         </header>
 
         <div className="ym04-table-wrap">
-          <Table headers={['Crop Name', 'Category', 'Status', 'Created Date', 'Actions']} className="ym04-table" aria-label="Registered Crops">
-            {crops.map((crop) => (
-              <TableRow key={crop.id}>
-                <td>
-                  <div className="ym04-cell-crop-name">
-                    <span className="ym04-crop-emoji" aria-hidden="true">{crop.emoji}</span>
-                    <span>{crop.name}</span>
-                  </div>
-                </td>
-                <td>
-                  <span className="ym04-badge-category">{crop.category}</span>
-                </td>
-                <td>
-                  <StatusBadge status={crop.status} />
-                </td>
-                <td>{crop.createdDate}</td>
-                <td>
-                  <div className="ym04-actions-cell">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="ym04-btn-view"
-                      onClick={() => setSelectedCrop(crop)}
-                      aria-label={`View details for ${crop.name}`}
-                    >
-                      View
-                    </Button>
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        type="button"
-                        className="ym04-btn-menu"
-                        onClick={() => setActiveMenuId(activeMenuId === crop.id ? null : crop.id)}
-                        aria-label={`More actions for ${crop.name}`}
-                        aria-expanded={activeMenuId === crop.id}
-                      >
-                        <MoreVertical size={16} />
-                      </button>
-                      {activeMenuId === crop.id && (
-                        <div className="ym04-dropdown-menu" role="menu">
-                          <button
-                            type="button"
-                            className="ym04-dropdown-item"
-                            role="menuitem"
-                            onClick={() => {
-                              setSelectedCrop(crop);
-                              setActiveMenuId(null);
-                            }}
-                          >
-                            <Eye size={14} />
-                            <span>View Details</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="ym04-dropdown-item"
-                            role="menuitem"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              navigate('/admin/reference-data/crops');
-                            }}
-                          >
-                            <Sprout size={14} />
-                            <span>Manage Crops</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="ym04-dropdown-item"
-                            role="menuitem"
-                            onClick={() => handleToggleCropStatus(crop.id)}
-                          >
-                            <RefreshCw size={14} />
-                            <span>Make {crop.status === 'Active' ? 'Inactive' : 'Active'}</span>
-                          </button>
-                        </div>
-                      )}
+          {loading && !data ? (
+            <div className="ym04-loading-state" style={{ padding: '40px', textAlign: 'center' }}>
+              <Loader2 size={32} className="ym04-spin" style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
+              <p style={{ color: 'var(--muted)' }}>Loading crop overview...</p>
+            </div>
+          ) : cropsList.length > 0 ? (
+            <Table headers={['Crop Name', 'Status', 'Actions']} className="ym04-table" aria-label="Registered Crops">
+              {cropsList.map((crop) => (
+                <TableRow key={crop.id}>
+                  <td>
+                    <div className="ym04-cell-crop-name">
+                      <Sprout size={18} className="ym04-target-green-icon" aria-hidden="true" />
+                      <span className="ym04-cell-crop-name-bold">{crop.name}</span>
                     </div>
-                  </div>
-                </td>
-              </TableRow>
-            ))}
-          </Table>
+                  </td>
+                  <td>
+                    <StatusBadge status={crop.active ? 'Active' : 'Inactive'} />
+                  </td>
+                  <td>
+                    <div className="ym04-actions-cell">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="ym04-btn-view"
+                        onClick={() => setSelectedCrop(crop)}
+                        aria-label={`View details for ${crop.name}`}
+                      >
+                        View
+                      </Button>
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          type="button"
+                          className="ym04-btn-menu"
+                          onClick={() => setActionMenuId(actionMenuId === crop.id ? null : crop.id)}
+                          aria-label={`More actions for ${crop.name}`}
+                          aria-expanded={actionMenuId === crop.id}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        {actionMenuId === crop.id && (
+                          <div className="ym04-dropdown-menu" role="menu">
+                            <button
+                              type="button"
+                              className="ym04-dropdown-item"
+                              role="menuitem"
+                              onClick={() => {
+                                setSelectedCrop(crop);
+                                setActionMenuId(null);
+                              }}
+                            >
+                              <Eye size={14} />
+                              <span>View Details</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="ym04-dropdown-item"
+                              role="menuitem"
+                              onClick={() => {
+                                setActionMenuId(null);
+                                navigate('/admin/reference-data/crops');
+                              }}
+                            >
+                              <Sprout size={14} />
+                              <span>Manage Crops</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="ym04-dropdown-item"
+                              role="menuitem"
+                              onClick={() => handleToggleCropStatus(crop)}
+                            >
+                              <RefreshCw size={14} />
+                              <span>Make {crop.active ? 'Inactive' : 'Active'}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </TableRow>
+              ))}
+            </Table>
+          ) : (
+            <div style={{ padding: '32px' }}>
+              <EmptyState
+                title="No crops registered"
+                description="Get started by registering a new crop into the system."
+                action={
+                  <Button variant="primary" onClick={() => setIsAddCropOpen(true)}>
+                    <Plus size={16} style={{ marginRight: '6px' }} />
+                    Add Crop
+                  </Button>
+                }
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -529,7 +523,10 @@ export default function ReferenceDataOverview() {
             type="button"
             variant="primary"
             className="ym04-btn-add"
-            onClick={() => setIsAddGradeOpen(true)}
+            onClick={() => {
+              setGradeFormError(null);
+              setIsAddGradeOpen(true);
+            }}
             aria-label="Add new grade standard"
           >
             <Plus size={16} aria-hidden="true" />
@@ -538,83 +535,103 @@ export default function ReferenceDataOverview() {
         </header>
 
         <div className="ym04-table-wrap">
-          <Table headers={['Grade Name', 'Description', 'Status', 'Actions']} className="ym04-table" aria-label="Registered Produce Grades">
-            {grades.map((grade) => (
-              <TableRow key={grade.id}>
-                <td>
-                  <div className="ym04-cell-grade-name">
-                    <Star className="ym04-star-icon" size={15} aria-hidden="true" />
-                    <span>{grade.name}</span>
-                  </div>
-                </td>
-                <td>{grade.description}</td>
-                <td>
-                  <StatusBadge status={grade.status} />
-                </td>
-                <td>
-                  <div className="ym04-actions-cell">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="ym04-btn-view"
-                      onClick={() => setSelectedGrade(grade)}
-                      aria-label={`View details for ${grade.name}`}
-                    >
-                      View
-                    </Button>
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        type="button"
-                        className="ym04-btn-menu"
-                        onClick={() => setActiveMenuId(activeMenuId === grade.id ? null : grade.id)}
-                        aria-label={`More actions for ${grade.name}`}
-                        aria-expanded={activeMenuId === grade.id}
-                      >
-                        <MoreVertical size={16} />
-                      </button>
-                      {activeMenuId === grade.id && (
-                        <div className="ym04-dropdown-menu" role="menu">
-                          <button
-                            type="button"
-                            className="ym04-dropdown-item"
-                            role="menuitem"
-                            onClick={() => {
-                              setSelectedGrade(grade);
-                              setActiveMenuId(null);
-                            }}
-                          >
-                            <Eye size={14} />
-                            <span>View Details</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="ym04-dropdown-item"
-                            role="menuitem"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              navigate('/admin/reference-data/grades');
-                            }}
-                          >
-                            <Award size={14} />
-                            <span>Manage Grades</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="ym04-dropdown-item"
-                            role="menuitem"
-                            onClick={() => handleToggleGradeStatus(grade.id)}
-                          >
-                            <RefreshCw size={14} />
-                            <span>Make {grade.status === 'Active' ? 'Inactive' : 'Active'}</span>
-                          </button>
-                        </div>
-                      )}
+          {loading && !data ? (
+            <div className="ym04-loading-state" style={{ padding: '40px', textAlign: 'center' }}>
+              <Loader2 size={32} className="ym04-spin" style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
+              <p style={{ color: 'var(--muted)' }}>Loading grade overview...</p>
+            </div>
+          ) : gradesList.length > 0 ? (
+            <Table headers={['Grade Name', 'Description', 'Status', 'Actions']} className="ym04-table" aria-label="Registered Produce Grades">
+              {gradesList.map((grade) => (
+                <TableRow key={grade.id}>
+                  <td>
+                    <div className="ym04-cell-grade-name">
+                      <Star className="ym04-star-icon" size={15} aria-hidden="true" />
+                      <span className="ym04-cell-crop-name-bold">{grade.name}</span>
                     </div>
-                  </div>
-                </td>
-              </TableRow>
-            ))}
-          </Table>
+                  </td>
+                  <td>{grade.description || '—'}</td>
+                  <td>
+                    <StatusBadge status={grade.active ? 'Active' : 'Inactive'} />
+                  </td>
+                  <td>
+                    <div className="ym04-actions-cell">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="ym04-btn-view"
+                        onClick={() => setSelectedGrade(grade)}
+                        aria-label={`View details for ${grade.name}`}
+                      >
+                        View
+                      </Button>
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          type="button"
+                          className="ym04-btn-menu"
+                          onClick={() => setActionMenuId(actionMenuId === grade.id ? null : grade.id)}
+                          aria-label={`More actions for ${grade.name}`}
+                          aria-expanded={actionMenuId === grade.id}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        {actionMenuId === grade.id && (
+                          <div className="ym04-dropdown-menu" role="menu">
+                            <button
+                              type="button"
+                              className="ym04-dropdown-item"
+                              role="menuitem"
+                              onClick={() => {
+                                setSelectedGrade(grade);
+                                setActionMenuId(null);
+                              }}
+                            >
+                              <Eye size={14} />
+                              <span>View Details</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="ym04-dropdown-item"
+                              role="menuitem"
+                              onClick={() => {
+                                setActionMenuId(null);
+                                navigate('/admin/reference-data/grades');
+                              }}
+                            >
+                              <Award size={14} />
+                              <span>Manage Grades</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="ym04-dropdown-item"
+                              role="menuitem"
+                              onClick={() => handleToggleGradeStatus(grade)}
+                            >
+                              <RefreshCw size={14} />
+                              <span>Make {grade.active ? 'Inactive' : 'Active'}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </TableRow>
+              ))}
+            </Table>
+          ) : (
+            <div style={{ padding: '32px' }}>
+              <EmptyState
+                title="No grades registered"
+                description="Get started by registering a new quality grade standard into the system."
+                action={
+                  <Button variant="primary" onClick={() => setIsAddGradeOpen(true)}>
+                    <Plus size={16} style={{ marginRight: '6px' }} />
+                    Add Grade
+                  </Button>
+                }
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -662,7 +679,7 @@ export default function ReferenceDataOverview() {
             type="button"
             className="ym04-qa-btn ym04-qa-btn--green"
             onClick={() => {
-              setToastMessage('Navigating to Audit Trail (Page 4)...');
+              setToastMessage('Navigating to Audit Trail...');
               navigate('/admin/audit-trail');
             }}
           >
@@ -681,7 +698,7 @@ export default function ReferenceDataOverview() {
           <div className="ym04-modal-dialog">
             <div className="ym04-modal-header">
               <h3 id="crop-modal-title" className="ym04-modal-title">
-                {selectedCrop.emoji} {selectedCrop.name} Details
+                {selectedCrop.name} Details
               </h3>
               <button
                 type="button"
@@ -699,48 +716,28 @@ export default function ReferenceDataOverview() {
                 <span className="ym04-detail-value">{selectedCrop.name}</span>
               </div>
               <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Category</span>
-                <span className="ym04-detail-value">{selectedCrop.category}</span>
-              </div>
-              <div className="ym04-detail-item">
                 <span className="ym04-detail-label">Status</span>
                 <span className="ym04-detail-value">
-                  <StatusBadge status={selectedCrop.status} />
+                  <StatusBadge status={selectedCrop.active ? 'Active' : 'Inactive'} />
                 </span>
               </div>
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Registration Date</span>
-                <span className="ym04-detail-value">{selectedCrop.createdDate}</span>
+              <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
+                <span className="ym04-detail-label">System ID</span>
+                <span className="ym04-detail-value" style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+                  {selectedCrop.id}
+                </span>
               </div>
             </div>
-
-            {selectedCrop.description && (
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Description</span>
-                <p style={{ fontSize: '13px', color: 'var(--text)', marginTop: '4px', lineHeight: 1.5 }}>
-                  {selectedCrop.description}
-                </p>
-              </div>
-            )}
-
-            {selectedCrop.storageCondition && (
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Recommended Storage</span>
-                <p style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '4px', lineHeight: 1.5 }}>
-                  {selectedCrop.storageCondition}
-                </p>
-              </div>
-            )}
 
             <div className="ym04-modal-footer">
               <Button
                 variant="outline"
                 onClick={() => {
-                  handleToggleCropStatus(selectedCrop.id);
+                  handleToggleCropStatus(selectedCrop);
                   setSelectedCrop(null);
                 }}
               >
-                Toggle {selectedCrop.status === 'Active' ? 'Inactive' : 'Active'}
+                Toggle {selectedCrop.active ? 'Inactive' : 'Active'}
               </Button>
               <Button variant="primary" onClick={() => setSelectedCrop(null)}>
                 Close
@@ -776,39 +773,32 @@ export default function ReferenceDataOverview() {
                 <span className="ym04-detail-value">{selectedGrade.name}</span>
               </div>
               <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Quality Level</span>
-                <span className="ym04-detail-value">{selectedGrade.description}</span>
-              </div>
-              <div className="ym04-detail-item">
                 <span className="ym04-detail-label">Status</span>
                 <span className="ym04-detail-value">
-                  <StatusBadge status={selectedGrade.status} />
+                  <StatusBadge status={selectedGrade.active ? 'Active' : 'Inactive'} />
                 </span>
               </div>
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Inspection Threshold</span>
-                <span className="ym04-detail-value">{selectedGrade.inspectionThreshold || 'Standard'}</span>
+              <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
+                <span className="ym04-detail-label">Description</span>
+                <span className="ym04-detail-value">{selectedGrade.description || 'No description provided.'}</span>
+              </div>
+              <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
+                <span className="ym04-detail-label">System ID</span>
+                <span className="ym04-detail-value" style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+                  {selectedGrade.id}
+                </span>
               </div>
             </div>
-
-            {selectedGrade.criteria && (
-              <div className="ym04-detail-item">
-                <span className="ym04-detail-label">Quality &amp; Acceptance Criteria</span>
-                <p style={{ fontSize: '13px', color: 'var(--text)', marginTop: '4px', lineHeight: 1.5 }}>
-                  {selectedGrade.criteria}
-                </p>
-              </div>
-            )}
 
             <div className="ym04-modal-footer">
               <Button
                 variant="outline"
                 onClick={() => {
-                  handleToggleGradeStatus(selectedGrade.id);
+                  handleToggleGradeStatus(selectedGrade);
                   setSelectedGrade(null);
                 }}
               >
-                Toggle {selectedGrade.status === 'Active' ? 'Inactive' : 'Active'}
+                Toggle {selectedGrade.active ? 'Inactive' : 'Active'}
               </Button>
               <Button variant="primary" onClick={() => setSelectedGrade(null)}>
                 Close
@@ -822,10 +812,12 @@ export default function ReferenceDataOverview() {
       {/* Modal: Add New Crop                                                */}
       {/* ------------------------------------------------------------------ */}
       {isAddCropOpen && (
-        <div className="ym04-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="add-crop-title">
-          <form className="ym04-modal-dialog" onSubmit={handleAddCropSubmit}>
+        <div className="ym04-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="add-crop-modal-title">
+          <div className="ym04-modal-dialog">
             <div className="ym04-modal-header">
-              <h3 id="add-crop-title" className="ym04-modal-title">Add Registered Crop</h3>
+              <h3 id="add-crop-modal-title" className="ym04-modal-title">
+                Add New Crop Type
+              </h3>
               <button
                 type="button"
                 className="ym04-modal-close"
@@ -836,63 +828,79 @@ export default function ReferenceDataOverview() {
               </button>
             </div>
 
-            <div className="ym04-form-grid">
-              <InputField
-                label="Crop Name"
-                placeholder="e.g. Potato, Onion, Green Chilli"
-                value={newCropName}
-                onChange={(e) => setNewCropName(e.target.value)}
-                required
-              />
+            {cropFormError && (
+              <div style={{ marginBottom: '16px' }}>
+                <Alert type="error">{cropFormError}</Alert>
+              </div>
+            )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
+            <form onSubmit={handleAddCropSubmit} className="ym04-crop-form">
+              <div className="ym04-form-group">
                 <InputField
-                  label="Emoji Icon"
-                  value={newCropEmoji}
-                  onChange={(e) => setNewCropEmoji(e.target.value)}
-                  maxLength={4}
-                />
-                <SelectField
-                  label="Category"
-                  value={newCropCategory}
-                  onChange={(e) => setNewCropCategory(e.target.value as any)}
-                  options={[
-                    { value: 'Cereal', label: 'Cereal' },
-                    { value: 'Vegetable', label: 'Vegetable' },
-                    { value: 'Fruit', label: 'Fruit' },
-                    { value: 'Legume', label: 'Legume' },
-                    { value: 'Cash Crop', label: 'Cash Crop' }
-                  ]}
+                  label="Crop Name"
+                  placeholder="e.g. Paddy Rice, Tomato"
+                  value={newCropName}
+                  onChange={(e) => setNewCropName(e.target.value)}
+                  required
                 />
               </div>
 
-              <SelectField
-                label="Initial Status"
-                value={newCropStatus}
-                onChange={(e) => setNewCropStatus(e.target.value as any)}
-                options={[
-                  { value: 'Active', label: 'Active (Available for trade)' },
-                  { value: 'Inactive', label: 'Inactive (Hidden/Draft)' }
-                ]}
-              />
+              <div className="ym04-form-group">
+                <span className="ym04-form-label">Initial Status</span>
+                <div className="ym04-radio-group">
+                  <label className="ym04-radio-item">
+                    <input
+                      type="radio"
+                      name="overview-crop-status"
+                      checked={newCropActive === true}
+                      onChange={() => setNewCropActive(true)}
+                      className="ym04-radio-input"
+                    />
+                    <span className="ym04-radio-custom" />
+                    <span className="ym04-radio-text">Active</span>
+                  </label>
+                  <label className="ym04-radio-item">
+                    <input
+                      type="radio"
+                      name="overview-crop-status"
+                      checked={newCropActive === false}
+                      onChange={() => setNewCropActive(false)}
+                      className="ym04-radio-input"
+                    />
+                    <span className="ym04-radio-custom" />
+                    <span className="ym04-radio-text">Inactive</span>
+                  </label>
+                </div>
+              </div>
 
-              <InputField
-                label="Description & Notes (Optional)"
-                placeholder="Agronomic variety, seasonality, or handling info..."
-                value={newCropDesc}
-                onChange={(e) => setNewCropDesc(e.target.value)}
-              />
-            </div>
+              <div className="ym04-form-group">
+                <InputField
+                  label="Audit Reason (Optional)"
+                  placeholder="Reason for adding crop"
+                  value={newCropReason}
+                  onChange={(e) => setNewCropReason(e.target.value)}
+                />
+              </div>
 
-            <div className="ym04-modal-footer">
-              <Button variant="outline" type="button" onClick={() => setIsAddCropOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" type="submit">
-                Register Crop
-              </Button>
-            </div>
-          </form>
+              <div className="ym04-modal-footer">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddCropOpen(false)}
+                  disabled={isSubmittingCrop}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={isSubmittingCrop}
+                >
+                  {isSubmittingCrop ? 'Saving...' : 'Register Crop'}
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -900,10 +908,12 @@ export default function ReferenceDataOverview() {
       {/* Modal: Add New Grade                                               */}
       {/* ------------------------------------------------------------------ */}
       {isAddGradeOpen && (
-        <div className="ym04-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="add-grade-title">
-          <form className="ym04-modal-dialog" onSubmit={handleAddGradeSubmit}>
+        <div className="ym04-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="add-grade-modal-title">
+          <div className="ym04-modal-dialog">
             <div className="ym04-modal-header">
-              <h3 id="add-grade-title" className="ym04-modal-title">Add Produce Grade</h3>
+              <h3 id="add-grade-modal-title" className="ym04-modal-title">
+                Add New Quality Grade
+              </h3>
               <button
                 type="button"
                 className="ym04-modal-close"
@@ -914,75 +924,120 @@ export default function ReferenceDataOverview() {
               </button>
             </div>
 
-            <div className="ym04-form-grid">
-              <InputField
-                label="Grade Code / Name"
-                placeholder="e.g. Grade A+, Grade Export, Super Grade"
-                value={newGradeName}
-                onChange={(e) => setNewGradeName(e.target.value)}
-                required
-              />
+            {gradeFormError && (
+              <div style={{ marginBottom: '16px' }}>
+                <Alert type="error">{gradeFormError}</Alert>
+              </div>
+            )}
 
-              <InputField
-                label="Description"
-                placeholder="e.g. Organic Certified, Direct Wholesale"
-                value={newGradeDesc}
-                onChange={(e) => setNewGradeDesc(e.target.value)}
-                required
-              />
+            <form onSubmit={handleAddGradeSubmit} className="ym04-crop-form">
+              <div className="ym04-form-group">
+                <InputField
+                  label="Grade Name"
+                  placeholder="e.g. Grade A, Grade Export"
+                  value={newGradeName}
+                  onChange={(e) => setNewGradeName(e.target.value)}
+                  required
+                />
+              </div>
 
-              <SelectField
-                label="Status"
-                value={newGradeStatus}
-                onChange={(e) => setNewGradeStatus(e.target.value as any)}
-                options={[
-                  { value: 'Active', label: 'Active (Enabled)' },
-                  { value: 'Inactive', label: 'Inactive' }
-                ]}
-              />
+              <div className="ym04-form-group">
+                <label htmlFor="overview-grade-desc" className="ym04-form-label">
+                  Description
+                </label>
+                <textarea
+                  id="overview-grade-desc"
+                  className="ym04-form-textarea"
+                  placeholder="Produce quality tier description..."
+                  rows={3}
+                  value={newGradeDesc}
+                  onChange={(e) => setNewGradeDesc(e.target.value)}
+                />
+              </div>
 
-              <InputField
-                label="Quality & Inspection Criteria"
-                placeholder="Defect tolerance, moisture percentage..."
-                value={newGradeCriteria}
-                onChange={(e) => setNewGradeCriteria(e.target.value)}
-              />
-            </div>
+              <div className="ym04-form-group">
+                <span className="ym04-form-label">Initial Status</span>
+                <div className="ym04-radio-group">
+                  <label className="ym04-radio-item">
+                    <input
+                      type="radio"
+                      name="overview-grade-status"
+                      checked={newGradeActive === true}
+                      onChange={() => setNewGradeActive(true)}
+                      className="ym04-radio-input"
+                    />
+                    <span className="ym04-radio-custom" />
+                    <span className="ym04-radio-text">Active</span>
+                  </label>
+                  <label className="ym04-radio-item">
+                    <input
+                      type="radio"
+                      name="overview-grade-status"
+                      checked={newGradeActive === false}
+                      onChange={() => setNewGradeActive(false)}
+                      className="ym04-radio-input"
+                    />
+                    <span className="ym04-radio-custom" />
+                    <span className="ym04-radio-text">Inactive</span>
+                  </label>
+                </div>
+              </div>
 
-            <div className="ym04-modal-footer">
-              <Button variant="outline" type="button" onClick={() => setIsAddGradeOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" type="submit">
-                Create Grade
-              </Button>
-            </div>
-          </form>
+              <div className="ym04-form-group">
+                <InputField
+                  label="Audit Reason (Optional)"
+                  placeholder="Reason for adding grade"
+                  value={newGradeReason}
+                  onChange={(e) => setNewGradeReason(e.target.value)}
+                />
+              </div>
+
+              <div className="ym04-modal-footer">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddGradeOpen(false)}
+                  disabled={isSubmittingGrade}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={isSubmittingGrade}
+                >
+                  {isSubmittingGrade ? 'Saving...' : 'Register Grade'}
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* Deactivation Confirmation Dialog */}
-      <ConfirmDialog
-        open={Boolean(deactivateConfirm?.open)}
-        title={`Deactivate ${deactivateConfirm?.type === 'crop' ? 'Crop' : 'Grade'}`}
-        description={`Are you sure you want to set "${deactivateConfirm?.name}" to Inactive? This will mark it as unavailable for active trading and operations.`}
-        simulationNote="This action can be reversed at any time by toggling status back to Active."
-        confirmLabel="Deactivate"
-        onCancel={() => setDeactivateConfirm(null)}
-        onConfirm={() => {
-          if (!deactivateConfirm) return;
-          if (deactivateConfirm.type === 'crop') {
-            executeToggleCropStatus(deactivateConfirm.id);
-          } else {
-            executeToggleGradeStatus(deactivateConfirm.id);
-          }
-          setDeactivateConfirm(null);
-        }}
-      />
+      {/* Confirmation Dialog on Deactivate */}
+      {deactivateConfirm && (
+        <ConfirmDialog
+          open={deactivateConfirm.open}
+          title={`Deactivate ${deactivateConfirm.type === 'crop' ? 'Crop' : 'Grade'}`}
+          description={`Are you sure you want to deactivate "${deactivateConfirm.name}"? Inactive items will not be selectable in produce grading and allocations.`}
+          confirmLabel="Yes, Deactivate"
+          onCancel={() => setDeactivateConfirm(null)}
+          onConfirm={() => {
+            if (deactivateConfirm.type === 'crop') {
+              executeToggleCropStatus(deactivateConfirm.id, true, deactivateConfirm.name);
+            } else {
+              executeToggleGradeStatus(deactivateConfirm.id, true, deactivateConfirm.name);
+            }
+          }}
+        />
+      )}
 
-      {/* Confirmation / Status Toast */}
+      {/* Toast Feedback */}
       {toastMessage && (
-        <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
+        <Toast
+          message={toastMessage}
+          onClose={() => setToastMessage(null)}
+        />
       )}
     </div>
   );

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import {
   Ribbon,
   Check,
@@ -11,11 +11,10 @@ import {
   SquarePen,
   ChevronLeft,
   ChevronRight,
-  Zap,
-  ArrowRight,
-  BarChart2,
-  FileText,
-  AlertCircle
+  RefreshCw,
+  Loader2,
+  Copy,
+  CheckCircle2
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { InputField } from '../../components/InputField';
@@ -25,111 +24,39 @@ import { EmptyState } from '../../components/EmptyState';
 import { Table, TableRow } from '../../components/Table';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
-
-export interface GradeItem {
-  id: string;
-  name: string;
-  description: string;
-  status: 'Active' | 'Inactive';
-  createdDate: string;
-  criteria?: string;
-}
-
-// 8 realistic produce quality grade records matching Figma mock metrics (6 Active, 2 Inactive)
-const INITIAL_GRADES: GradeItem[] = [
-  {
-    id: 'GR001',
-    name: 'Grade A',
-    description: 'Premium Quality',
-    status: 'Active',
-    createdDate: '05 Nov 2026',
-    criteria: 'Zero defect tolerance, uniform size distribution, export-certified purity and moisture standard.'
-  },
-  {
-    id: 'GR002',
-    name: 'Grade B',
-    description: 'Standard Quality',
-    status: 'Active',
-    createdDate: '05 Nov 2026',
-    criteria: 'Minor superficial skin defects allowed, 100% sound flesh, standard wholesale and supermarket spec.'
-  },
-  {
-    id: 'GR003',
-    name: 'Grade C',
-    description: 'Basic Quality',
-    status: 'Active',
-    createdDate: '04 Nov 2026',
-    criteria: 'Acceptable for processing, puree, pulping, milling, or localized community retail consumption.'
-  },
-  {
-    id: 'GR004',
-    name: 'Grade D',
-    description: 'Special Category',
-    status: 'Inactive',
-    createdDate: '01 Nov 2026',
-    criteria: 'Heavily bruised or distressed produce restricted to industrial biomass or animal feed.'
-  },
-  {
-    id: 'GR005',
-    name: 'Grade Premium',
-    description: 'High Market Value',
-    status: 'Active',
-    createdDate: '30 Oct 2026',
-    criteria: 'Ultra top-tier harvest with specialized agronomic lineage and guaranteed sugar/moisture grade.'
-  },
-  {
-    id: 'GR006',
-    name: 'Grade Export',
-    description: 'Certified Organic Standard',
-    status: 'Active',
-    createdDate: '28 Oct 2026',
-    criteria: 'GlobalGAP certified chemical residue-free export standard with strict phytosanitary compliance.'
-  },
-  {
-    id: 'GR007',
-    name: 'Grade Processing',
-    description: 'Industrial Spec',
-    status: 'Active',
-    createdDate: '25 Oct 2026',
-    criteria: 'Optimized for high-yield industrial extraction, juice bottling, and starch milling factories.'
-  },
-  {
-    id: 'GR008',
-    name: 'Grade Substandard',
-    description: 'Non-conforming Cull Grade',
-    status: 'Inactive',
-    createdDate: '20 Oct 2026',
-    criteria: 'Substandard grade segregated during primary depot sorting; scheduled for composting or salvage.'
-  }
-];
+import api from '../../services/api';
+import { Grade, Pagination, getErrorMessage } from './types';
 
 function getPaginationItems(current: number, total: number): (number | string)[] {
   if (total <= 4) {
     return Array.from({ length: total }, (_, i) => i + 1);
   }
   if (total === 5) {
-    if (current <= 2) {
-      return [1, 2, 3, '...', 5];
-    }
-    if (current >= 4) {
-      return [1, '...', 3, 4, 5];
-    }
+    if (current <= 2) return [1, 2, 3, '...', 5];
+    if (current >= 4) return [1, '...', 3, 4, 5];
     return [1, 2, 3, 4, 5];
   }
-  if (current <= 3) {
-    return [1, 2, 3, '...', total];
-  }
-  if (current >= total - 2) {
-    return [1, '...', total - 2, total - 1, total];
-  }
+  if (current <= 3) return [1, 2, 3, '...', total];
+  if (current >= total - 2) return [1, '...', total - 2, total - 1, total];
   return [1, '...', current, '...', total];
 }
 
 export default function GradeManagement() {
-  const navigate = useNavigate();
-
-  // Master records
-  const [grades, setGrades] = useState<GradeItem[]>(INITIAL_GRADES);
+  // Master records & data state
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 5,
+    total: 0,
+    totalPages: 1
+  });
+  const [summary, setSummary] = useState<{ total: number; active: number; inactive: number }>({
+    total: 0,
+    active: 0,
+    inactive: 0
+  });
 
   // Search, filter, pagination
   const [searchQuery, setSearchQuery] = useState('');
@@ -139,81 +66,95 @@ export default function GradeManagement() {
 
   // Side Panel state: 'add' | 'edit' | 'view'
   const [panelMode, setPanelMode] = useState<'add' | 'edit' | 'view'>('add');
-  const [selectedGradeId, setSelectedGradeId] = useState<string | null>(null);
+  const [selectedGrade, setSelectedGrade] = useState<Grade | null>(null);
 
   // Form input fields
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formStatus, setFormStatus] = useState<'Active' | 'Inactive'>('Active');
+  const [formActive, setFormActive] = useState<boolean>(true);
+  const [formReason, setFormReason] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Confirmation dialog state for changing status to Inactive
+  // Confirmation dialog state for deactivation
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [pendingGradeUpdate, setPendingGradeUpdate] = useState<{
     id: string;
     name: string;
     description: string;
-    status: 'Inactive';
+    active: boolean;
+    reason: string;
   } | null>(null);
 
-  // Summary counts
-  const totalGrades = grades.length;
-  const activeGrades = useMemo(() => grades.filter(g => g.status === 'Active').length, [grades]);
-  const inactiveGrades = useMemo(() => grades.filter(g => g.status === 'Inactive').length, [grades]);
+  // Fetch grades from live backend
+  const fetchGrades = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setPageError(null);
+    try {
+      const params: Record<string, any> = {
+        page: currentPage,
+        limit: pageSize,
+        status: statusFilter.toLowerCase()
+      };
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
 
-  // Filtered and paginated records
-  const filteredGrades = useMemo(() => {
-    return grades.filter(grade => {
-      const term = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        grade.name.toLowerCase().includes(term) ||
-        grade.id.toLowerCase().includes(term) ||
-        grade.description.toLowerCase().includes(term);
+      const response = await api.get('/ym04/grades', { params, signal });
+      const { grades: list, pagination: pag, summary: sum } = response.data;
+      setGrades(list || []);
+      if (pag) setPagination(pag);
+      if (sum) setSummary(sum);
+    } catch (err) {
+      if (axios.isCancel(err)) return;
+      setPageError(getErrorMessage(err, 'Failed to load produce grades list.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, pageSize, statusFilter, searchQuery]);
 
-      const matchesStatus =
-        statusFilter === 'All' ? true : grade.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [grades, searchQuery, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredGrades.length / pageSize));
-
-  // Ensure current page stays in bounds
-  const validCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (validCurrentPage - 1) * pageSize;
-  const paginatedGrades = filteredGrades.slice(startIndex, startIndex + pageSize);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchGrades(controller.signal);
+    return () => {
+      controller.abort();
+    };
+  }, [fetchGrades]);
 
   // Switch to Add mode
   const handleOpenAdd = () => {
     setPanelMode('add');
-    setSelectedGradeId(null);
+    setSelectedGrade(null);
     setFormName('');
     setFormDescription('');
-    setFormStatus('Active');
+    setFormActive(true);
+    setFormReason('');
     setFormError(null);
   };
 
   // Switch to Edit mode
-  const handleOpenEdit = (grade: GradeItem) => {
+  const handleOpenEdit = (grade: Grade) => {
     setPanelMode('edit');
-    setSelectedGradeId(grade.id);
+    setSelectedGrade(grade);
     setFormName(grade.name);
-    setFormDescription(grade.description);
-    setFormStatus(grade.status);
+    setFormDescription(grade.description || '');
+    setFormActive(grade.active);
+    setFormReason('');
     setFormError(null);
   };
 
   // Switch to View mode
-  const handleOpenView = (grade: GradeItem) => {
+  const handleOpenView = (grade: Grade) => {
     setPanelMode('view');
-    setSelectedGradeId(grade.id);
+    setSelectedGrade(grade);
     setFormName(grade.name);
-    setFormDescription(grade.description);
-    setFormStatus(grade.status);
+    setFormDescription(grade.description || '');
+    setFormActive(grade.active);
+    setFormReason('');
     setFormError(null);
   };
 
@@ -222,8 +163,49 @@ export default function GradeManagement() {
     handleOpenAdd();
   };
 
+  // Copy UUID
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    setToastMessage('Grade ID copied to clipboard');
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Execute Grade Update via PATCH
+  const executeUpdateGrade = async (
+    id: string,
+    name: string,
+    description: string,
+    active: boolean,
+    reason?: string
+  ) => {
+    setIsSubmitting(true);
+    setFormError(null);
+    try {
+      const payload: { name: string; description?: string | null; active: boolean; reason?: string } = {
+        name: name.trim(),
+        description: description.trim() || null,
+        active
+      };
+      if (reason && reason.trim()) {
+        payload.reason = reason.trim();
+      }
+
+      await api.patch(`/ym04/grades/${id}`, payload);
+      setToastMessage(`Grade "${name.trim()}" updated successfully!`);
+      handleOpenAdd();
+      fetchGrades();
+    } catch (err) {
+      setFormError(getErrorMessage(err, 'Failed to update grade.'));
+    } finally {
+      setIsSubmitting(false);
+      setShowDeactivateConfirm(false);
+      setPendingGradeUpdate(null);
+    }
+  };
+
   // Form submit handler
-  const handleSaveGrade = (e: React.FormEvent) => {
+  const handleSaveGrade = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formName.trim()) {
@@ -231,78 +213,70 @@ export default function GradeManagement() {
       return;
     }
 
+    if (formName.trim().length > 100) {
+      setFormError('Grade name must not exceed 100 characters.');
+      return;
+    }
+
     setFormError(null);
 
-    if (panelMode === 'edit' && selectedGradeId) {
+    if (panelMode === 'edit' && selectedGrade) {
       // Check if deactivating an active grade
-      const currentItem = grades.find(g => g.id === selectedGradeId);
-      if (currentItem && currentItem.status === 'Active' && formStatus === 'Inactive') {
+      if (selectedGrade.active && !formActive) {
         setPendingGradeUpdate({
-          id: selectedGradeId,
+          id: selectedGrade.id,
           name: formName.trim(),
-          description: formDescription.trim() || 'Produce quality grade registered in YieldMatrix.',
-          status: 'Inactive'
+          description: formDescription.trim(),
+          active: false,
+          reason: formReason.trim() || `Grade '${formName.trim()}' deactivated`
         });
         setShowDeactivateConfirm(true);
         return;
       }
 
-      // Update existing grade
-      setGrades(prev =>
-        prev.map(item => {
-          if (item.id === selectedGradeId) {
-            return {
-              ...item,
-              name: formName.trim(),
-              description: formDescription.trim() || 'Produce quality grade registered in YieldMatrix.',
-              status: formStatus
-            };
-          }
-          return item;
-        })
-      );
-      setToastMessage(`Grade "${formName.trim()}" updated successfully!`);
-      handleOpenAdd();
+      await executeUpdateGrade(selectedGrade.id, formName, formDescription, formActive, formReason);
     } else {
-      // Add new grade with incremented GR ID
-      const nextIdNum = grades.length + 1;
-      const newId = `GR${String(nextIdNum).padStart(3, '0')}`;
-      const newGrade: GradeItem = {
-        id: newId,
-        name: formName.trim(),
-        description: formDescription.trim() || 'Produce quality grade registered in YieldMatrix.',
-        status: formStatus,
-        createdDate: '23 Nov 2026',
-        criteria: 'Standard quality specification set by agricultural produce authority.'
-      };
+      // Add new grade via POST
+      setIsSubmitting(true);
+      try {
+        const payload: { name: string; description?: string | null; active: boolean; reason?: string } = {
+          name: formName.trim(),
+          description: formDescription.trim() || null,
+          active: formActive
+        };
+        if (formReason.trim()) {
+          payload.reason = formReason.trim();
+        }
 
-      setGrades(prev => [newGrade, ...prev]);
-      setToastMessage(`Grade "${newGrade.name}" (${newGrade.id}) added successfully!`);
-      handleOpenAdd();
+        const res = await api.post('/ym04/grades', payload);
+        const created = res.data.grade;
+        setToastMessage(`Grade "${created.name}" registered successfully!`);
+        handleOpenAdd();
+        setCurrentPage(1);
+        fetchGrades();
+      } catch (err) {
+        setFormError(getErrorMessage(err, 'Failed to create grade.'));
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
   // Confirm deactivation execution
-  const handleConfirmDeactivate = () => {
+  const handleConfirmDeactivate = async () => {
     if (!pendingGradeUpdate) return;
-    setGrades(prev =>
-      prev.map(item => {
-        if (item.id === pendingGradeUpdate.id) {
-          return {
-            ...item,
-            name: pendingGradeUpdate.name,
-            description: pendingGradeUpdate.description,
-            status: 'Inactive'
-          };
-        }
-        return item;
-      })
+    await executeUpdateGrade(
+      pendingGradeUpdate.id,
+      pendingGradeUpdate.name,
+      pendingGradeUpdate.description,
+      pendingGradeUpdate.active,
+      pendingGradeUpdate.reason
     );
-    setToastMessage(`Grade "${pendingGradeUpdate.name}" set to Inactive successfully.`);
-    setShowDeactivateConfirm(false);
-    setPendingGradeUpdate(null);
-    handleOpenAdd();
   };
+
+  const totalPages = pagination.totalPages || 1;
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (validCurrentPage - 1) * pageSize;
 
   return (
     <div className="ym04-container">
@@ -323,6 +297,21 @@ export default function GradeManagement() {
         </div>
       </header>
 
+      {/* Global Page Error Banner */}
+      {pageError && (
+        <div className="ym04-alert-wrap" role="alert">
+          <Alert type="error">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', width: '100%' }}>
+              <span>{pageError}</span>
+              <Button variant="outline" onClick={() => fetchGrades()}>
+                <RefreshCw size={14} className={loading ? 'ym04-spin' : ''} style={{ marginRight: '6px' }} />
+                Retry
+              </Button>
+            </div>
+          </Alert>
+        </div>
+      )}
+
       {/* ------------------------------------------------------------------ */}
       {/* Top 4-Column Summary Row (3 Metrics + 1 Banner Card)               */}
       {/* ------------------------------------------------------------------ */}
@@ -335,7 +324,7 @@ export default function GradeManagement() {
           onClick={() => {
             setStatusFilter('All');
             setCurrentPage(1);
-            setToastMessage(`Filtering all ${totalGrades} registered quality grades.`);
+            setToastMessage(`Viewing all ${summary.total} registered quality grades.`);
           }}
           onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('All')}
           title="Show all grades"
@@ -346,7 +335,7 @@ export default function GradeManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Grades</span>
-              <strong className="ym04-stat-value">{totalGrades}</strong>
+              <strong className="ym04-stat-value">{summary.total}</strong>
               <span className="ym04-stat-subtext">All registered grades</span>
             </div>
           </div>
@@ -363,7 +352,7 @@ export default function GradeManagement() {
           onClick={() => {
             setStatusFilter('Active');
             setCurrentPage(1);
-            setToastMessage(`Filtering ${activeGrades} active quality grades.`);
+            setToastMessage(`Filtering ${summary.active} active quality grades.`);
           }}
           onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('Active')}
           title="Filter active grades"
@@ -374,7 +363,7 @@ export default function GradeManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Active Grades</span>
-              <strong className="ym04-stat-value">{activeGrades}</strong>
+              <strong className="ym04-stat-value">{summary.active}</strong>
               <span className="ym04-stat-subtext">Currently available</span>
             </div>
           </div>
@@ -391,7 +380,7 @@ export default function GradeManagement() {
           onClick={() => {
             setStatusFilter('Inactive');
             setCurrentPage(1);
-            setToastMessage(`Filtering ${inactiveGrades} inactive quality grades.`);
+            setToastMessage(`Filtering ${summary.inactive} inactive quality grades.`);
           }}
           onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('Inactive')}
           title="Filter inactive grades"
@@ -402,7 +391,7 @@ export default function GradeManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Inactive Grades</span>
-              <strong className="ym04-stat-value">{inactiveGrades}</strong>
+              <strong className="ym04-stat-value">{summary.inactive}</strong>
               <span className="ym04-stat-subtext">Not available</span>
             </div>
           </div>
@@ -411,14 +400,13 @@ export default function GradeManagement() {
           </div>
         </div>
 
-        {/* Card 4: Better Quality, Greater Value Banner Card */}
+        {/* Card 4: Banner Card */}
         <div className="ym04-banner-card" aria-label="YieldMatrix quality value banner">
           <div className="ym04-banner-content">
             <p className="ym04-banner-heading">Better Quality,</p>
             <p className="ym04-banner-subheading">Greater Value</p>
           </div>
           <div className="ym04-banner-graphic" aria-hidden="true">
-            {/* SVG Sun & Rolling Hills matching the Figma design */}
             <svg
               className="ym04-banner-svg"
               viewBox="0 0 160 90"
@@ -426,15 +414,12 @@ export default function GradeManagement() {
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
-              {/* Sun */}
               <circle cx="130" cy="24" r="14" fill="#ECA24F" />
-              {/* Back Hill */}
               <path
                 d="M40 90 C70 50, 110 50, 160 70 L160 90 Z"
                 fill="#4D8E67"
                 opacity="0.85"
               />
-              {/* Foreground Rolling Hill */}
               <path
                 d="M-10 90 C40 60, 90 60, 170 90 Z"
                 fill="#27573A"
@@ -450,7 +435,6 @@ export default function GradeManagement() {
       <div className="ym04-split-layout">
         {/* Left Column: Grade List Card */}
         <section className="ym04-section-card ym04-crop-list-card" aria-labelledby="heading-grade-list">
-          {/* Header */}
           <div className="ym04-section-header">
             <div className="ym04-section-title-wrap">
               <Ribbon className="ym04-section-icon" size={22} strokeWidth={2.2} aria-hidden="true" />
@@ -487,7 +471,10 @@ export default function GradeManagement() {
                 <button
                   type="button"
                   className="ym04-search-clear"
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCurrentPage(1);
+                  }}
                   aria-label="Clear search"
                 >
                   <X size={14} />
@@ -514,86 +501,102 @@ export default function GradeManagement() {
 
           {/* Table */}
           <div className="ym04-table-wrap">
-            <Table
-              headers={['Grade ID', 'Grade Name', 'Description', 'Status', 'Created Date', 'Actions']}
-              className="ym04-table"
-              aria-label="Grade List Table"
-            >
-              {paginatedGrades.length > 0 ? (
-                paginatedGrades.map((grade) => (
-                  <TableRow
-                    key={grade.id}
-                    className={selectedGradeId === grade.id ? 'ym04-row--selected' : ''}
-                  >
-                    <td className="ym04-cell-crop-id">{grade.id}</td>
-                    <td className="ym04-cell-crop-name-bold">{grade.name}</td>
-                    <td className="ym04-cell-grade-desc">{grade.description}</td>
-                    <td>
-                      <StatusBadge status={grade.status} />
-                    </td>
-                    <td className="ym04-cell-date">{grade.createdDate}</td>
-                    <td>
-                      <div className="ym04-action-icons-wrap">
-                        <button
-                          type="button"
-                          className="ym04-icon-action-btn"
-                          onClick={() => handleOpenView(grade)}
-                          title={`View details for ${grade.name}`}
-                          aria-label={`View details for ${grade.name}`}
-                        >
-                          <Eye size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className="ym04-icon-action-btn"
-                          onClick={() => handleOpenEdit(grade)}
-                          title={`Edit ${grade.name}`}
-                          aria-label={`Edit ${grade.name}`}
-                        >
-                          <SquarePen size={16} />
-                        </button>
-                      </div>
+            {loading ? (
+              <div style={{ padding: '48px', textAlign: 'center' }}>
+                <Loader2 size={32} className="ym04-spin" style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
+                <p style={{ color: 'var(--muted)' }}>Loading produce grades...</p>
+              </div>
+            ) : (
+              <Table
+                headers={['Grade ID', 'Grade Name', 'Description', 'Status', 'Actions']}
+                className="ym04-table"
+                aria-label="Grade List Table"
+              >
+                {grades.length > 0 ? (
+                  grades.map((grade) => (
+                    <TableRow
+                      key={grade.id}
+                      className={selectedGrade?.id === grade.id ? 'ym04-row--selected' : ''}
+                    >
+                      <td className="ym04-cell-crop-id" title={grade.id}>
+                        <span style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+                          {grade.id.length > 8 ? `${grade.id.slice(0, 8)}...` : grade.id}
+                        </span>
+                      </td>
+                      <td className="ym04-cell-crop-name-bold">{grade.name}</td>
+                      <td className="ym04-cell-grade-desc">{grade.description || '—'}</td>
+                      <td>
+                        <StatusBadge status={grade.active ? 'Active' : 'Inactive'} />
+                      </td>
+                      <td>
+                        <div className="ym04-action-icons-wrap">
+                          <button
+                            type="button"
+                            className="ym04-icon-action-btn"
+                            onClick={() => handleOpenView(grade)}
+                            title={`View details for ${grade.name}`}
+                            aria-label={`View details for ${grade.name}`}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="ym04-icon-action-btn"
+                            onClick={() => handleOpenEdit(grade)}
+                            title={`Edit ${grade.name}`}
+                            aria-label={`Edit ${grade.name}`}
+                          >
+                            <SquarePen size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <td colSpan={5}>
+                      <EmptyState
+                        title="No grades found"
+                        description={
+                          searchQuery || statusFilter !== 'All'
+                            ? 'No produce grades match your active filter criteria. Try clearing search or status filters.'
+                            : 'No produce grade records available.'
+                        }
+                        action={
+                          (searchQuery || statusFilter !== 'All') ? (
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setSearchQuery('');
+                                setStatusFilter('All');
+                                setCurrentPage(1);
+                              }}
+                            >
+                              Reset Filters
+                            </Button>
+                          ) : (
+                            <Button variant="primary" onClick={handleOpenAdd}>
+                              <Plus size={16} style={{ marginRight: '6px' }} />
+                              Add New Grade
+                            </Button>
+                          )
+                        }
+                      />
                     </td>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <td colSpan={6}>
-                    <EmptyState
-                      title="No grades found"
-                      description={
-                        searchQuery || statusFilter !== 'All'
-                          ? 'No produce grades match your active filter criteria. Try clearing search or status filters.'
-                          : 'No produce grade records available.'
-                      }
-                      action={
-                        (searchQuery || statusFilter !== 'All') ? (
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setSearchQuery('');
-                              setStatusFilter('All');
-                            }}
-                          >
-                            Reset Filters
-                          </Button>
-                        ) : undefined
-                      }
-                    />
-                  </td>
-                </TableRow>
-              )}
-            </Table>
+                )}
+              </Table>
+            )}
           </div>
 
           {/* Pagination Bar */}
           <div className="ym04-pagination-row">
             <span className="ym04-pagination-info">
-              {filteredGrades.length > 0
+              {pagination.total > 0
                 ? `Showing ${startIndex + 1}–${Math.min(
                     startIndex + pageSize,
-                    filteredGrades.length
-                  )} of ${filteredGrades.length} grades`
+                    pagination.total
+                  )} of ${pagination.total} grades`
                 : 'Showing 0 of 0 grades'}
             </span>
 
@@ -649,12 +652,11 @@ export default function GradeManagement() {
 
         {/* Right Column: Add / Edit Grade Side Panel Card */}
         <section className="ym04-section-card ym04-side-panel-card" aria-labelledby="heading-side-panel">
-          {/* Header */}
           <div className="ym04-side-panel-header">
             <div className="ym04-section-title-wrap">
               <Ribbon className="ym04-section-icon" size={20} strokeWidth={2.2} aria-hidden="true" />
               <h2 id="heading-side-panel" className="ym04-side-panel-title">
-                {panelMode === 'view' ? 'Grade Details' : 'Add / Edit Grade'}
+                {panelMode === 'view' ? 'Grade Details' : panelMode === 'edit' ? 'Edit Grade' : 'Add New Grade'}
               </h2>
             </div>
             <button
@@ -668,34 +670,47 @@ export default function GradeManagement() {
             </button>
           </div>
 
-          {/* Error Banner */}
+          {/* Form Error Banner */}
           {formError && (
-            <div className="ym04-form-alert-wrap">
+            <div className="ym04-form-alert-wrap" style={{ margin: '16px 20px 0' }}>
               <Alert type="error">{formError}</Alert>
             </div>
           )}
 
-          {panelMode === 'view' ? (
+          {panelMode === 'view' && selectedGrade ? (
             /* View Mode Readout */
             <div className="ym04-view-panel-body">
               <div className="ym04-detail-grid">
-                <div className="ym04-detail-item">
+                <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
                   <span className="ym04-detail-label">Grade ID</span>
-                  <span className="ym04-detail-value">{selectedGradeId}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="ym04-detail-value" style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+                      {selectedGrade.id}
+                    </span>
+                    <button
+                      type="button"
+                      className="ym04-copy-btn"
+                      onClick={() => handleCopyId(selectedGrade.id)}
+                      title="Copy Grade ID"
+                      aria-label="Copy Grade ID"
+                    >
+                      {copiedId === selectedGrade.id ? <CheckCircle2 size={13} color="#1b8754" /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="ym04-detail-item">
+                  <span className="ym04-detail-label">Grade Name</span>
+                  <span className="ym04-detail-value">{selectedGrade.name}</span>
                 </div>
                 <div className="ym04-detail-item">
                   <span className="ym04-detail-label">Status</span>
                   <span className="ym04-detail-value">
-                    <StatusBadge status={formStatus} />
+                    <StatusBadge status={selectedGrade.active ? 'Active' : 'Inactive'} />
                   </span>
                 </div>
                 <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
-                  <span className="ym04-detail-label">Grade Name</span>
-                  <span className="ym04-detail-value">{formName}</span>
-                </div>
-                <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
                   <span className="ym04-detail-label">Description</span>
-                  <p className="ym04-detail-desc">{formDescription || 'No description provided.'}</p>
+                  <p className="ym04-detail-desc">{selectedGrade.description || 'No description provided.'}</p>
                 </div>
               </div>
 
@@ -712,7 +727,7 @@ export default function GradeManagement() {
                   type="button"
                   variant="primary"
                   className="ym04-panel-btn-save"
-                  onClick={() => setPanelMode('edit')}
+                  onClick={() => handleOpenEdit(selectedGrade)}
                 >
                   Edit This Grade
                 </Button>
@@ -755,9 +770,8 @@ export default function GradeManagement() {
                     <input
                       type="radio"
                       name="grade-status"
-                      value="Active"
-                      checked={formStatus === 'Active'}
-                      onChange={() => setFormStatus('Active')}
+                      checked={formActive === true}
+                      onChange={() => setFormActive(true)}
                       className="ym04-radio-input"
                     />
                     <span className="ym04-radio-custom" />
@@ -768,15 +782,24 @@ export default function GradeManagement() {
                     <input
                       type="radio"
                       name="grade-status"
-                      value="Inactive"
-                      checked={formStatus === 'Inactive'}
-                      onChange={() => setFormStatus('Inactive')}
+                      checked={formActive === false}
+                      onChange={() => setFormActive(false)}
                       className="ym04-radio-input"
                     />
                     <span className="ym04-radio-custom" />
                     <span className="ym04-radio-text">Inactive</span>
                   </label>
                 </div>
+              </div>
+
+              {/* Field 4: Audit Reason (Optional) */}
+              <div className="ym04-form-group">
+                <InputField
+                  label="Audit Reason (Optional)"
+                  placeholder="Reason for change (e.g., Quality criteria revision)"
+                  value={formReason}
+                  onChange={(e) => setFormReason(e.target.value)}
+                />
               </div>
 
               {/* Action Buttons */}
@@ -786,6 +809,7 @@ export default function GradeManagement() {
                   variant="outline"
                   className="ym04-panel-btn-cancel"
                   onClick={handleClosePanel}
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </Button>
@@ -793,8 +817,13 @@ export default function GradeManagement() {
                   type="submit"
                   variant="primary"
                   className="ym04-panel-btn-save"
+                  disabled={isSubmitting}
                 >
-                  Save Grade
+                  {isSubmitting
+                    ? 'Saving...'
+                    : panelMode === 'edit'
+                    ? 'Update Grade'
+                    : 'Save Grade'}
                 </Button>
               </div>
             </form>
@@ -802,82 +831,25 @@ export default function GradeManagement() {
         </section>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Bottom Quick Actions Bar                                           */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="ym04-quick-actions-bar" aria-label="Quick Actions">
-        <div className="ym04-quick-actions-left">
-          <Zap className="ym04-quick-actions-icon" size={22} aria-hidden="true" />
-          <div>
-            <h3 className="ym04-quick-actions-title">Quick Actions</h3>
-            <p className="ym04-quick-actions-subtitle">Access grade management features quickly.</p>
-          </div>
-        </div>
-
-        <div className="ym04-quick-actions-btns">
-          {/* Action 1: Manage Grades (Active on this page) */}
-          <button
-            type="button"
-            className="ym04-qa-btn ym04-qa-btn--green"
-            onClick={() => {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              setToastMessage('Already viewing Grade Management. Filter or edit grades above.');
-            }}
-          >
-            <Ribbon size={16} strokeWidth={2.2} aria-hidden="true" />
-            <span>Manage Grades</span>
-            <ArrowRight size={16} aria-hidden="true" />
-          </button>
-
-          {/* Action 2: View Grade Insights */}
-          <button
-            type="button"
-            className="ym04-qa-btn ym04-qa-btn--white"
-            onClick={() => {
-              setToastMessage('Navigating to Market Insights...');
-              navigate('/admin/market-data');
-            }}
-          >
-            <BarChart2 size={16} aria-hidden="true" />
-            <span>View Grade Insights</span>
-            <ArrowRight size={16} aria-hidden="true" />
-          </button>
-
-          {/* Action 3: View Audit Trail */}
-          <button
-            type="button"
-            className="ym04-qa-btn ym04-qa-btn--white"
-            onClick={() => {
-              setToastMessage('Navigating to Audit Trail...');
-              navigate('/admin/audit-trail');
-            }}
-          >
-            <FileText size={16} aria-hidden="true" />
-            <span>View Audit Trail</span>
-            <ArrowRight size={16} aria-hidden="true" />
-          </button>
-        </div>
-      </section>
-
-      {/* Status Deactivation Confirmation Dialog */}
-      <ConfirmDialog
-        open={showDeactivateConfirm}
-        title="Deactivate Quality Grade"
-        description={`Are you sure you want to deactivate "${pendingGradeUpdate?.name}"? Inactive grades cannot be assigned to produce lots.`}
-        simulationNote="This action can be undone by editing the grade and setting status back to Active."
-        confirmLabel="Deactivate"
-        onCancel={() => {
-          setShowDeactivateConfirm(false);
-          setPendingGradeUpdate(null);
-        }}
-        onConfirm={handleConfirmDeactivate}
-      />
+      {/* Confirmation Dialog for Deactivation */}
+      {showDeactivateConfirm && pendingGradeUpdate && (
+        <ConfirmDialog
+          open={showDeactivateConfirm}
+          title="Deactivate Grade"
+          description={`Are you sure you want to set grade "${pendingGradeUpdate.name}" to Inactive? This will pause produce grading for this tier.`}
+          confirmLabel="Yes, Deactivate"
+          onCancel={() => {
+            setShowDeactivateConfirm(false);
+            setPendingGradeUpdate(null);
+          }}
+          onConfirm={handleConfirmDeactivate}
+        />
+      )}
 
       {/* Toast Notification */}
       {toastMessage && (
         <Toast
           message={toastMessage}
-          open={Boolean(toastMessage)}
           onClose={() => setToastMessage(null)}
         />
       )}

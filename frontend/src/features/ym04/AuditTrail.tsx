@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import {
   Sprout,
   FileText,
@@ -17,15 +18,16 @@ import {
   Zap,
   ArrowRight,
   Info,
-  CheckCircle2,
-  AlertCircle
+  Loader2
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { StatusBadge } from '../../components/StatusBadge';
 import { EmptyState } from '../../components/EmptyState';
 import { Table, TableRow } from '../../components/Table';
 import { Toast } from '../../components/Toast';
-import { AuditEventItem, GENERATED_AUDIT_EVENTS } from './auditMockData';
+import { Alert } from '../../components/Alert';
+import api from '../../services/api';
+import { AuditEventItem, Pagination, formatColomboDate, getErrorMessage } from './types';
 
 export type { AuditEventItem };
 
@@ -42,6 +44,29 @@ function getPaginationItems(current: number, total: number): (number | string)[]
   return [1, '...', current, '...', total];
 }
 
+// Compute ISO date range in Colombo local time
+function getDateRangeParams(filter: string): { dateFrom?: string; dateTo?: string } {
+  if (filter === 'Today') {
+    const now = new Date();
+    // format as YYYY-MM-DD
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+    return { dateFrom: todayStr, dateTo: todayStr };
+  }
+  if (filter === 'Last7Days') {
+    const now = new Date();
+    const past = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const pastYear = past.getFullYear();
+    const pastMonth = String(past.getMonth() + 1).padStart(2, '0');
+    const pastDay = String(past.getDate()).padStart(2, '0');
+    const pastStr = `${pastYear}-${pastMonth}-${pastDay}`;
+    return { dateFrom: pastStr };
+  }
+  return {};
+}
+
 export default function AuditTrail() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -53,75 +78,93 @@ export default function AuditTrail() {
   const [targetFilter, setTargetFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All');
 
-  // Interactive UI State
+  // Interactive UI & Data State
+  const [events, setEvents] = useState<AuditEventItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5; // 5 items per page to match the exact 1-5 of 245 in the Figma screenshot
+  const pageSize = 5;
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 5,
+    total: 0,
+    totalPages: 1
+  });
+  const [summary, setSummary] = useState<{
+    totalEvents: number;
+    todayEvents: number;
+    referenceChanges: number;
+    adminActions: number;
+  }>({
+    totalEvents: 0,
+    todayEvents: 0,
+    referenceChanges: 0,
+    adminActions: 0
+  });
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Filtered dataset
-  const filteredEvents = useMemo(() => {
-    return GENERATED_AUDIT_EVENTS.filter((item) => {
-      // 1. Search term (Event ID, Target, Actor, Action, Date)
-      if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const matchesId = item.id.toLowerCase().includes(query);
-        const matchesTarget = item.target.toLowerCase().includes(query);
-        const matchesActor = item.actor.toLowerCase().includes(query);
-        const matchesAction = item.action.toLowerCase().includes(query);
-        const matchesDate = item.dateTime.toLowerCase().includes(query);
-        if (!matchesId && !matchesTarget && !matchesActor && !matchesAction && !matchesDate) {
-          return false;
+  // Fetch live audit logs
+  const fetchAuditLogs = useCallback(
+    async (signal?: AbortSignal, isManualRefresh = false) => {
+      if (isManualRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      try {
+        const params: Record<string, any> = {
+          page: currentPage,
+          limit: pageSize
+        };
+
+        if (searchTerm.trim()) {
+          params.search = searchTerm.trim();
         }
-      }
-
-      // 2. Action Filter
-      if (actionFilter !== 'All' && item.action !== actionFilter) {
-        return false;
-      }
-
-      // 3. Actor Filter
-      if (actorFilter !== 'All' && item.actor !== actorFilter) {
-        return false;
-      }
-
-      // 4. Target Filter
-      if (targetFilter !== 'All') {
-        if (targetFilter === 'Crops' && item.targetType !== 'Crop') return false;
-        if (targetFilter === 'Grades' && item.targetType !== 'Grade') return false;
-        if (targetFilter === 'System' && item.targetType !== 'System') return false;
-      }
-
-      // 5. Date Filter
-      if (dateFilter !== 'All') {
-        if (dateFilter === 'Today') {
-          // In the mock context, Today is 05 Nov 2026
-          return item.dateTime.includes('05 Nov 2026');
+        if (actionFilter !== 'All') {
+          params.action = actionFilter;
         }
-        if (dateFilter === 'Last7Days') {
-          // Within Nov 2026
-          return item.dateTime.includes('Nov 2026');
+        if (actorFilter !== 'All') {
+          params.actor = actorFilter;
         }
+        if (targetFilter !== 'All') {
+          params.targetType = targetFilter;
+        }
+
+        const dateParams = getDateRangeParams(dateFilter);
+        if (dateParams.dateFrom) params.dateFrom = dateParams.dateFrom;
+        if (dateParams.dateTo) params.dateTo = dateParams.dateTo;
+
+        const response = await api.get('/ym04/audit-logs', { params, signal });
+        const { events: list, pagination: pag, summary: sum } = response.data;
+        setEvents(list || []);
+        if (pag) setPagination(pag);
+        if (sum) setSummary(sum);
+
+        if (isManualRefresh) {
+          setToastMessage('Audit log data refreshed successfully.');
+        }
+      } catch (err) {
+        if (axios.isCancel(err)) return;
+        setError(getErrorMessage(err, 'Failed to load audit logs.'));
+      } finally {
+        setLoading(false);
+        setIsRefreshing(false);
       }
+    },
+    [currentPage, pageSize, searchTerm, actionFilter, actorFilter, targetFilter, dateFilter]
+  );
 
-      return true;
-    });
-  }, [searchTerm, actionFilter, actorFilter, targetFilter, dateFilter]);
-
-  // Pagination calculation
-  const totalItems = filteredEvents.length;
-  const totalPages = Math.ceil(totalItems / pageSize) || 1;
-
-  // Ensure current page is valid when filters change
-  const validCurrentPage = Math.min(currentPage, totalPages);
-
-  const paginatedEvents = useMemo(() => {
-    const startIndex = (validCurrentPage - 1) * pageSize;
-    return filteredEvents.slice(startIndex, startIndex + pageSize);
-  }, [filteredEvents, validCurrentPage, pageSize]);
-
-  const startRecordNumber = totalItems === 0 ? 0 : (validCurrentPage - 1) * pageSize + 1;
-  const endRecordNumber = Math.min(validCurrentPage * pageSize, totalItems);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchAuditLogs(controller.signal);
+    return () => {
+      controller.abort();
+    };
+  }, [fetchAuditLogs]);
 
   // Reset all filters
   const handleResetFilters = () => {
@@ -136,14 +179,10 @@ export default function AuditTrail() {
 
   // Handle Refresh
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      setToastMessage('Audit log data refreshed successfully.');
-    }, 600);
+    fetchAuditLogs(undefined, true);
   };
 
-  // Handle View Details - navigates cleanly to Page 5: Audit Event Details
+  // Handle View Details
   const handleViewDetails = (item: AuditEventItem) => {
     if (location.pathname.startsWith('/admin/audit-trail')) {
       navigate(`/admin/audit-trail/${item.id}`);
@@ -151,6 +190,12 @@ export default function AuditTrail() {
       navigate(`/admin/reference-data/audit-trail/${item.id}`);
     }
   };
+
+  const totalItems = pagination.total || 0;
+  const totalPages = pagination.totalPages || 1;
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startRecordNumber = totalItems === 0 ? 0 : (validCurrentPage - 1) * pageSize + 1;
+  const endRecordNumber = Math.min(validCurrentPage * pageSize, totalItems);
 
   return (
     <div className="ym04-container" role="region" aria-label="Audit Trail">
@@ -169,13 +214,28 @@ export default function AuditTrail() {
         </div>
       </div>
 
+      {/* Global Error Banner */}
+      {error && (
+        <div className="ym04-alert-wrap" role="alert">
+          <Alert type="error">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', width: '100%' }}>
+              <span>{error}</span>
+              <Button variant="outline" onClick={() => fetchAuditLogs()}>
+                <RefreshCw size={14} className={loading ? 'ym04-spin' : ''} style={{ marginRight: '6px' }} />
+                Retry
+              </Button>
+            </div>
+          </Alert>
+        </div>
+      )}
+
       {/* ------------------------------------------------------------------ */}
       {/* 2. Top Metric / Stat Cards (4 Cards)                               */}
       {/* ------------------------------------------------------------------ */}
       <section className="ym04-stats-grid" aria-label="Audit Trail Metrics">
         {/* Card 1: Total Events */}
         <div
-          className="ym04-stat-card"
+          className="ym04-stat-card cursor-pointer"
           role="button"
           tabIndex={0}
           title="Click to view all events"
@@ -188,7 +248,7 @@ export default function AuditTrail() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Events</span>
-              <strong className="ym04-stat-value">245</strong>
+              <strong className="ym04-stat-value">{summary.totalEvents}</strong>
               <span className="ym04-stat-subtext">All audit events</span>
             </div>
           </div>
@@ -199,14 +259,14 @@ export default function AuditTrail() {
 
         {/* Card 2: Today Events */}
         <div
-          className="ym04-stat-card"
+          className="ym04-stat-card cursor-pointer"
           role="button"
           tabIndex={0}
           title="Click to filter events today"
           onClick={() => {
             setDateFilter('Today');
             setCurrentPage(1);
-            setToastMessage('Filtered by today\'s events.');
+            setToastMessage("Filtered by today's events.");
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -221,7 +281,7 @@ export default function AuditTrail() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Today Events</span>
-              <strong className="ym04-stat-value">12</strong>
+              <strong className="ym04-stat-value">{summary.todayEvents}</strong>
               <span className="ym04-stat-subtext">Events today</span>
             </div>
           </div>
@@ -232,14 +292,14 @@ export default function AuditTrail() {
 
         {/* Card 3: Reference Changes */}
         <div
-          className="ym04-stat-card"
+          className="ym04-stat-card cursor-pointer"
           role="button"
           tabIndex={0}
           title="Click to filter Crop & Grade reference changes"
           onClick={() => {
             setTargetFilter('Crops');
             setCurrentPage(1);
-            setToastMessage('Filtered by Reference Changes (Crops & Grades).');
+            setToastMessage('Filtered by Reference Changes (Crops).');
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -254,7 +314,7 @@ export default function AuditTrail() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Reference Changes</span>
-              <strong className="ym04-stat-value">68</strong>
+              <strong className="ym04-stat-value">{summary.referenceChanges}</strong>
               <span className="ym04-stat-subtext">Crop &amp; Grade changes</span>
             </div>
           </div>
@@ -265,7 +325,7 @@ export default function AuditTrail() {
 
         {/* Card 4: Admin Actions */}
         <div
-          className="ym04-stat-card"
+          className="ym04-stat-card cursor-pointer"
           role="button"
           tabIndex={0}
           title="Click to filter Admin activities"
@@ -287,7 +347,7 @@ export default function AuditTrail() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Admin Actions</span>
-              <strong className="ym04-stat-value">74</strong>
+              <strong className="ym04-stat-value">{summary.adminActions}</strong>
               <span className="ym04-stat-subtext">Admin activities</span>
             </div>
           </div>
@@ -319,7 +379,10 @@ export default function AuditTrail() {
             <button
               type="button"
               className="ym04-search-clear"
-              onClick={() => setSearchTerm('')}
+              onClick={() => {
+                setSearchTerm('');
+                setCurrentPage(1);
+              }}
               aria-label="Clear search input"
             >
               <X size={15} />
@@ -345,7 +408,7 @@ export default function AuditTrail() {
           </select>
         </div>
 
-        {/* Filter 2: Actor Dropdown */}
+        {/* Filter 2: Actor Dropdown (Strictly Admin & System only) */}
         <div className="ym04-audit-select-wrap">
           <select
             className="ym04-audit-select"
@@ -359,7 +422,6 @@ export default function AuditTrail() {
             <option value="All">All Actors</option>
             <option value="Admin">Admin</option>
             <option value="System">System</option>
-            <option value="Agri Officer">Agri Officer</option>
           </select>
         </div>
 
@@ -393,10 +455,9 @@ export default function AuditTrail() {
             }}
             aria-label="Filter by Date Range"
           >
-            <option value="All">Select Date Range</option>
-            <option value="Today">Today (05 Nov)</option>
-            <option value="Last7Days">Last 7 Days</option>
             <option value="All">All Time</option>
+            <option value="Today">Today</option>
+            <option value="Last7Days">Last 7 Days</option>
           </select>
         </div>
       </section>
@@ -410,7 +471,7 @@ export default function AuditTrail() {
           variant="outline"
           className="ym04-btn-refresh"
           onClick={handleRefresh}
-          disabled={isRefreshing}
+          disabled={isRefreshing || loading}
           aria-label="Refresh audit events list"
         >
           <RotateCw size={15} className={isRefreshing ? 'ym04-spin' : ''} aria-hidden="true" />
@@ -423,101 +484,132 @@ export default function AuditTrail() {
       {/* ------------------------------------------------------------------ */}
       <section className="ym04-audit-card" aria-label="Audit Events List">
         <div className="ym04-table-wrap">
-          <Table
-            headers={['Event ID', 'Actor', 'Action', 'Target', 'Date & Time', 'Status', 'Actions']}
-            className="ym04-audit-table"
-            aria-label="Audit Events List"
-          >
-            {paginatedEvents.length > 0 ? (
-              paginatedEvents.map((item) => (
-                <TableRow key={item.id}>
-                  {/* Event ID */}
-                  <td
-                    className="ym04-cell-event-id"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => handleViewDetails(item)}
-                    title={`View event ${item.id} details`}
-                  >
-                    {item.id}
-                  </td>
+          {loading ? (
+            <div style={{ padding: '48px', textAlign: 'center' }}>
+              <Loader2 size={32} className="ym04-spin" style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
+              <p style={{ color: 'var(--muted)' }}>Loading audit events...</p>
+            </div>
+          ) : (
+            <Table
+              headers={['Event ID', 'Actor', 'Action', 'Target', 'Date & Time (Colombo)', 'Status', 'Actions']}
+              className="ym04-audit-table"
+              aria-label="Audit Events List"
+            >
+              {events.length > 0 ? (
+                events.map((item) => {
+                  const displayTime =
+                    item.dateTime || formatColomboDate(item.occurredAt);
+                  const displayActor = item.actor || 'System';
+                  const avatarLetter =
+                    item.actorAvatar || displayActor.charAt(0).toUpperCase();
 
-                  {/* Actor */}
-                  <td>
-                    <div className="ym04-cell-actor">
-                      <span className="ym04-actor-avatar" aria-hidden="true">
-                        {item.actorAvatar}
-                      </span>
-                      <span>{item.actor}</span>
-                    </div>
-                  </td>
+                  return (
+                    <TableRow key={item.id}>
+                      {/* Event ID */}
+                      <td
+                        className="ym04-cell-event-id"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => handleViewDetails(item)}
+                        title={`View event ${item.id} details`}
+                      >
+                        <span style={{ fontFamily: 'monospace' }}>
+                          {item.id.length > 8 ? `${item.id.slice(0, 8)}...` : item.id}
+                        </span>
+                      </td>
 
-                  {/* Action */}
-                  <td>
-                    <span
-                      className={`ym04-badge-action ym04-badge-action--${item.action.toLowerCase()}`}
-                    >
-                      {item.action}
-                    </span>
-                  </td>
+                      {/* Actor */}
+                      <td>
+                        <div className="ym04-cell-actor">
+                          <span className="ym04-actor-avatar" aria-hidden="true">
+                            {avatarLetter}
+                          </span>
+                          <span>{displayActor}</span>
+                        </div>
+                      </td>
 
-                  {/* Target */}
-                  <td>
-                    <div className="ym04-cell-target">
-                      {item.targetType === 'Crop' ? (
-                        <Sprout size={16} className="ym04-target-icon ym04-target-icon--crop" aria-hidden="true" />
-                      ) : item.targetType === 'Grade' ? (
-                        <Tag size={15} className="ym04-target-icon ym04-target-icon--grade" aria-hidden="true" />
-                      ) : (
-                        <Info size={15} className="ym04-target-icon ym04-target-icon--system" aria-hidden="true" />
-                      )}
-                      <span>{item.target}</span>
-                    </div>
-                  </td>
+                      {/* Action */}
+                      <td>
+                        <span
+                          className={`ym04-badge-action ym04-badge-action--${(
+                            item.action || 'updated'
+                          ).toLowerCase()}`}
+                        >
+                          {item.action}
+                        </span>
+                      </td>
 
-                  {/* Date & Time */}
-                  <td className="ym04-cell-date">{item.dateTime}</td>
+                      {/* Target */}
+                      <td>
+                        <div className="ym04-cell-target">
+                          {item.targetType === 'Crop' ? (
+                            <Sprout
+                              size={16}
+                              className="ym04-target-icon ym04-target-icon--crop"
+                              aria-hidden="true"
+                            />
+                          ) : item.targetType === 'Grade' ? (
+                            <Tag
+                              size={15}
+                              className="ym04-target-icon ym04-target-icon--grade"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <Info
+                              size={15}
+                              className="ym04-target-icon ym04-target-icon--system"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span>{item.targetName || item.target}</span>
+                        </div>
+                      </td>
 
-                  {/* Status */}
-                  <td>
-                    <StatusBadge status={item.status} />
-                  </td>
+                      {/* Date & Time */}
+                      <td className="ym04-cell-date">{displayTime}</td>
 
-                  {/* Actions */}
-                  <td>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="ym04-btn-view-details"
-                      onClick={() => handleViewDetails(item)}
-                      aria-label={`View audit details for event ${item.id}`}
-                    >
-                      View Details
-                    </Button>
+                      {/* Status */}
+                      <td>
+                        <StatusBadge status={item.status || 'Success'} />
+                      </td>
+
+                      {/* Actions */}
+                      <td>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="ym04-btn-view-details"
+                          onClick={() => handleViewDetails(item)}
+                          aria-label={`View audit details for event ${item.id}`}
+                        >
+                          View Details
+                        </Button>
+                      </td>
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <td colSpan={7}>
+                    <EmptyState
+                      title="No audit events match your filters"
+                      description="Try clearing your search terms or resetting the action, actor, or date filters to view all audit records."
+                      action={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="ym04-reset-filter-btn"
+                          onClick={handleResetFilters}
+                        >
+                          <RefreshCw size={14} aria-hidden="true" />
+                          <span>Reset Filters</span>
+                        </Button>
+                      }
+                    />
                   </td>
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <td colSpan={7}>
-                  <EmptyState
-                    title="No audit events match your filters"
-                    description="Try clearing your search terms or resetting the action, actor, or date filters to view all audit records."
-                    action={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="ym04-reset-filter-btn"
-                        onClick={handleResetFilters}
-                      >
-                        <RefreshCw size={14} aria-hidden="true" />
-                        <span>Reset Filters</span>
-                      </Button>
-                    }
-                  />
-                </td>
-              </TableRow>
-            )}
-          </Table>
+              )}
+            </Table>
+          )}
         </div>
 
         {/* ------------------------------------------------------------------ */}
@@ -600,7 +692,7 @@ export default function AuditTrail() {
             onClick={() => {
               setTargetFilter('Crops');
               setCurrentPage(1);
-              setToastMessage('Filtered table to reference changes.');
+              setToastMessage('Filtered table to Crop changes.');
             }}
           >
             <BarChart2 size={16} aria-hidden="true" />

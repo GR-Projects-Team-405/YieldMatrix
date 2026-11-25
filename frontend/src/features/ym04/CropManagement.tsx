@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import axios from 'axios';
 import {
   Sprout,
   Check,
@@ -10,287 +10,52 @@ import {
   SquarePen,
   ChevronLeft,
   ChevronRight,
-  Zap,
-  ArrowRight,
-  BarChart2,
-  ShieldCheck,
-  AlertCircle
+  RefreshCw,
+  Loader2,
+  Copy,
+  CheckCircle2
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { InputField } from '../../components/InputField';
-import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Alert } from '../../components/Alert';
 import { EmptyState } from '../../components/EmptyState';
 import { Table, TableRow } from '../../components/Table';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
-
-export interface CropItem {
-  id: string;
-  name: string;
-  category: 'Cereal' | 'Vegetable' | 'Fruit' | 'Legume' | 'Cash Crop';
-  status: 'Active' | 'Inactive';
-  createdDate: string;
-  description: string;
-  storageCondition?: string;
-}
-
-// 24 realistic agricultural crop records matching Figma mock metrics (20 Active, 4 Inactive)
-const INITIAL_CROPS: CropItem[] = [
-  {
-    id: 'CR001',
-    name: 'Rice',
-    category: 'Cereal',
-    status: 'Active',
-    createdDate: '05 Nov 2026',
-    description: 'Oryza sativa · Long-grain paddy cultivated across dry and intermediate agricultural zones.',
-    storageCondition: 'Moisture < 14%, dry aerated silo storage'
-  },
-  {
-    id: 'CR002',
-    name: 'Maize',
-    category: 'Cereal',
-    status: 'Active',
-    createdDate: '04 Nov 2026',
-    description: 'Zea mays · High yield yellow corn cultivated for food processing and animal feed feedstocks.',
-    storageCondition: 'Cool, pest-controlled ambient warehouse'
-  },
-  {
-    id: 'CR003',
-    name: 'Tomato',
-    category: 'Vegetable',
-    status: 'Active',
-    createdDate: '03 Nov 2026',
-    description: 'Solanum lycopersicum · High-perishable vegetable harvested for fresh markets and sauce processing.',
-    storageCondition: 'Cold-chain storage 10-12°C, 85-90% RH'
-  },
-  {
-    id: 'CR004',
-    name: 'Carrot',
-    category: 'Vegetable',
-    status: 'Inactive',
-    createdDate: '01 Nov 2026',
-    description: 'Daucus carota · Root vegetable graded by taper, root diameter, and uniform orange hue.',
-    storageCondition: 'Cold-chain storage 0-4°C, 95% RH'
-  },
-  {
-    id: 'CR005',
-    name: 'Cabbage',
-    category: 'Vegetable',
-    status: 'Active',
-    createdDate: '30 Oct 2026',
-    description: 'Brassica oleracea · Tight-headed green cabbage cultivated in highland cooler climates.',
-    storageCondition: 'Cold-chain storage 0-2°C, high humidity'
-  },
-  {
-    id: 'CR006',
-    name: 'Potato',
-    category: 'Vegetable',
-    status: 'Active',
-    createdDate: '28 Oct 2026',
-    description: 'Solanum tuberosum · Starchy tuber crop grown across Nuwara Eliya and Badulla regions.',
-    storageCondition: 'Well-ventilated dark store 8-10°C'
-  },
-  {
-    id: 'CR007',
-    name: 'Big Onion',
-    category: 'Vegetable',
-    status: 'Active',
-    createdDate: '27 Oct 2026',
-    description: 'Allium cepa · Dry bulb onion essential for local culinary supply and market reserves.',
-    storageCondition: 'Dry ambient air with continuous airflow'
-  },
-  {
-    id: 'CR008',
-    name: 'Green Chilli',
-    category: 'Vegetable',
-    status: 'Active',
-    createdDate: '25 Oct 2026',
-    description: 'Capsicum annuum · Pungent green hot chilli harvested daily for fresh market trade.',
-    storageCondition: 'Chilled 7-10°C, perforated packaging'
-  },
-  {
-    id: 'CR009',
-    name: 'Banana',
-    category: 'Fruit',
-    status: 'Active',
-    createdDate: '24 Oct 2026',
-    description: 'Musa acuminata · Premium sour banana (Ambul) and Cavendish export grade varieties.',
-    storageCondition: 'Controlled atmosphere 13-14°C'
-  },
-  {
-    id: 'CR010',
-    name: 'Papaya',
-    category: 'Fruit',
-    status: 'Active',
-    createdDate: '22 Oct 2026',
-    description: 'Carica papaya · Red Lady variety cultivated in dry intermediate plains.',
-    storageCondition: 'Ventilated crates 12°C'
-  },
-  {
-    id: 'CR011',
-    name: 'Mango',
-    category: 'Fruit',
-    status: 'Inactive',
-    createdDate: '20 Oct 2026',
-    description: 'Mangifera indica · Sweet tropical mango varieties, seasonal harvest cycle.',
-    storageCondition: 'Dry ambient cooling 12-14°C'
-  },
-  {
-    id: 'CR012',
-    name: 'Pineapple',
-    category: 'Fruit',
-    status: 'Active',
-    createdDate: '18 Oct 2026',
-    description: 'Ananas comosus · Mauritius variety pineapples with high sweetness and distinct aroma.',
-    storageCondition: 'Cold-chain storage 10-12°C'
-  },
-  {
-    id: 'CR013',
-    name: 'Finger Millet',
-    category: 'Cereal',
-    status: 'Active',
-    createdDate: '16 Oct 2026',
-    description: 'Eleusine coracana · Kurakkan grain with high calcium and dietary fiber content.',
-    storageCondition: 'Moisture < 12%, sealed silo storage'
-  },
-  {
-    id: 'CR014',
-    name: 'Black Gram',
-    category: 'Legume',
-    status: 'Active',
-    createdDate: '14 Oct 2026',
-    description: 'Vigna mungo · Protein-rich black gram pulse used for flour and commercial papadum.',
-    storageCondition: 'Airtight sacks in pest-free dry store'
-  },
-  {
-    id: 'CR015',
-    name: 'Green Gram',
-    category: 'Legume',
-    status: 'Active',
-    createdDate: '12 Oct 2026',
-    description: 'Vigna radiata · Mung bean pulse cultivated across Mahaweli river valleys.',
-    storageCondition: 'Dry aerated warehouse'
-  },
-  {
-    id: 'CR016',
-    name: 'Cowpea',
-    category: 'Legume',
-    status: 'Active',
-    createdDate: '10 Oct 2026',
-    description: 'Vigna unguiculata · Drought-tolerant pulse crop for balanced rural nutrition.',
-    storageCondition: 'Moisture < 11%, fumigated storage'
-  },
-  {
-    id: 'CR017',
-    name: 'Soya Bean',
-    category: 'Legume',
-    status: 'Inactive',
-    createdDate: '08 Oct 2026',
-    description: 'Glycine max · Industrial processing pulse for edible oil and poultry feedstocks.',
-    storageCondition: 'Standard dry warehouse'
-  },
-  {
-    id: 'CR018',
-    name: 'Ceylon Cinnamon',
-    category: 'Cash Crop',
-    status: 'Active',
-    createdDate: '06 Oct 2026',
-    description: 'Cinnamomum verum · Pure Ceylon true cinnamon quills with ultra-low coumarin levels.',
-    storageCondition: 'Dry ventilated spice storage'
-  },
-  {
-    id: 'CR019',
-    name: 'Black Pepper',
-    category: 'Cash Crop',
-    status: 'Active',
-    createdDate: '04 Oct 2026',
-    description: 'Piper nigrum · High-piperine whole black peppercorns for global spice export.',
-    storageCondition: 'Moisture < 12%, multi-wall craft bags'
-  },
-  {
-    id: 'CR020',
-    name: 'Cardamom',
-    category: 'Cash Crop',
-    status: 'Active',
-    createdDate: '02 Oct 2026',
-    description: 'Elettaria cardamomum · Green aromatic cardamom pods grown under hill country shade canopy.',
-    storageCondition: 'Cool, sealed dark containers'
-  },
-  {
-    id: 'CR021',
-    name: 'Ceylon Tea',
-    category: 'Cash Crop',
-    status: 'Active',
-    createdDate: '30 Sep 2026',
-    description: 'Camellia sinensis · Hand-picked two leaves and a bud orthodox black tea.',
-    storageCondition: 'Moisture-free aluminum lined sacks'
-  },
-  {
-    id: 'CR022',
-    name: 'Coconut',
-    category: 'Cash Crop',
-    status: 'Active',
-    createdDate: '28 Sep 2026',
-    description: 'Cocos nucifera · Coconut triangle harvested fresh nuts and copra processing.',
-    storageCondition: 'Well-aerated covered yard'
-  },
-  {
-    id: 'CR023',
-    name: 'Pumpkin',
-    category: 'Vegetable',
-    status: 'Active',
-    createdDate: '26 Sep 2026',
-    description: 'Cucurbita moschata · Hard rind yellow pumpkin with exceptionally long shelf stability.',
-    storageCondition: 'Ambient dry floor storage'
-  },
-  {
-    id: 'CR024',
-    name: 'Beetroot',
-    category: 'Vegetable',
-    status: 'Inactive',
-    createdDate: '24 Sep 2026',
-    description: 'Beta vulgaris · Vibrant red root crop grown in upcountry horticultural farms.',
-    storageCondition: 'Cold-chain storage 0-3°C, 95% RH'
-  }
-];
-
-const CATEGORIES: Array<CropItem['category']> = [
-  'Cereal',
-  'Vegetable',
-  'Fruit',
-  'Legume',
-  'Cash Crop'
-];
+import api from '../../services/api';
+import { Crop, Pagination, getErrorMessage } from './types';
 
 function getPaginationItems(current: number, total: number): (number | string)[] {
   if (total <= 4) {
     return Array.from({ length: total }, (_, i) => i + 1);
   }
   if (total === 5) {
-    if (current <= 2) {
-      return [1, 2, 3, '...', 5];
-    }
-    if (current >= 4) {
-      return [1, '...', 3, 4, 5];
-    }
+    if (current <= 2) return [1, 2, 3, '...', 5];
+    if (current >= 4) return [1, '...', 3, 4, 5];
     return [1, 2, 3, 4, 5];
   }
-  if (current <= 3) {
-    return [1, 2, 3, '...', total];
-  }
-  if (current >= total - 2) {
-    return [1, '...', total - 2, total - 1, total];
-  }
+  if (current <= 3) return [1, 2, 3, '...', total];
+  if (current >= total - 2) return [1, '...', total - 2, total - 1, total];
   return [1, '...', current, '...', total];
 }
 
 export default function CropManagement() {
-  const navigate = useNavigate();
-
-  // Master records
-  const [crops, setCrops] = useState<CropItem[]>(INITIAL_CROPS);
+  // Master records & data state
+  const [crops, setCrops] = useState<Crop[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 5,
+    total: 0,
+    totalPages: 1
+  });
+  const [summary, setSummary] = useState<{ total: number; active: number; inactive: number }>({
+    total: 0,
+    active: 0,
+    inactive: 0
+  });
 
   // Search, filter, pagination
   const [searchQuery, setSearchQuery] = useState('');
@@ -300,85 +65,91 @@ export default function CropManagement() {
 
   // Side Panel state: 'add' | 'edit' | 'view'
   const [panelMode, setPanelMode] = useState<'add' | 'edit' | 'view'>('add');
-  const [selectedCropId, setSelectedCropId] = useState<string | null>(null);
+  const [selectedCrop, setSelectedCrop] = useState<Crop | null>(null);
 
   // Form input fields
   const [formName, setFormName] = useState('');
-  const [formCategory, setFormCategory] = useState<CropItem['category'] | ''>('');
-  const [formDescription, setFormDescription] = useState('');
-  const [formStatus, setFormStatus] = useState<'Active' | 'Inactive'>('Active');
+  const [formActive, setFormActive] = useState<boolean>(true);
+  const [formReason, setFormReason] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Confirmation dialog state for changing status to Inactive
+  // Confirmation dialog state for deactivation
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [pendingCropUpdate, setPendingCropUpdate] = useState<{
     id: string;
     name: string;
-    category: CropItem['category'];
-    description: string;
-    status: 'Inactive';
+    active: boolean;
+    reason: string;
   } | null>(null);
 
-  // Summary counts
-  const totalCrops = crops.length;
-  const activeCrops = useMemo(() => crops.filter(c => c.status === 'Active').length, [crops]);
-  const inactiveCrops = useMemo(() => crops.filter(c => c.status === 'Inactive').length, [crops]);
 
-  // Filtered and paginated records
-  const filteredCrops = useMemo(() => {
-    return crops.filter(crop => {
-      const matchesSearch =
-        crop.name.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-        crop.id.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-        crop.category.toLowerCase().includes(searchQuery.trim().toLowerCase());
+  // Fetch crops from live backend
+  const fetchCrops = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setPageError(null);
+    try {
+      const params: Record<string, any> = {
+        page: currentPage,
+        limit: pageSize,
+        status: statusFilter.toLowerCase()
+      };
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
 
-      const matchesStatus =
-        statusFilter === 'All' ? true : crop.status === statusFilter;
+      const response = await api.get('/ym04/crops', { params, signal });
+      const { crops: list, pagination: pag, summary: sum } = response.data;
+      setCrops(list || []);
+      if (pag) setPagination(pag);
+      if (sum) setSummary(sum);
+    } catch (err) {
+      if (axios.isCancel(err)) return;
+      setPageError(getErrorMessage(err, 'Failed to load crops list.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, pageSize, statusFilter, searchQuery]);
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [crops, searchQuery, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredCrops.length / pageSize));
-
-  // Ensure current page stays in bounds
-  const validCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (validCurrentPage - 1) * pageSize;
-  const paginatedCrops = filteredCrops.slice(startIndex, startIndex + pageSize);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchCrops(controller.signal);
+    return () => {
+      controller.abort();
+    };
+  }, [fetchCrops]);
 
   // Switch to Add mode
   const handleOpenAdd = () => {
     setPanelMode('add');
-    setSelectedCropId(null);
+    setSelectedCrop(null);
     setFormName('');
-    setFormCategory('');
-    setFormDescription('');
-    setFormStatus('Active');
+    setFormActive(true);
+    setFormReason('');
     setFormError(null);
   };
 
   // Switch to Edit mode
-  const handleOpenEdit = (crop: CropItem) => {
+  const handleOpenEdit = (crop: Crop) => {
     setPanelMode('edit');
-    setSelectedCropId(crop.id);
+    setSelectedCrop(crop);
     setFormName(crop.name);
-    setFormCategory(crop.category);
-    setFormDescription(crop.description);
-    setFormStatus(crop.status);
+    setFormActive(crop.active);
+    setFormReason('');
     setFormError(null);
   };
 
   // Switch to View mode
-  const handleOpenView = (crop: CropItem) => {
+  const handleOpenView = (crop: Crop) => {
     setPanelMode('view');
-    setSelectedCropId(crop.id);
+    setSelectedCrop(crop);
     setFormName(crop.name);
-    setFormCategory(crop.category);
-    setFormDescription(crop.description);
-    setFormStatus(crop.status);
+    setFormActive(crop.active);
+    setFormReason('');
     setFormError(null);
   };
 
@@ -387,8 +158,42 @@ export default function CropManagement() {
     handleOpenAdd();
   };
 
+  // Copy UUID
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    setToastMessage('Crop ID copied to clipboard');
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Execute Crop Update via PATCH
+  const executeUpdateCrop = async (id: string, name: string, active: boolean, reason?: string) => {
+    setIsSubmitting(true);
+    setFormError(null);
+    try {
+      const payload: { name: string; active: boolean; reason?: string } = {
+        name: name.trim(),
+        active
+      };
+      if (reason && reason.trim()) {
+        payload.reason = reason.trim();
+      }
+
+      await api.patch(`/ym04/crops/${id}`, payload);
+      setToastMessage(`Crop "${name.trim()}" updated successfully!`);
+      handleOpenAdd();
+      fetchCrops();
+    } catch (err) {
+      setFormError(getErrorMessage(err, 'Failed to update crop.'));
+    } finally {
+      setIsSubmitting(false);
+      setShowDeactivateConfirm(false);
+      setPendingCropUpdate(null);
+    }
+  };
+
   // Form submit handler
-  const handleSaveCrop = (e: React.FormEvent) => {
+  const handleSaveCrop = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formName.trim()) {
@@ -396,86 +201,67 @@ export default function CropManagement() {
       return;
     }
 
-    if (!formCategory) {
-      setFormError('Please select a valid category.');
+    if (formName.trim().length > 100) {
+      setFormError('Crop name must not exceed 100 characters.');
       return;
     }
 
     setFormError(null);
 
-    if (panelMode === 'edit' && selectedCropId) {
+    if (panelMode === 'edit' && selectedCrop) {
       // Check if deactivating an active crop
-      const currentItem = crops.find(c => c.id === selectedCropId);
-      if (currentItem && currentItem.status === 'Active' && formStatus === 'Inactive') {
+      if (selectedCrop.active && !formActive) {
         setPendingCropUpdate({
-          id: selectedCropId,
+          id: selectedCrop.id,
           name: formName.trim(),
-          category: formCategory as CropItem['category'],
-          description: formDescription.trim() || 'Agricultural commodity registered in YieldMatrix.',
-          status: 'Inactive'
+          active: false,
+          reason: formReason.trim() || `Crop '${formName.trim()}' deactivated`
         });
         setShowDeactivateConfirm(true);
         return;
       }
 
-      // Update existing crop
-      setCrops(prev =>
-        prev.map(item => {
-          if (item.id === selectedCropId) {
-            return {
-              ...item,
-              name: formName.trim(),
-              category: formCategory as CropItem['category'],
-              description: formDescription.trim() || 'Agricultural commodity registered in YieldMatrix.',
-              status: formStatus
-            };
-          }
-          return item;
-        })
-      );
-      setToastMessage(`Crop "${formName.trim()}" updated successfully!`);
-      handleOpenAdd();
+      await executeUpdateCrop(selectedCrop.id, formName, formActive, formReason);
     } else {
-      // Add new crop with incremented CR ID
-      const nextIdNum = crops.length + 1;
-      const newId = `CR${String(nextIdNum).padStart(3, '0')}`;
-      const newCrop: CropItem = {
-        id: newId,
-        name: formName.trim(),
-        category: formCategory as CropItem['category'],
-        status: formStatus,
-        createdDate: '20 Nov 2026',
-        description: formDescription.trim() || 'Agricultural commodity registered in YieldMatrix.'
-      };
+      // Add new crop via POST
+      setIsSubmitting(true);
+      try {
+        const payload: { name: string; active: boolean; reason?: string } = {
+          name: formName.trim(),
+          active: formActive
+        };
+        if (formReason.trim()) {
+          payload.reason = formReason.trim();
+        }
 
-      setCrops(prev => [newCrop, ...prev]);
-      setToastMessage(`Crop "${newCrop.name}" (${newCrop.id}) added successfully!`);
-      handleOpenAdd();
+        const res = await api.post('/ym04/crops', payload);
+        const created = res.data.crop;
+        setToastMessage(`Crop "${created.name}" registered successfully!`);
+        handleOpenAdd();
+        setCurrentPage(1);
+        fetchCrops();
+      } catch (err) {
+        setFormError(getErrorMessage(err, 'Failed to create crop.'));
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
   // Confirm deactivation execution
-  const handleConfirmDeactivate = () => {
+  const handleConfirmDeactivate = async () => {
     if (!pendingCropUpdate) return;
-    setCrops(prev =>
-      prev.map(item => {
-        if (item.id === pendingCropUpdate.id) {
-          return {
-            ...item,
-            name: pendingCropUpdate.name,
-            category: pendingCropUpdate.category,
-            description: pendingCropUpdate.description,
-            status: 'Inactive'
-          };
-        }
-        return item;
-      })
+    await executeUpdateCrop(
+      pendingCropUpdate.id,
+      pendingCropUpdate.name,
+      pendingCropUpdate.active,
+      pendingCropUpdate.reason
     );
-    setToastMessage(`Crop "${pendingCropUpdate.name}" set to Inactive successfully.`);
-    setShowDeactivateConfirm(false);
-    setPendingCropUpdate(null);
-    handleOpenAdd();
   };
+
+  const totalPages = pagination.totalPages || 1;
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (validCurrentPage - 1) * pageSize;
 
   return (
     <div className="ym04-container">
@@ -496,6 +282,21 @@ export default function CropManagement() {
         </div>
       </header>
 
+      {/* Global Page Error Banner */}
+      {pageError && (
+        <div className="ym04-alert-wrap" role="alert">
+          <Alert type="error">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', width: '100%' }}>
+              <span>{pageError}</span>
+              <Button variant="outline" onClick={() => fetchCrops()}>
+                <RefreshCw size={14} className={loading ? 'ym04-spin' : ''} style={{ marginRight: '6px' }} />
+                Retry
+              </Button>
+            </div>
+          </Alert>
+        </div>
+      )}
+
       {/* ------------------------------------------------------------------ */}
       {/* Top 4-Column Summary Row (3 Metrics + 1 Banner Card)               */}
       {/* ------------------------------------------------------------------ */}
@@ -508,7 +309,7 @@ export default function CropManagement() {
           onClick={() => {
             setStatusFilter('All');
             setCurrentPage(1);
-            setToastMessage(`Filtering all ${totalCrops} registered crops.`);
+            setToastMessage(`Viewing all ${summary.total} registered crops.`);
           }}
           onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('All')}
           title="Show all crops"
@@ -519,7 +320,7 @@ export default function CropManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Crops</span>
-              <strong className="ym04-stat-value">{totalCrops}</strong>
+              <strong className="ym04-stat-value">{summary.total}</strong>
               <span className="ym04-stat-subtext">All registered crops</span>
             </div>
           </div>
@@ -536,7 +337,7 @@ export default function CropManagement() {
           onClick={() => {
             setStatusFilter('Active');
             setCurrentPage(1);
-            setToastMessage(`Filtering ${activeCrops} active crops.`);
+            setToastMessage(`Filtering ${summary.active} active crops.`);
           }}
           onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('Active')}
           title="Filter active crops"
@@ -547,7 +348,7 @@ export default function CropManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Active Crops</span>
-              <strong className="ym04-stat-value">{activeCrops}</strong>
+              <strong className="ym04-stat-value">{summary.active}</strong>
               <span className="ym04-stat-subtext">Currently available</span>
             </div>
           </div>
@@ -564,7 +365,7 @@ export default function CropManagement() {
           onClick={() => {
             setStatusFilter('Inactive');
             setCurrentPage(1);
-            setToastMessage(`Filtering ${inactiveCrops} inactive crops.`);
+            setToastMessage(`Filtering ${summary.inactive} inactive crops.`);
           }}
           onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('Inactive')}
           title="Filter inactive crops"
@@ -575,7 +376,7 @@ export default function CropManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Inactive Crops</span>
-              <strong className="ym04-stat-value">{inactiveCrops}</strong>
+              <strong className="ym04-stat-value">{summary.inactive}</strong>
               <span className="ym04-stat-subtext">Not available</span>
             </div>
           </div>
@@ -584,14 +385,13 @@ export default function CropManagement() {
           </div>
         </div>
 
-        {/* Card 4: Healthy Fields, Better Tomorrow Banner Card */}
+        {/* Card 4: Banner Card */}
         <div className="ym04-banner-card" aria-label="YieldMatrix vision banner">
           <div className="ym04-banner-content">
             <p className="ym04-banner-heading">Healthy Fields, Better</p>
             <p className="ym04-banner-subheading">Tomorrow</p>
           </div>
           <div className="ym04-banner-graphic" aria-hidden="true">
-            {/* SVG Sun & Rolling Hills matching the Figma design */}
             <svg
               className="ym04-banner-svg"
               viewBox="0 0 160 90"
@@ -599,15 +399,12 @@ export default function CropManagement() {
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
-              {/* Sun */}
               <circle cx="130" cy="24" r="14" fill="#ECA24F" />
-              {/* Back Hill */}
               <path
                 d="M40 90 C70 50, 110 50, 160 70 L160 90 Z"
                 fill="#4D8E67"
                 opacity="0.85"
               />
-              {/* Foreground Rolling Hill */}
               <path
                 d="M-10 90 C40 60, 90 60, 170 90 Z"
                 fill="#27573A"
@@ -623,7 +420,6 @@ export default function CropManagement() {
       <div className="ym04-split-layout">
         {/* Left Column: Crop List Card */}
         <section className="ym04-section-card ym04-crop-list-card" aria-labelledby="heading-crop-list">
-          {/* Header */}
           <div className="ym04-section-header">
             <div className="ym04-section-title-wrap">
               <Sprout className="ym04-section-icon" size={22} aria-hidden="true" />
@@ -660,7 +456,10 @@ export default function CropManagement() {
                 <button
                   type="button"
                   className="ym04-search-clear"
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCurrentPage(1);
+                  }}
                   aria-label="Clear search"
                 >
                   <X size={14} />
@@ -687,88 +486,101 @@ export default function CropManagement() {
 
           {/* Table */}
           <div className="ym04-table-wrap">
-            <Table
-              headers={['Crop ID', 'Crop Name', 'Category', 'Status', 'Created Date', 'Actions']}
-              className="ym04-table"
-              aria-label="Crop List Table"
-            >
-              {paginatedCrops.length > 0 ? (
-                paginatedCrops.map((crop) => (
-                  <TableRow
-                    key={crop.id}
-                    className={selectedCropId === crop.id ? 'ym04-row--selected' : ''}
-                  >
-                    <td className="ym04-cell-crop-id">{crop.id}</td>
-                    <td className="ym04-cell-crop-name-bold">{crop.name}</td>
-                    <td>
-                      <span className="ym04-badge-category">{crop.category}</span>
-                    </td>
-                    <td>
-                      <StatusBadge status={crop.status} />
-                    </td>
-                    <td className="ym04-cell-date">{crop.createdDate}</td>
-                    <td>
-                      <div className="ym04-action-icons-wrap">
-                        <button
-                          type="button"
-                          className="ym04-icon-action-btn"
-                          onClick={() => handleOpenView(crop)}
-                          title={`View details for ${crop.name}`}
-                          aria-label={`View details for ${crop.name}`}
-                        >
-                          <Eye size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className="ym04-icon-action-btn"
-                          onClick={() => handleOpenEdit(crop)}
-                          title={`Edit ${crop.name}`}
-                          aria-label={`Edit ${crop.name}`}
-                        >
-                          <SquarePen size={16} />
-                        </button>
-                      </div>
+            {loading ? (
+              <div style={{ padding: '48px', textAlign: 'center' }}>
+                <Loader2 size={32} className="ym04-spin" style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
+                <p style={{ color: 'var(--muted)' }}>Loading crops...</p>
+              </div>
+            ) : (
+              <Table
+                headers={['Crop ID', 'Crop Name', 'Status', 'Actions']}
+                className="ym04-table"
+                aria-label="Crop List Table"
+              >
+                {crops.length > 0 ? (
+                  crops.map((crop) => (
+                    <TableRow
+                      key={crop.id}
+                      className={selectedCrop?.id === crop.id ? 'ym04-row--selected' : ''}
+                    >
+                      <td className="ym04-cell-crop-id" title={crop.id}>
+                        <span style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+                          {crop.id.length > 8 ? `${crop.id.slice(0, 8)}...` : crop.id}
+                        </span>
+                      </td>
+                      <td className="ym04-cell-crop-name-bold">{crop.name}</td>
+                      <td>
+                        <StatusBadge status={crop.active ? 'Active' : 'Inactive'} />
+                      </td>
+                      <td>
+                        <div className="ym04-action-icons-wrap">
+                          <button
+                            type="button"
+                            className="ym04-icon-action-btn"
+                            onClick={() => handleOpenView(crop)}
+                            title={`View details for ${crop.name}`}
+                            aria-label={`View details for ${crop.name}`}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="ym04-icon-action-btn"
+                            onClick={() => handleOpenEdit(crop)}
+                            title={`Edit ${crop.name}`}
+                            aria-label={`Edit ${crop.name}`}
+                          >
+                            <SquarePen size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <td colSpan={4}>
+                      <EmptyState
+                        title="No crops found"
+                        description={
+                          searchQuery || statusFilter !== 'All'
+                            ? 'No crops match your active filter criteria. Try clearing search or status filters.'
+                            : 'No crop records available.'
+                        }
+                        action={
+                          (searchQuery || statusFilter !== 'All') ? (
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setSearchQuery('');
+                                setStatusFilter('All');
+                                setCurrentPage(1);
+                              }}
+                            >
+                              Reset Filters
+                            </Button>
+                          ) : (
+                            <Button variant="primary" onClick={handleOpenAdd}>
+                              <Plus size={16} style={{ marginRight: '6px' }} />
+                              Add New Crop
+                            </Button>
+                          )
+                        }
+                      />
                     </td>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <td colSpan={6}>
-                    <EmptyState
-                      title="No crops found"
-                      description={
-                        searchQuery || statusFilter !== 'All'
-                          ? 'No crops match your active filter criteria. Try clearing search or status filters.'
-                          : 'No crop records available.'
-                      }
-                      action={
-                        (searchQuery || statusFilter !== 'All') ? (
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setSearchQuery('');
-                              setStatusFilter('All');
-                            }}
-                          >
-                            Reset Filters
-                          </Button>
-                        ) : undefined
-                      }
-                    />
-                  </td>
-                </TableRow>
-              )}
-            </Table>
+                )}
+              </Table>
+            )}
           </div>
 
           {/* Pagination Bar */}
           <div className="ym04-pagination-row">
             <span className="ym04-pagination-info">
-              {filteredCrops.length > 0
+              {pagination.total > 0
                 ? `Showing ${startIndex + 1}–${Math.min(
                     startIndex + pageSize,
-                    filteredCrops.length
-                  )} of ${filteredCrops.length} crops`
+                    pagination.total
+                  )} of ${pagination.total} crops`
                 : 'Showing 0 of 0 crops'}
             </span>
 
@@ -824,16 +636,11 @@ export default function CropManagement() {
 
         {/* Right Column: Add / Edit Crop Side Panel Card */}
         <section className="ym04-section-card ym04-side-panel-card" aria-labelledby="heading-side-panel">
-          {/* Header */}
           <div className="ym04-side-panel-header">
             <div className="ym04-section-title-wrap">
               <Sprout className="ym04-section-icon" size={20} aria-hidden="true" />
               <h2 id="heading-side-panel" className="ym04-side-panel-title">
-                {panelMode === 'view'
-                  ? `Crop Details`
-                  : panelMode === 'edit'
-                  ? `Add / Edit Crop`
-                  : `Add / Edit Crop`}
+                {panelMode === 'view' ? 'Crop Details' : panelMode === 'edit' ? 'Edit Crop' : 'Add New Crop'}
               </h2>
             </div>
             <button
@@ -847,38 +654,43 @@ export default function CropManagement() {
             </button>
           </div>
 
-          {/* Error Banner */}
+          {/* Form Error Banner */}
           {formError && (
-            <div className="ym04-form-alert-wrap">
+            <div className="ym04-form-alert-wrap" style={{ margin: '16px 20px 0' }}>
               <Alert type="error">{formError}</Alert>
             </div>
           )}
 
-          {panelMode === 'view' ? (
+          {panelMode === 'view' && selectedCrop ? (
             /* View Mode Readout */
             <div className="ym04-view-panel-body">
               <div className="ym04-detail-grid">
-                <div className="ym04-detail-item">
+                <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
                   <span className="ym04-detail-label">Crop ID</span>
-                  <span className="ym04-detail-value">{selectedCropId}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="ym04-detail-value" style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+                      {selectedCrop.id}
+                    </span>
+                    <button
+                      type="button"
+                      className="ym04-copy-btn"
+                      onClick={() => handleCopyId(selectedCrop.id)}
+                      title="Copy Crop ID"
+                      aria-label="Copy Crop ID"
+                    >
+                      {copiedId === selectedCrop.id ? <CheckCircle2 size={13} color="#1b8754" /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="ym04-detail-item">
+                  <span className="ym04-detail-label">Crop Name</span>
+                  <span className="ym04-detail-value">{selectedCrop.name}</span>
                 </div>
                 <div className="ym04-detail-item">
                   <span className="ym04-detail-label">Status</span>
                   <span className="ym04-detail-value">
-                    <StatusBadge status={formStatus} />
+                    <StatusBadge status={selectedCrop.active ? 'Active' : 'Inactive'} />
                   </span>
-                </div>
-                <div className="ym04-detail-item">
-                  <span className="ym04-detail-label">Crop Name</span>
-                  <span className="ym04-detail-value">{formName}</span>
-                </div>
-                <div className="ym04-detail-item">
-                  <span className="ym04-detail-label">Category</span>
-                  <span className="ym04-badge-category">{formCategory}</span>
-                </div>
-                <div className="ym04-detail-item" style={{ gridColumn: 'span 2' }}>
-                  <span className="ym04-detail-label">Description</span>
-                  <p className="ym04-detail-desc">{formDescription || 'No description provided.'}</p>
                 </div>
               </div>
 
@@ -895,7 +707,7 @@ export default function CropManagement() {
                   type="button"
                   variant="primary"
                   className="ym04-panel-btn-save"
-                  onClick={() => setPanelMode('edit')}
+                  onClick={() => handleOpenEdit(selectedCrop)}
                 >
                   Edit This Crop
                 </Button>
@@ -915,36 +727,7 @@ export default function CropManagement() {
                 />
               </div>
 
-              {/* Field 2: Category */}
-              <div className="ym04-form-group">
-                <SelectField
-                  label="Category"
-                  value={formCategory}
-                  onChange={(e) => setFormCategory(e.target.value as CropItem['category'])}
-                  options={[
-                    { value: '', label: 'Select category', disabled: true },
-                    ...CATEGORIES.map(cat => ({ value: cat, label: cat }))
-                  ]}
-                  required
-                />
-              </div>
-
-              {/* Field 3: Description */}
-              <div className="ym04-form-group">
-                <label htmlFor="crop-desc-textarea" className="ym04-form-label">
-                  Description
-                </label>
-                <textarea
-                  id="crop-desc-textarea"
-                  className="ym04-form-textarea"
-                  placeholder="Enter description..."
-                  rows={4}
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                />
-              </div>
-
-              {/* Field 4: Status Radio Buttons */}
+              {/* Field 2: Status Radio Buttons */}
               <div className="ym04-form-group">
                 <span className="ym04-form-label">Status</span>
                 <div className="ym04-radio-group">
@@ -952,9 +735,8 @@ export default function CropManagement() {
                     <input
                       type="radio"
                       name="crop-status"
-                      value="Active"
-                      checked={formStatus === 'Active'}
-                      onChange={() => setFormStatus('Active')}
+                      checked={formActive === true}
+                      onChange={() => setFormActive(true)}
                       className="ym04-radio-input"
                     />
                     <span className="ym04-radio-custom" />
@@ -965,15 +747,24 @@ export default function CropManagement() {
                     <input
                       type="radio"
                       name="crop-status"
-                      value="Inactive"
-                      checked={formStatus === 'Inactive'}
-                      onChange={() => setFormStatus('Inactive')}
+                      checked={formActive === false}
+                      onChange={() => setFormActive(false)}
                       className="ym04-radio-input"
                     />
                     <span className="ym04-radio-custom" />
                     <span className="ym04-radio-text">Inactive</span>
                   </label>
                 </div>
+              </div>
+
+              {/* Field 3: Audit Reason (Optional) */}
+              <div className="ym04-form-group">
+                <InputField
+                  label="Audit Reason (Optional)"
+                  placeholder="Reason for change (e.g., Seasonal update)"
+                  value={formReason}
+                  onChange={(e) => setFormReason(e.target.value)}
+                />
               </div>
 
               {/* Action Buttons */}
@@ -983,6 +774,7 @@ export default function CropManagement() {
                   variant="outline"
                   className="ym04-panel-btn-cancel"
                   onClick={handleClosePanel}
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </Button>
@@ -990,8 +782,13 @@ export default function CropManagement() {
                   type="submit"
                   variant="primary"
                   className="ym04-panel-btn-save"
+                  disabled={isSubmitting}
                 >
-                  Save Crop
+                  {isSubmitting
+                    ? 'Saving...'
+                    : panelMode === 'edit'
+                    ? 'Update Crop'
+                    : 'Save Crop'}
                 </Button>
               </div>
             </form>
@@ -999,82 +796,25 @@ export default function CropManagement() {
         </section>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Bottom Quick Actions Bar                                           */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="ym04-quick-actions-bar" aria-label="Quick Actions">
-        <div className="ym04-quick-actions-left">
-          <Zap className="ym04-quick-actions-icon" size={22} aria-hidden="true" />
-          <div>
-            <h3 className="ym04-quick-actions-title">Quick Actions</h3>
-            <p className="ym04-quick-actions-subtitle">Access crop management features quickly.</p>
-          </div>
-        </div>
-
-        <div className="ym04-quick-actions-btns">
-          {/* Action 1: Manage Crops (Active on this page) */}
-          <button
-            type="button"
-            className="ym04-qa-btn ym04-qa-btn--green"
-            onClick={() => {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              setToastMessage('Already viewing Crop Management. Filter or edit crops above.');
-            }}
-          >
-            <Sprout size={16} aria-hidden="true" />
-            <span>Manage Crops</span>
-            <ArrowRight size={16} aria-hidden="true" />
-          </button>
-
-          {/* Action 2: View Market Insights */}
-          <button
-            type="button"
-            className="ym04-qa-btn ym04-qa-btn--white"
-            onClick={() => {
-              setToastMessage('Navigating to Market Insights...');
-              navigate('/admin/market-data');
-            }}
-          >
-            <BarChart2 size={16} aria-hidden="true" />
-            <span>View Market Insights</span>
-            <ArrowRight size={16} aria-hidden="true" />
-          </button>
-
-          {/* Action 3: View Audit Trail */}
-          <button
-            type="button"
-            className="ym04-qa-btn ym04-qa-btn--white"
-            onClick={() => {
-              setToastMessage('Navigating to Audit Trail...');
-              navigate('/admin/audit-trail');
-            }}
-          >
-            <ShieldCheck size={16} aria-hidden="true" />
-            <span>View Audit Trail</span>
-            <ArrowRight size={16} aria-hidden="true" />
-          </button>
-        </div>
-      </section>
-
-      {/* Status Deactivation Confirmation Dialog */}
-      <ConfirmDialog
-        open={showDeactivateConfirm}
-        title="Deactivate Crop"
-        description={`Are you sure you want to deactivate "${pendingCropUpdate?.name}"? Deactivated crops will be marked as Inactive and will be unavailable for active transactions.`}
-        simulationNote="This action can be undone by editing the crop and setting status back to Active."
-        confirmLabel="Deactivate"
-        onCancel={() => {
-          setShowDeactivateConfirm(false);
-          setPendingCropUpdate(null);
-        }}
-        onConfirm={handleConfirmDeactivate}
-      />
+      {/* Confirmation Dialog for Deactivation */}
+      {showDeactivateConfirm && pendingCropUpdate && (
+        <ConfirmDialog
+          open={showDeactivateConfirm}
+          title="Deactivate Crop"
+          description={`Are you sure you want to set crop "${pendingCropUpdate.name}" to Inactive? This will pause crop allocation in other modules.`}
+          confirmLabel="Yes, Deactivate"
+          onCancel={() => {
+            setShowDeactivateConfirm(false);
+            setPendingCropUpdate(null);
+          }}
+          onConfirm={handleConfirmDeactivate}
+        />
+      )}
 
       {/* Toast Notification */}
       {toastMessage && (
         <Toast
           message={toastMessage}
-          open={Boolean(toastMessage)}
           onClose={() => setToastMessage(null)}
         />
       )}
