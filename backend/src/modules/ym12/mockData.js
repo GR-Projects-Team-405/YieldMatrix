@@ -15,14 +15,14 @@ function cropIllustration(primary, secondary, label) {
 
 const suppliers = [
   { id: 'b1111111-1111-4111-8111-111111111111', name: 'Green Valley Growers', district: 'Matale', verified: true, completedOrders: 126, rating: 4.8, ratingCount: 84 },
-  { id: 'b2222222-2222-4222-8222-222222222222', name: 'Dambulla Fresh Collective', district: 'Matale', verified: true, completedOrders: 88, rating: 4.6, ratingCount: 52 },
+  { id: 'b2222222-2222-4222-8222-222222222222', name: 'Dambulla Fresh Collective', district: 'Dambulla', verified: true, completedOrders: 88, rating: 4.6, ratingCount: 52 },
   { id: 'b3333333-3333-4333-8333-333333333333', name: 'Hill Country Harvest', district: 'Kandy', verified: true, completedOrders: null, rating: null, ratingCount: null },
 ];
 
 const samples = [
   { id: 'a12b0000-0000-4000-8000-000000000248', displayId: 'YM-0248', cropName: 'Fresh tomatoes', pricePerKgCents: '28000', availableKg: '2400.000', grade: 'Grade A', supplier: suppliers[0], imageUrl: cropIllustration('#ef654e', '#b82e26', 'tomatoes'), description: 'Firm, vine-ripened tomatoes · Sorted for bulk supply', harvestStart: '2026-11-08T00:00:00.000Z', harvestEnd: '2026-11-15T00:00:00.000Z' },
-  { id: 'a12b0000-0000-4000-8000-000000000249', displayId: 'YM-0249', cropName: 'Fresh tomatoes', pricePerKgCents: '25000', availableKg: '3200.000', grade: 'Grade B', supplier: suppliers[1], imageUrl: cropIllustration('#f07b35', '#c64b27', 'tomatoes'), description: 'Fresh tomatoes · Sorted for bulk supply' },
-  { id: 'a12b0000-0000-4000-8000-000000000250', displayId: 'YM-0250', cropName: 'Fresh tomatoes', pricePerKgCents: '29500', availableKg: '1800.000', grade: 'Grade A', supplier: suppliers[2], imageUrl: null, description: 'Fresh tomatoes · Available for bulk supply' },
+  { id: 'a12b0000-0000-4000-8000-000000000249', displayId: 'YM-0249', cropName: 'Fresh tomatoes', pricePerKgCents: '25000', availableKg: '3200.000', grade: 'Grade B', supplier: suppliers[1], imageUrl: cropIllustration('#f07b35', '#c64b27', 'tomatoes'), description: 'Fresh tomatoes · Sorted for bulk supply', harvestStart: '2026-11-08T00:00:00.000Z', harvestEnd: '2026-11-14T00:00:00.000Z' },
+  { id: 'a12b0000-0000-4000-8000-000000000250', displayId: 'YM-0250', cropName: 'Fresh tomatoes', pricePerKgCents: '29500', availableKg: '1800.000', grade: 'Grade A', supplier: suppliers[2], imageUrl: null, description: 'Fresh tomatoes · Available for bulk supply', harvestStart: '2026-11-09T00:00:00.000Z', harvestEnd: '2026-11-16T00:00:00.000Z' },
 ].map((item, index) => ({
   id: item.id,
   displayId: item.displayId,
@@ -212,4 +212,41 @@ export function getSampleSupplierPerformance(id, from, to) {
     };
   }
   return null;
+}
+
+const sampleComparisonFixtures = [
+  { ...samples[1], distanceKm: 88, performanceScore: 88 },
+  { ...samples[0], distanceKm: 110, performanceScore: 94 },
+  { ...samples[2], distanceKm: null, performanceScore: 90 },
+  {
+    ...samples[0],
+    id: 'a12b0000-0000-4000-8000-000000000253',
+    displayId: 'YM-0253',
+    pricePerKgCents: '28000',
+    availableKg: '1600.000',
+    supplier: suppliers[1],
+    distanceKm: 88,
+    performanceScore: 88,
+  },
+  {
+    ...samples[2],
+    id: 'a12b0000-0000-4000-8000-000000000254',
+    displayId: 'YM-0254',
+    pricePerKgCents: '28000',
+    availableKg: '900.000',
+    distanceKm: null,
+    performanceScore: 90,
+  },
+];
+
+export function getSampleComparisonListings(ids) {
+  const byId = new Map(sampleComparisonFixtures.map((item) => [item.id.toLowerCase(), item]));
+  const available = [];
+  const unavailable = [];
+  for (const id of ids) {
+    const listing = byId.get(id.toLowerCase());
+    if (listing) available.push(listing);
+    else unavailable.push({ id, reason: 'Listing not found or no longer eligible.' });
+  }
+  return { available, unavailable };
 }

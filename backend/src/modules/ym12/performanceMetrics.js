@@ -42,6 +42,7 @@ export function calculatePerformanceMetrics(completedOrdersValue, confirmedOrder
       insufficientHistory: true,
     };
   }
+
   const roundedPercent = (completed * 100n + confirmed / 2n) / confirmed;
   return {
     completedOrders: toSafeCount(completed),
@@ -49,4 +50,15 @@ export function calculatePerformanceMetrics(completedOrdersValue, confirmedOrder
     fulfilmentLabel: `${completed.toString()} / ${confirmed.toString()} confirmed orders`,
     insufficientHistory: false,
   };
+}
+
+// Proposed placeholder weighting; the final scoring model is to be confirmed by team.
+export function calculatePerformanceScore(fulfilment, onTimePickup, acceptance, disputeRate, insufficientHistory) {
+  const inputs = [fulfilment, onTimePickup, acceptance, disputeRate];
+  if (insufficientHistory || inputs.some((value) => value === null || !Number.isFinite(value))) return null;
+  const score = 0.4 * fulfilment
+    + 0.3 * onTimePickup
+    + 0.2 * acceptance
+    + 0.1 * (100 - disputeRate);
+  return Math.round(score * 10) / 10;
 }

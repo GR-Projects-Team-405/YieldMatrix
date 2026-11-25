@@ -1,8 +1,12 @@
 import pool from '../../config/db.js';
-import { DEMO_BUYER_ID, getSampleListing, getSampleSupplierProfile, getSampleSupplierPerformance } from './mockData.js';
+import { DEMO_BUYER_ID, getSampleListing, getSampleSupplierProfile, getSampleSupplierPerformance, getSampleComparisonListings } from './mockData.js';
 import { findApprovedSupplier, findSupplierListings, findSupplierPerformance } from './supplierQueries.js';
-import { calculatePerformanceMetrics, calculateRateMetric } from './performanceMetrics.js';
+import { calculatePerformanceMetrics, calculatePerformanceScore, calculateRateMetric } from './performanceMetrics.js';
 import { findSupplierMonthlyTrend, findSupplierPerformanceCounts } from './performanceQueries.js';
+import { findComparisonPerformance, findEligibleComparisonListings } from './comparisonQueries.js';
+import { DEFAULT_BUYER_DISTRICT, MAX_COMPARE } from './comparisonConstants.js';
+import { getDistanceKm } from './distances.js';
+import { rankListings } from './rankListings.js';
 // YM12 · MHD Muhthas · Produce & suppliers
 export async function getStatus(req, res, next) {
   try {
@@ -196,6 +200,92 @@ function shapeDatabaseListing(row) {
       ratingCount: null,
     },
   };
+}
+
+function parseComparisonIds(rawIds) {
+  if (typeof rawIds !== 'string' || rawIds.length === 0) return null;
+  const ids = rawIds.split(',');
+  if (ids.length > MAX_COMPARE || ids.some((id) => !UUID_PATTERN.test(id))) return null;
+  const normalized = ids.map((id) => id.toLowerCase());
+  if (new Set(normalized).size !== normalized.length) return null;
+  return ids;
+}
+
+function makeComparisonItem(row, score, distanceKm) {
+  return {
+    listingId: String(row.listing_id),
+    supplierId: String(row.supplier_id),
+    supplierName: row.supplier_name,
+    district: row.district,
+    pricePerKgCents: String(row.price_per_kg_cents),
+    pricePerKgLkr: centsToLkr(row.price_per_kg_cents),
+    availableKg: String(row.available_kg),
+    distanceKm,
+    grade: row.grade,
+    harvestStart: row.harvest_start,
+    harvestEnd: row.harvest_end,
+    performanceScore: score,
+    isBestPrice: false,
+    crop: row.crop_name,
+    cropId: row.crop_id,
+  };
+}
+
+function completeComparisonResponse(items, unavailable, buyerDistrict, dataSource, requestId) {
+  const ranked = rankListings(items);
+  const lowestPrice = ranked.length ? BigInt(ranked[0].pricePerKgCents) : null;
+  const publicItems = ranked.map((item, index) => {
+    const { crop: _crop, cropId: _cropId, ...publicItem } = item;
+    return {
+      ...publicItem,
+      rank: index + 1,
+      isBestPrice: lowestPrice !== null && BigInt(item.pricePerKgCents) === lowestPrice,
+    };
+  });
+  const cropIds = new Set(ranked.map((item) => item.cropId));
+  const sameCrop = cropIds.size <= 1;
+  return {
+    crop: ranked[0]?.crop || null,
+    sameCrop,
+    rankingMethod: 'price, then distance; unknown distances last',
+    items: publicItems,
+    unavailable,
+    buyerDistrict,
+    maxCompare: MAX_COMPARE,
+    dataSource,
+    requestId,
+  };
+}
+
+function scoreFromCounts(counts) {
+  const completed = String(counts.completed_orders ?? 0);
+  const confirmed = String(counts.confirmed_orders ?? 0);
+  const history = calculatePerformanceMetrics(completed, confirmed);
+  return calculatePerformanceScore(
+    history.fulfilmentRatePercent,
+    calculateRateMetric(counts.on_time_pickups, counts.pickup_denominator).percent,
+    calculateRateMetric(counts.accepted_requests, counts.buyer_requests).percent,
+    calculateRateMetric(counts.disputed_completed_orders, completed, 1).percent,
+    history.insufficientHistory,
+  );
+}
+
+function sampleComparisonResponse(ids, requestId) {
+  const { available, unavailable } = getSampleComparisonListings(ids);
+  const items = available.map((row) => makeComparisonItem({
+    listing_id: row.id,
+    supplier_id: row.supplier.id,
+    supplier_name: row.supplier.name,
+    district: row.district,
+    price_per_kg_cents: row.pricePerKgCents,
+    available_kg: row.availableKg,
+    grade: row.grade,
+    harvest_start: row.harvestStart,
+    harvest_end: row.harvestEnd,
+    crop_name: row.cropName,
+    crop_id: row.cropName.toLowerCase(),
+  }, row.performanceScore, row.distanceKm));
+  return completeComparisonResponse(items, unavailable, DEFAULT_BUYER_DISTRICT, 'sample', requestId);
 }
 
 function sendSampleListing(req, res) {
@@ -442,6 +532,59 @@ export async function getSupplierPerformance(req, res, next) {
         found.dataSource,
         req.requestId,
       ));
+    }
+    return next(error);
+  }
+}
+
+export async function getComparison(req, res, next) {
+  const ids = parseComparisonIds(req.query.ids);
+  if (!ids) {
+    return res.status(400).json({
+      error: `Provide 1 to ${MAX_COMPARE} unique listing IDs in the ids query parameter.`,
+      requestId: req.requestId,
+    });
+  }
+
+  if (!process.env.DATABASE_URL && isDevelopment()) {
+    if (req.user.id !== DEMO_BUYER_ID) {
+      return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
+    }
+    return res.json(sampleComparisonResponse(ids, req.requestId));
+  }
+
+  try {
+    const account = await pool.query(
+      'SELECT approval_status, district FROM users WHERE id = $1 AND role = $2',
+      [req.user.id, 'buyer'],
+    );
+    if (account.rows[0]?.approval_status !== 'approved') {
+      return res.status(403).json({ error: 'Buyer account is not approved for trading.', requestId: req.requestId });
+    }
+
+    const rows = await findEligibleComparisonListings(ids);
+    const availableIds = new Set(rows.map((row) => String(row.listing_id).toLowerCase()));
+    const unavailable = ids.filter((id) => !availableIds.has(id.toLowerCase())).map((id) => ({
+      id,
+      reason: 'Listing not found or no longer eligible.',
+    }));
+    const supplierIds = [...new Set(rows.map((row) => String(row.supplier_id)))];
+    const performanceRows = supplierIds.length ? await findComparisonPerformance(supplierIds) : [];
+    const performanceBySupplier = new Map(performanceRows.map((row) => [String(row.supplier_id), row]));
+    const buyerDistrict = account.rows[0].district || DEFAULT_BUYER_DISTRICT;
+    const items = rows.map((row) => {
+      const metrics = performanceBySupplier.get(String(row.supplier_id));
+      const distanceKm = getDistanceKm(buyerDistrict, row.district);
+      return makeComparisonItem(row, metrics ? scoreFromCounts(metrics) : null, distanceKm);
+    });
+
+    return res.json(completeComparisonResponse(items, unavailable, buyerDistrict, 'database', req.requestId));
+  } catch (error) {
+    if (isDevelopment() && isConnectionUnavailable(error)) {
+      if (req.user.id !== DEMO_BUYER_ID) {
+        return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
+      }
+      return res.json(sampleComparisonResponse(ids, req.requestId));
     }
     return next(error);
   }

@@ -48,6 +48,7 @@
 .ym12-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ym12-action-button { width: 100%; min-width: 0; padding-inline: 12px; white-space: normal; }
 .ym12-action-feedback { min-height: 18px; margin-top: -12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.ym12-compare-selected-link { width: fit-content; color: var(--accent-text); font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .ym12-units-note { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .ym12-state-wrap { display: grid; justify-items: start; gap: 16px; max-width: 680px; }
 .ym12-state-wrap .ym-empty-state { width: 100%; }

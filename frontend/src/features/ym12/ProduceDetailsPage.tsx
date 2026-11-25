@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, CalendarDays, MapPin, Package, PanelsTopLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
@@ -65,6 +65,9 @@ export function ProduceDetailsPage({ listingId }: { listingId: string }) {
             Start bulk match <ArrowRight size={18} aria-hidden="true" />
           </Button>
         </div>
+        {listingIds.length > 0 && <Link className="ym12-compare-selected-link" to="/buyer/suppliers/compare">
+          Compare selected listings ({listingIds.length})
+        </Link>}
         <p className="ym12-action-feedback" role="status" aria-live="polite">{compareMessage || (!canCompare ? `Comparison limit reached (${MAX_COMPARE}). Remove a listing to add another.` : '')}</p>
       </section>
     </div>

@@ -135,3 +135,37 @@ export interface PerformancePeriodQuery {
   from?: string;
   to?: string;
 }
+
+export interface ComparisonItem {
+  rank: number;
+  listingId: string;
+  supplierId: string;
+  supplierName: string;
+  district: string;
+  pricePerKgCents: string;
+  pricePerKgLkr: string;
+  availableKg: string;
+  distanceKm: number | null;
+  grade: string;
+  harvestStart: string;
+  harvestEnd: string;
+  performanceScore: number | null;
+  isBestPrice: boolean;
+}
+
+export interface UnavailableComparisonListing {
+  id: string;
+  reason: string;
+}
+
+export interface ComparisonResponse {
+  crop: string | null;
+  sameCrop: boolean;
+  rankingMethod: 'price, then distance; unknown distances last';
+  items: ComparisonItem[];
+  unavailable: UnavailableComparisonListing[];
+  buyerDistrict: string;
+  maxCompare: number;
+  dataSource: ProduceDataSource;
+  requestId: string;
+}
