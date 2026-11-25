@@ -37,3 +37,13 @@ export const badgeClass = (status: string) => {
 
 export const sumCents = (rows: ApiTransaction[], type: string) =>
   rows.filter((r) => r.type === type).reduce((total, r) => total + Number(r.amountCents), 0);
+
+export type ApiTransactionDetail = ApiTransaction & {
+  recordedAt: string;
+  orderStatus: string | null;
+  destination: string | null;
+  orderTotalCents: string | null;
+};
+
+export const formatDateTime = (iso: string) =>
+  new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Colombo', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
