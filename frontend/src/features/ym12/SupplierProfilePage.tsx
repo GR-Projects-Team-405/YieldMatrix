@@ -34,7 +34,7 @@ export function SupplierProfilePage({ supplierId }: { supplierId: string }) {
           <li><span>Suppliers</span></li><li aria-hidden="true">/</li>
           <li aria-current="page">{state.status === 'success' ? state.data.supplier.name : 'Supplier profile'}</li>
         </ol></nav>
-        <h1>Supplier profile</h1>
+        <h2>Supplier profile</h2>
         <p>Public business information to support your sourcing decisions.</p>
       </div>
       <Button variant="outline" className="ym12-profile-back" onClick={backToProduce}>

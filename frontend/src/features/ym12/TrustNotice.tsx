@@ -7,6 +7,6 @@ export function TrustNotice({ data }: { data: ProduceDetailsResponse }) {
       ? 'Supplier account approved. Confirm final quality and terms before placing an order.'
       : 'Supplier identity verification is not recorded. Confirm final quality and terms before placing an order.';
   return <aside className="ym12-trust-notice"><ShieldCheck size={24} strokeWidth={1.7} aria-hidden="true" /><div>
-    <h3>Trade with greater confidence</h3><p>{message}</p>
+    <h2>Trade with greater confidence</h2><p>{message}</p>
   </div></aside>;
 }

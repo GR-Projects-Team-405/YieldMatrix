@@ -40,7 +40,7 @@ export function ProduceDetailsPage({ listingId }: { listingId: string }) {
     <nav className="ym12-breadcrumb" aria-label="Breadcrumb"><ol>
       <li><span>Browse produce</span></li><li aria-hidden="true">/</li><li><span>{listing.category}</span></li><li aria-hidden="true">/</li><li aria-current="page">{listing.cropName}</li>
     </ol></nav>
-    <header className="ym12-heading-row"><div><h1>Produce details</h1><p>Know your harvest. Source with confidence.</p></div>
+    <header className="ym12-heading-row"><div><h2>Produce details</h2><p>Know your harvest. Source with confidence.</p></div>
       <p className="ym12-listing-meta">Listing {listing.displayId} <span aria-hidden="true">·</span> {data.dataSource === 'sample' ? 'Updated today' : formatUpdatedLabel(listing.updatedAt)}</p>
     </header>
     {data.dataSource === 'sample' && <Alert type="info">Sample listing data for development. Supplier ratings and product details are illustrative.</Alert>}
@@ -48,7 +48,7 @@ export function ProduceDetailsPage({ listingId }: { listingId: string }) {
       <div className="ym12-visual-column"><ProduceImage imageUrl={listing.imageUrl} cropName={listing.cropName} /><TrustNotice data={data} /></div>
       <section className="ym12-info-column" aria-labelledby="ym12-crop-title">
         <div className="ym12-badge-row"><StatusBadge status={listing.grade} /><StatusBadge status="Harvest ready" /><span className="ym12-category">{listing.category}</span></div>
-        <div className="ym12-crop-heading"><h3 id="ym12-crop-title">{listing.cropName}</h3><p>{listing.description}</p></div>
+        <div className="ym12-crop-heading"><h2 id="ym12-crop-title">{listing.cropName}</h2><p>{listing.description}</p></div>
         <div className="ym12-price-block"><p className="ym12-price"><strong>{formatLkr(listing.pricePerKgCents)}</strong><span>LKR per kg</span></p><span className="ym12-price-note">Supplier listed price</span></div>
         <dl className="ym12-facts">
           <div className="ym12-fact"><dt><Package size={20} aria-hidden="true" />Available quantity</dt><dd>{formatKg(listing.availableKg)}</dd></div>

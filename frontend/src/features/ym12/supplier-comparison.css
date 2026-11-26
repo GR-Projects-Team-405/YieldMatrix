@@ -1,6 +1,6 @@
 .ym12-comparison-page { display: grid; gap: 22px; min-width: 0; color: var(--text); }
 .ym12-comparison-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
-.ym12-comparison-heading h1 { font-size: clamp(30px, 3vw, 38px); line-height: 1.15; font-weight: 550; letter-spacing: -.025em; }
+.ym12-comparison-heading h2 { font-size: clamp(30px, 3vw, 38px); line-height: 1.15; font-weight: 550; letter-spacing: -.025em; }
 .ym12-comparison-heading > div > p { margin-top: 8px; color: var(--muted); line-height: 1.5; }
 .ym12-comparison-heading > .ym-button { flex: 0 0 auto; }
 .ym12-comparison-empty { max-width: 680px; }
@@ -35,7 +35,7 @@
 @media (max-width: 600px) {
   .ym12-comparison-page { gap: 18px; }
   .ym12-comparison-heading { align-items: flex-start; flex-direction: column; }
-  .ym12-comparison-heading h1 { font-size: 30px; }
+  .ym12-comparison-heading h2 { font-size: 30px; }
   .ym12-comparison-heading > .ym-button { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {

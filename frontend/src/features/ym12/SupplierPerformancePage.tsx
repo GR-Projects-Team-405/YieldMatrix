@@ -93,7 +93,7 @@ export function SupplierPerformancePage({ supplierId }: { supplierId: string }) 
           <li>{state.status === 'success' ? state.data.supplier.name : 'Supplier'}</li><li aria-hidden="true">/</li>
           <li aria-current="page">Performance</li>
         </ol></nav>
-        <h1>Supplier performance</h1>
+        <h2>Supplier performance</h2>
         <p>Understand reliability before your next bulk order.</p>
       </div>
       {state.status === 'success' && <Button variant="outline" className="ym12-performance-profile-link"
@@ -136,7 +136,7 @@ export function SupplierPerformancePage({ supplierId }: { supplierId: string }) 
             <StatCard label="Fulfilment rate" value={formatRate(state.data.metrics.fulfilmentRate)}
               subtext={formatRatio(state.data.metrics.fulfilmentRate, 'confirmed orders')} />
             <StatCard label="On-time pickup" value={formatRate(state.data.metrics.onTimePickup)}
-              subtext={formatRatio(state.data.metrics.onTimePickup, 'completed orders with recorded pickup times')} />
+              subtext={formatRatio(state.data.metrics.onTimePickup, 'completed orders')} />
             <StatCard label="Dispute rate" value={formatRate(state.data.metrics.disputeRate, 1)}
               subtext={formatRatio(state.data.metrics.disputeRate, 'completed orders')} />
             <StatCard label="Completed orders" value={state.data.metrics.completedOrders.count === null

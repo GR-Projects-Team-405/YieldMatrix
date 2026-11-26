@@ -45,6 +45,7 @@ export async function findSupplierListings(supplierId) {
         AND l.status = 'active'
         AND l.valid_from <= now()
         AND l.valid_until > now()
+        AND b.status IN ('ready','harvested')
         AND f.status = 'active'
         AND supplier.role = 'farmer'
         AND supplier.approval_status = 'approved'
@@ -55,20 +56,4 @@ export async function findSupplierListings(supplierId) {
     [supplierId],
   );
   return rows;
-}
-
-export async function findSupplierPerformance(supplierId) {
-  const { rows } = await pool.query(
-    `SELECT COUNT(DISTINCT o.id) FILTER (
-              WHERE o.status = 'closed'
-            )::text AS completed_orders,
-            COUNT(DISTINCT o.id) FILTER (
-              WHERE o.status IN ('confirmed','in_fulfilment','delivered','closed')
-            )::text AS confirmed_orders
-       FROM allocations a
-       JOIN orders o ON o.id = a.order_id
-      WHERE a.farmer_id = $1::uuid`,
-    [supplierId],
-  );
-  return rows[0] || { completed_orders: '0', confirmed_orders: '0' };
 }

@@ -29,8 +29,9 @@ export async function findSupplierPerformanceCounts(supplierId, from, to) {
      ),
      pickup_records AS (
        SELECT c.id AS order_id,
-              COUNT(ts.id) FILTER (WHERE ts.status = 'picked_up') AS pickup_stops,
-              COUNT(ts.id) FILTER (
+              COUNT(DISTINCT a.id) AS allocation_count,
+              COUNT(DISTINCT ts.id) FILTER (WHERE ts.status = 'picked_up') AS pickup_stops,
+              COUNT(DISTINCT ts.id) FILTER (
                 WHERE ts.status = 'picked_up'
                   AND ts.scheduled_at IS NOT NULL
                   AND ts.completed_at IS NOT NULL
@@ -59,13 +60,10 @@ export async function findSupplierPerformanceCounts(supplierId, from, to) {
        ) AS accepted_requests,
        (SELECT COUNT(*)::text FROM completed_orders) AS completed_orders,
        (SELECT COUNT(*)::text FROM supplier_orders) AS confirmed_orders,
+       (SELECT COUNT(*)::text FROM completed_orders) AS pickup_denominator,
        (SELECT COUNT(*)::text
           FROM pickup_records
-         WHERE pickup_stops > 0 AND pickup_stops = timed_pickup_stops
-       ) AS pickup_denominator,
-       (SELECT COUNT(*)::text
-          FROM pickup_records
-         WHERE pickup_stops > 0
+         WHERE pickup_stops = allocation_count
            AND pickup_stops = timed_pickup_stops
            AND all_pickups_on_time
        ) AS on_time_pickups,

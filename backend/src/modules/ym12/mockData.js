@@ -23,6 +23,8 @@ const samples = [
   { id: 'a12b0000-0000-4000-8000-000000000248', displayId: 'YM-0248', cropName: 'Fresh tomatoes', pricePerKgCents: '28000', availableKg: '2400.000', grade: 'Grade A', supplier: suppliers[0], imageUrl: cropIllustration('#ef654e', '#b82e26', 'tomatoes'), description: 'Firm, vine-ripened tomatoes · Sorted for bulk supply', harvestStart: '2026-11-08T00:00:00.000Z', harvestEnd: '2026-11-15T00:00:00.000Z' },
   { id: 'a12b0000-0000-4000-8000-000000000249', displayId: 'YM-0249', cropName: 'Fresh tomatoes', pricePerKgCents: '25000', availableKg: '3200.000', grade: 'Grade B', supplier: suppliers[1], imageUrl: cropIllustration('#f07b35', '#c64b27', 'tomatoes'), description: 'Fresh tomatoes · Sorted for bulk supply', harvestStart: '2026-11-08T00:00:00.000Z', harvestEnd: '2026-11-14T00:00:00.000Z' },
   { id: 'a12b0000-0000-4000-8000-000000000250', displayId: 'YM-0250', cropName: 'Fresh tomatoes', pricePerKgCents: '29500', availableKg: '1800.000', grade: 'Grade A', supplier: suppliers[2], imageUrl: null, description: 'Fresh tomatoes · Available for bulk supply', harvestStart: '2026-11-09T00:00:00.000Z', harvestEnd: '2026-11-16T00:00:00.000Z' },
+  { id: 'a12b0000-0000-4000-8000-000000000253', displayId: 'YM-0253', cropName: 'Fresh tomatoes', pricePerKgCents: '28000', availableKg: '1600.000', grade: 'Grade A', supplier: suppliers[1], imageUrl: null, description: 'Fresh tomatoes · Available for bulk supply', harvestStart: '2026-11-08T00:00:00.000Z', harvestEnd: '2026-11-15T00:00:00.000Z' },
+  { id: 'a12b0000-0000-4000-8000-000000000254', displayId: 'YM-0254', cropName: 'Fresh tomatoes', pricePerKgCents: '28000', availableKg: '900.000', grade: 'Grade A', supplier: suppliers[2], imageUrl: null, description: 'Fresh tomatoes · Available for bulk supply', harvestStart: '2026-11-09T00:00:00.000Z', harvestEnd: '2026-11-16T00:00:00.000Z' },
 ].map((item, index) => ({
   id: item.id,
   displayId: item.displayId,
@@ -146,6 +148,50 @@ export function getSampleSupplierProfile(id) {
       requestId: '',
     };
   }
+  const supplier = suppliers.find((item) => item.id === id.toLowerCase());
+  const supplierListings = samples.filter((listing) => listing.supplier.id === id.toLowerCase());
+  if (supplier && supplierListings.length) {
+    const activeListings = supplierListings.map((listing) => ({
+      listingId: listing.id,
+      displayId: listing.displayId,
+      cropName: listing.cropName,
+      grade: listing.grade,
+      availableKg: listing.availableKg,
+      district: listing.district,
+      harvestStart: listing.harvestStart,
+      harvestEnd: listing.harvestEnd,
+      pricePerKgCents: listing.pricePerKgCents,
+      pricePerKgLkr: listing.pricePerKgLkr,
+      imageUrl: listing.imageUrl,
+    }));
+    return {
+      supplier: {
+        id: supplier.id,
+        name: supplier.name,
+        businessType: null,
+        district: supplier.district,
+        country: 'Sri Lanka',
+        tagline: null,
+        description: null,
+        verified: supplier.verified,
+        operatingSinceYear: null,
+        memberSince: null,
+        rating: supplier.rating,
+        ratingCount: supplier.ratingCount,
+      },
+      performanceSummary: {
+        completedOrders: null,
+        fulfilmentRatePercent: null,
+        fulfilmentLabel: null,
+        insufficientHistory: true,
+      },
+      cropsSupplied: [...new Set(activeListings.map((listing) => listing.cropName))],
+      activeListings,
+      activeListingCount: activeListings.length,
+      dataSource: 'sample',
+      requestId: '',
+    };
+  }
   return null;
 }
 
@@ -211,13 +257,35 @@ export function getSampleSupplierPerformance(id, from, to) {
       dataSource: 'sample',
     };
   }
+  const sampleSupplier = suppliers.find((supplier) => supplier.id === normalizedId);
+  if (sampleSupplier && sampleSupplier.id !== 'b1111111-1111-4111-8111-111111111111') {
+    return {
+      supplier: {
+        id: sampleSupplier.id,
+        name: sampleSupplier.name,
+        district: sampleSupplier.district,
+        verified: sampleSupplier.verified,
+      },
+      counts: {
+        buyer_requests: null,
+        accepted_requests: null,
+        completed_orders: '0',
+        confirmed_orders: '0',
+        on_time_pickups: null,
+        pickup_denominator: '0',
+        disputed_completed_orders: '0',
+      },
+      trend: [],
+      dataSource: 'sample',
+    };
+  }
   return null;
 }
 
 const sampleComparisonFixtures = [
-  { ...samples[1], distanceKm: 88, performanceScore: 88 },
-  { ...samples[0], distanceKm: 110, performanceScore: 94 },
-  { ...samples[2], distanceKm: null, performanceScore: 90 },
+  { ...samples[1], distanceKm: 88 },
+  { ...samples[0], distanceKm: 110 },
+  { ...samples[2], distanceKm: null },
   {
     ...samples[0],
     id: 'a12b0000-0000-4000-8000-000000000253',
@@ -226,7 +294,6 @@ const sampleComparisonFixtures = [
     availableKg: '1600.000',
     supplier: suppliers[1],
     distanceKm: 88,
-    performanceScore: 88,
   },
   {
     ...samples[2],
@@ -235,7 +302,6 @@ const sampleComparisonFixtures = [
     pricePerKgCents: '28000',
     availableKg: '900.000',
     distanceKm: null,
-    performanceScore: 90,
   },
 ];
 

@@ -1,9 +1,9 @@
 import pool from '../../config/db.js';
 import { DEMO_BUYER_ID, getSampleListing, getSampleSupplierProfile, getSampleSupplierPerformance, getSampleComparisonListings } from './mockData.js';
-import { findApprovedSupplier, findSupplierListings, findSupplierPerformance } from './supplierQueries.js';
+import { findApprovedSupplier, findSupplierListings } from './supplierQueries.js';
 import { calculatePerformanceMetrics, calculatePerformanceScore, calculateRateMetric } from './performanceMetrics.js';
 import { findSupplierMonthlyTrend, findSupplierPerformanceCounts } from './performanceQueries.js';
-import { findComparisonPerformance, findEligibleComparisonListings } from './comparisonQueries.js';
+import { findEligibleComparisonListings } from './comparisonQueries.js';
 import { DEFAULT_BUYER_DISTRICT, MAX_COMPARE } from './comparisonConstants.js';
 import { getDistanceKm } from './distances.js';
 import { rankListings } from './rankListings.js';
@@ -14,14 +14,18 @@ export async function getStatus(req, res, next) {
     const { rows } = await pool.query('SELECT id, name, role FROM users WHERE id = $1 AND role = $2 AND approval_status = $3', [req.user.id, req.user.role, 'approved']);
     if (!rows[0]) return res.status(403).json({ error: 'Account is not approved', requestId: req.requestId });
     return res.json({ module: 'YM12', owner: 'MHD Muhthas', status: 'scaffold', user: rows[0], requestId: req.requestId });
-  } catch (error) { next(error); }
+  } catch (error) {
+    logDatabaseFailure(error, req);
+    next(error);
+  }
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_PERFORMANCE_FROM = '2026-06-01';
 const PERFORMANCE_TIMEZONE = 'Asia/Colombo (UTC+05:30)';
 const DATABASE_CONNECTION_CODES = new Set([
-  'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN',
+  'ECONNREFUSED', 'ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN',
+  'EHOSTUNREACH', 'ENETUNREACH',
   '57P01', '57P02', '57P03', '08000', '08001', '08003', '08004', '08006', '08007',
 ]);
 
@@ -37,6 +41,13 @@ function isConnectionUnavailable(error) {
 
 function isDevelopment() {
   return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === undefined;
+}
+
+function logDatabaseFailure(error, req) {
+  const code = typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code)
+    ? error.code
+    : 'DATABASE_ERROR';
+  console.error('YM12 request failed', { requestId: req.requestId, code });
 }
 
 function centsToLkr(centsValue) {
@@ -146,7 +157,7 @@ function makeSupplierPerformanceResponse(supplier, counts, monthlyRows, period, 
         },
       onTimePickup: insufficientHistory ? { percent: null, numerator: null, denominator: null } : onTimePickup,
       disputeRate: insufficientHistory ? { percent: null, numerator: null, denominator: null } : disputeRate,
-      completedOrders: { count: insufficientHistory ? null : safeCount(completedOrders) },
+      completedOrders: { count: fulfilment.completedOrders },
     },
     trend,
     basis: insufficientHistory ? {
@@ -170,7 +181,7 @@ function categoryFor(cropName) {
   return vegetableCrops.has(String(cropName).trim().toLowerCase()) ? 'Vegetables' : 'Produce';
 }
 
-function shapeDatabaseListing(row) {
+function shapeDatabaseListing(row, completedOrders) {
   const pricePerKgCents = String(row.price_per_kg_cents);
   const cropName = String(row.crop_name).trim();
   return {
@@ -195,7 +206,7 @@ function shapeDatabaseListing(row) {
       district: row.district,
       // The current schema has account approval, but no separate identity-verification or rating record.
       verified: false,
-      completedOrders: row.completed_orders === null ? null : Number(row.completed_orders),
+      completedOrders,
       rating: null,
       ratingCount: null,
     },
@@ -270,21 +281,24 @@ function scoreFromCounts(counts) {
   );
 }
 
-function sampleComparisonResponse(ids, requestId) {
+function sampleComparisonResponse(ids, requestId, period) {
   const { available, unavailable } = getSampleComparisonListings(ids);
-  const items = available.map((row) => makeComparisonItem({
-    listing_id: row.id,
-    supplier_id: row.supplier.id,
-    supplier_name: row.supplier.name,
-    district: row.district,
-    price_per_kg_cents: row.pricePerKgCents,
-    available_kg: row.availableKg,
-    grade: row.grade,
-    harvest_start: row.harvestStart,
-    harvest_end: row.harvestEnd,
-    crop_name: row.cropName,
-    crop_id: row.cropName.toLowerCase(),
-  }, row.performanceScore, row.distanceKm));
+  const items = available.map((row) => {
+    const performance = getSampleSupplierPerformance(row.supplier.id, period.from, period.to);
+    return makeComparisonItem({
+      listing_id: row.id,
+      supplier_id: row.supplier.id,
+      supplier_name: row.supplier.name,
+      district: row.district,
+      price_per_kg_cents: row.pricePerKgCents,
+      available_kg: row.availableKg,
+      grade: row.grade,
+      harvest_start: row.harvestStart,
+      harvest_end: row.harvestEnd,
+      crop_name: row.cropName,
+      crop_id: row.cropName.toLowerCase(),
+    }, performance ? scoreFromCounts(performance.counts) : null, row.distanceKm);
+  });
   return completeComparisonResponse(items, unavailable, DEFAULT_BUYER_DISTRICT, 'sample', requestId);
 }
 
@@ -328,8 +342,7 @@ export async function getProduceDetails(req, res, next) {
               g.name AS grade_name,
               f.district,
               supplier.id::text AS supplier_id,
-              supplier.name AS supplier_name,
-              NULLIF(performance.completed_orders, 0)::int AS completed_orders
+              supplier.name AS supplier_name
          FROM listings l
          JOIN harvest_batches b ON b.id = l.batch_id
          JOIN batch_availability ba ON ba.batch_id = b.id
@@ -337,12 +350,6 @@ export async function getProduceDetails(req, res, next) {
          JOIN users supplier ON supplier.id = b.farmer_id
          JOIN crops c ON c.id = b.crop_id
          JOIN grades g ON g.id = b.grade_id
-         LEFT JOIN LATERAL (
-           SELECT COUNT(DISTINCT o.id)::int AS completed_orders
-             FROM allocations a
-             JOIN orders o ON o.id = a.order_id
-            WHERE a.farmer_id = supplier.id AND o.status = 'closed'
-         ) performance ON TRUE
         WHERE l.id = $1::uuid
           AND l.status = 'active'
           AND l.valid_from <= now()
@@ -357,11 +364,21 @@ export async function getProduceDetails(req, res, next) {
       [req.params.listingId],
     );
     if (!rows[0]) return res.status(404).json({ error: 'This produce listing is unavailable or no longer active.', requestId: req.requestId });
-    const shaped = shapeDatabaseListing(rows[0]);
+    const period = getPerformancePeriod({});
+    const performanceCounts = await findSupplierPerformanceCounts(rows[0].supplier_id, period.from, period.to);
+    const completedOrders = calculatePerformanceMetrics(
+      performanceCounts?.completed_orders,
+      performanceCounts?.confirmed_orders,
+    ).completedOrders;
+    const shaped = shapeDatabaseListing(rows[0], completedOrders);
     const { supplier, ...listing } = shaped;
     return res.json({ listing, supplier, dataSource: 'database', requestId: req.requestId });
   } catch (error) {
-    if (isDevelopment() && isConnectionUnavailable(error)) return sendSampleListing(req, res);
+    if (isDevelopment() && isConnectionUnavailable(error)) {
+      logDatabaseFailure(error, req);
+      return sendSampleListing(req, res);
+    }
+    logDatabaseFailure(error, req);
     return next(error);
   }
 }
@@ -397,9 +414,10 @@ export async function getSupplierProfile(req, res, next) {
       return res.status(404).json({ error: 'Supplier profile not found or supplier is not approved.', requestId: req.requestId });
     }
 
+    const period = getPerformancePeriod({});
     const [listingRows, performanceRow] = await Promise.all([
       findSupplierListings(req.params.supplierId),
-      findSupplierPerformance(req.params.supplierId),
+      findSupplierPerformanceCounts(req.params.supplierId, period.from, period.to),
     ]);
 
     const activeListings = listingRows.map((row) => {
@@ -450,6 +468,7 @@ export async function getSupplierProfile(req, res, next) {
     });
   } catch (error) {
     if (isDevelopment() && isConnectionUnavailable(error)) {
+      logDatabaseFailure(error, req);
       if (req.user.id !== DEMO_BUYER_ID) {
         return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
       }
@@ -460,6 +479,7 @@ export async function getSupplierProfile(req, res, next) {
       found.requestId = req.requestId;
       return res.json(found);
     }
+    logDatabaseFailure(error, req);
     return next(error);
   }
 }
@@ -517,6 +537,7 @@ export async function getSupplierPerformance(req, res, next) {
     }, counts || {}, monthlyRows, period, 'database', req.requestId));
   } catch (error) {
     if (isDevelopment() && isConnectionUnavailable(error)) {
+      logDatabaseFailure(error, req);
       if (req.user.id !== DEMO_BUYER_ID) {
         return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
       }
@@ -533,6 +554,7 @@ export async function getSupplierPerformance(req, res, next) {
         req.requestId,
       ));
     }
+    logDatabaseFailure(error, req);
     return next(error);
   }
 }
@@ -545,12 +567,13 @@ export async function getComparison(req, res, next) {
       requestId: req.requestId,
     });
   }
+  const performancePeriod = getPerformancePeriod({});
 
   if (!process.env.DATABASE_URL && isDevelopment()) {
     if (req.user.id !== DEMO_BUYER_ID) {
       return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
     }
-    return res.json(sampleComparisonResponse(ids, req.requestId));
+    return res.json(sampleComparisonResponse(ids, req.requestId, performancePeriod));
   }
 
   try {
@@ -569,8 +592,13 @@ export async function getComparison(req, res, next) {
       reason: 'Listing not found or no longer eligible.',
     }));
     const supplierIds = [...new Set(rows.map((row) => String(row.supplier_id)))];
-    const performanceRows = supplierIds.length ? await findComparisonPerformance(supplierIds) : [];
-    const performanceBySupplier = new Map(performanceRows.map((row) => [String(row.supplier_id), row]));
+    const performanceRows = supplierIds.length
+      ? await Promise.all(supplierIds.map((supplierId) =>
+        findSupplierPerformanceCounts(supplierId, performancePeriod.from, performancePeriod.to)))
+      : [];
+    const performanceBySupplier = new Map(
+      supplierIds.map((supplierId, index) => [supplierId, performanceRows[index]]),
+    );
     const buyerDistrict = account.rows[0].district || DEFAULT_BUYER_DISTRICT;
     const items = rows.map((row) => {
       const metrics = performanceBySupplier.get(String(row.supplier_id));
@@ -581,11 +609,13 @@ export async function getComparison(req, res, next) {
     return res.json(completeComparisonResponse(items, unavailable, buyerDistrict, 'database', req.requestId));
   } catch (error) {
     if (isDevelopment() && isConnectionUnavailable(error)) {
+      logDatabaseFailure(error, req);
       if (req.user.id !== DEMO_BUYER_ID) {
         return res.status(503).json({ error: 'Database is unavailable for account approval checks.', requestId: req.requestId });
       }
-      return res.json(sampleComparisonResponse(ids, req.requestId));
+      return res.json(sampleComparisonResponse(ids, req.requestId, performancePeriod));
     }
+    logDatabaseFailure(error, req);
     return next(error);
   }
 }

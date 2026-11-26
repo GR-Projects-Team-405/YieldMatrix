@@ -54,7 +54,7 @@ export function SupplierComparisonPage() {
   const items = data?.items || [];
   const maxCompare = data?.maxCompare ?? MAX_COMPARE;
   const count = items.length;
-  const cropName = data?.crop?.toLowerCase().replace(/^fresh\s+/, '').replace(/s$/, '') || 'produce';
+  const cropName = data?.crop?.toLowerCase().replace(/^fresh\s+/, '').replace(/oes$/, 'o').replace(/s$/, '') || 'produce';
   const supplierWord = count === 1 ? 'supplier' : 'suppliers';
 
   return <div className="ym12-comparison-page">
@@ -64,7 +64,7 @@ export function SupplierComparisonPage() {
           <li><span>Suppliers</span></li><li aria-hidden="true">/</li>
           <li aria-current="page">Comparison</li>
         </ol></nav>
-        <h1>Supplier comparison</h1>
+        <h2>Supplier comparison</h2>
         {data && count > 0
           ? <p>{count === 3 ? 'Three' : count} {cropName} {supplierWord}, ranked by price and then distance.</p>
           : <p>Compare selected suppliers side by side before sourcing.</p>}

@@ -1,6 +1,6 @@
 .ym12-profile-page { display: grid; gap: 24px; color: var(--text); }
 .ym12-profile-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
-.ym12-profile-page-heading h1 { font-size: clamp(30px, 3vw, 38px); line-height: 1.15; font-weight: 550; letter-spacing: -.025em; }
+.ym12-profile-page-heading h2 { font-size: clamp(30px, 3vw, 38px); line-height: 1.15; font-weight: 550; letter-spacing: -.025em; }
 .ym12-profile-page-heading > div > p { margin-top: 8px; color: var(--muted); line-height: 1.5; }
 .ym12-profile-back { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
 .ym12-profile-content { display: grid; gap: 24px; min-width: 0; }
@@ -70,7 +70,7 @@
 @media (max-width: 600px) {
   .ym12-profile-page { gap: 18px; }
   .ym12-profile-page-heading { align-items: flex-start; flex-direction: column; gap: 14px; }
-  .ym12-profile-page-heading h1 { font-size: 30px; }
+  .ym12-profile-page-heading h2 { font-size: 30px; }
   .ym12-profile-back { min-height: 44px; }
   .ym12-profile-hero { align-items: flex-start; flex-direction: column; padding: 20px; }
   .ym12-profile-identity { align-items: flex-start; gap: 12px; }

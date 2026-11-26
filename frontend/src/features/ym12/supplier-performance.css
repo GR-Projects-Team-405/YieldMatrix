@@ -1,6 +1,6 @@
 .ym12-performance-page { display: grid; gap: 22px; color: var(--text); }
 .ym12-performance-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; }
-.ym12-performance-page-heading h1 { font-size: clamp(30px, 3vw, 38px); line-height: 1.15; font-weight: 550; letter-spacing: -.025em; }
+.ym12-performance-page-heading h2 { font-size: clamp(30px, 3vw, 38px); line-height: 1.15; font-weight: 550; letter-spacing: -.025em; }
 .ym12-performance-page-heading > div > p { margin-top: 8px; color: var(--muted); line-height: 1.5; }
 .ym12-performance-profile-link { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .ym12-performance-supplier { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
@@ -52,7 +52,7 @@
 @media (max-width: 600px) {
   .ym12-performance-page { gap: 18px; }
   .ym12-performance-page-heading { align-items: flex-start; flex-direction: column; gap: 14px; }
-  .ym12-performance-page-heading h1 { font-size: 30px; }
+  .ym12-performance-page-heading h2 { font-size: 30px; }
   .ym12-performance-profile-link { min-height: 44px; }
   .ym12-performance-supplier { align-items: flex-start; flex-direction: column; padding: 18px; }
   .ym12-performance-period { justify-items: start; text-align: left; }
