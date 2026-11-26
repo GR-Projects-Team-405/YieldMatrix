@@ -11,60 +11,14 @@ import { InputField } from '../../components/InputField';
 import { SelectField } from '../../components/SelectField';
 import type { HarvestChangeProposal } from './types';
 
-// Fallback mock proposal matching Figma YM14_05
-const defaultMockProposal: HarvestChangeProposal = {
-  commitmentId: 'c1041',
-  reference: 'COM-1041',
-  cropBatch: 'Batch #BT-9024 • Welimada Carrot Grade A',
-  proposalExpiresAt: new Date(Date.now() + 18 * 3600 * 1000 + 42 * 60 * 1000).toISOString(),
-  diff: [
-    {
-      parameter: 'Harvest Quantity',
-      originalAgreed: '600 kg net',
-      proposedChange: '480 kg net',
-      netVariance: '-120 kg (-20% Yield Shortage)',
-      isNegative: true,
-    },
-    {
-      parameter: 'Delivery Window',
-      originalAgreed: '10 - 11 Nov 2026',
-      proposedChange: '14 - 15 Nov 2026',
-      netVariance: '+4 Days Shift (Weather Hold)',
-      isShift: true,
-    },
-    {
-      parameter: 'Agreed Unit Price',
-      originalAgreed: 'LKR 220.00 / kg',
-      proposedChange: 'LKR 220.00 / kg',
-      netVariance: 'Unchanged (Agreed Cap Maintained)',
-    },
-    {
-      parameter: 'Total Escrow Value',
-      originalAgreed: 'LKR 132,000',
-      proposedChange: 'LKR 105,600',
-      netVariance: '-LKR 26,400 (Escrow Refund to Wallet)',
-      isNegative: true,
-    },
-  ],
-  growerStatement:
-    'Due to unseasonal heavy rainfall in Welimada over the past 48 hours, 20% of the carrot field experienced waterlogging. To preserve Grade-A quality standards, we are harvesting only unaffected heads from upper drainage terraces, resulting in 480 kg net volume ready on 14 Nov.',
-  agronomyVerified: true,
-  verificationNotes:
-    '3 field photos and rainfall gauge log verified by Badulla Regional Agricultural Extension Officer.',
-  financialImpact: {
-    escrowAutoRefundCents: 2640000, // LKR 26,400
-    revisedEscrowHoldCents: 10560000, // LKR 105,600
-    timelineShift: '+4 Days Delay',
-    newIntakeDate: '14 Nov 2026 (08:00 AM)',
-  },
-};
-
 export default function HarvestChangeReview() {
-  const { id = 'c1041' } = useParams<{ id?: string }>();
+  const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
-  const [proposal, setProposal] = useState<HarvestChangeProposal>(defaultMockProposal);
-  const [countdown, setCountdown] = useState('18h 42m remaining');
+  const [proposal, setProposal] = useState<HarvestChangeProposal | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState('--h --m remaining');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [decisionState, setDecisionState] = useState<'pending' | 'approved' | 'rejected' | 'cancelled'>('pending');
@@ -82,23 +36,38 @@ export default function HarvestChangeReview() {
   const [cancelNotes, setCancelNotes] = useState('');
   const [cancelError, setCancelError] = useState('');
 
-  // Load live proposal data
+  // Load live proposal data from PostgreSQL-backed API
   useEffect(() => {
     let mounted = true;
     async function loadProposal() {
+      if (!id) {
+        if (mounted) {
+          setErrorMsg('No commitment ID specified.');
+          setLoading(false);
+        }
+        return;
+      }
+      setLoading(true);
+      setErrorMsg(null);
       try {
         const res = await api.get(`/ym14/commitments/${id}/change-proposal`);
         if (mounted && res.data?.diff) {
           setProposal(res.data);
+        } else if (mounted) {
+          setProposal(null);
+          setErrorMsg('No pending harvest modification proposal exists for this commitment.');
         }
-      } catch (_err) {
+      } catch (err: any) {
         if (mounted) {
-          setProposal({
-            ...defaultMockProposal,
-            commitmentId: id,
-            reference: id.startsWith('COM-') ? id : `COM-${id.toUpperCase()}`,
-          });
+          setProposal(null);
+          setErrorMsg(
+            err?.response?.status === 404
+              ? 'No pending harvest modification proposal exists for this commitment.'
+              : 'Unable to load harvest modification proposal from the database.'
+          );
         }
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
     loadProposal();
@@ -109,7 +78,8 @@ export default function HarvestChangeReview() {
 
   // Countdown timer
   useEffect(() => {
-    const target = proposal.proposalExpiresAt ? new Date(proposal.proposalExpiresAt).getTime() : Date.now() + 67320000;
+    if (!proposal?.proposalExpiresAt) return;
+    const target = new Date(proposal.proposalExpiresAt).getTime();
     const update = () => {
       const diff = Math.max(0, target - Date.now());
       if (diff <= 0) {
@@ -123,27 +93,25 @@ export default function HarvestChangeReview() {
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [proposal.proposalExpiresAt]);
+  }, [proposal?.proposalExpiresAt]);
 
   // Handle Approve Change (DR-02: Silence is never acceptance)
   const handleApproveConfirm = async () => {
+    if (!proposal) return;
     setActionBusy(true);
     try {
-      const res = await api.post(`/ym14/commitments/${proposal.reference || id}/approve-change`, {
+      const targetId = proposal.commitmentId || id;
+      const res = await api.post(`/ym14/commitments/${targetId}/approve-change`, {
         operationKey: `op-approve-${proposal.reference}-${Date.now()}`,
       });
       setDecisionState('approved');
       setApproveDialogOpen(false);
       setToastMessage(
-        res.data?.message ||
-          'Harvest modification approved. Contract terms updated and LKR 26,400 credited to your Agri Wallet.'
+        res.data?.message || 'Harvest modification approved. Contract terms updated.'
       );
-    } catch (_err) {
-      setDecisionState('approved');
+    } catch (err: any) {
       setApproveDialogOpen(false);
-      setToastMessage(
-        'Harvest modification approved. Contract terms updated and LKR 26,400 credited to your Agri Wallet.'
-      );
+      setToastMessage(err?.response?.data?.error || 'Failed to approve harvest modification.');
     } finally {
       setActionBusy(false);
     }
@@ -151,19 +119,22 @@ export default function HarvestChangeReview() {
 
   // Handle Reject Change
   const handleRejectConfirm = async () => {
+    if (!proposal) return;
     setActionBusy(true);
     try {
-      await api.post(`/ym14/commitments/${proposal.reference || id}/reject-change`, {
+      const targetId = proposal.commitmentId || id;
+      const res = await api.post(`/ym14/commitments/${targetId}/reject-change`, {
         reason: rejectReason || 'Buyer requested retention of original binding terms',
         operationKey: `op-reject-${proposal.reference}-${Date.now()}`,
       });
       setDecisionState('rejected');
       setRejectDialogOpen(false);
-      setToastMessage('Harvest modification rejected. Original agreed terms remain strictly binding.');
-    } catch (_err) {
-      setDecisionState('rejected');
+      setToastMessage(
+        res.data?.message || 'Harvest modification rejected. Original agreed terms remain strictly binding.'
+      );
+    } catch (err: any) {
       setRejectDialogOpen(false);
-      setToastMessage('Harvest modification rejected. Original agreed terms remain strictly binding.');
+      setToastMessage(err?.response?.data?.error || 'Failed to reject harvest modification.');
     } finally {
       setActionBusy(false);
     }
@@ -181,6 +152,7 @@ export default function HarvestChangeReview() {
 
   // Handle Cancellation
   const handleCancelSubmit = async () => {
+    if (!proposal) return;
     if (!cancelReason.trim()) {
       setCancelError('Please select or specify a cancellation reason.');
       return;
@@ -188,7 +160,8 @@ export default function HarvestChangeReview() {
     setCancelError('');
     setActionBusy(true);
     try {
-      const res = await api.post(`/ym14/commitments/${proposal.reference || id}/cancel`, {
+      const targetId = proposal.commitmentId || id;
+      const res = await api.post(`/ym14/commitments/${targetId}/cancel`, {
         reason: `${cancelReason}${cancelNotes ? ': ' + cancelNotes : ''}`,
         operationKey: `op-cancel-${proposal.reference}-${Date.now()}`,
       });
@@ -197,14 +170,36 @@ export default function HarvestChangeReview() {
       setToastMessage(
         res.data?.message || 'Commitment cancelled successfully. 100% of escrow funds released back to Agri Wallet.'
       );
-    } catch (_err) {
-      setDecisionState('cancelled');
+    } catch (err: any) {
       setCancelModalOpen(false);
-      setToastMessage('Commitment cancelled successfully. 100% of escrow funds released back to Agri Wallet.');
+      setToastMessage(err?.response?.data?.error || 'Failed to cancel commitment.');
     } finally {
       setActionBusy(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="ym14-container">
+        <ContentCard>
+          <p style={{ margin: 0, color: 'var(--muted)' }}>Loading harvest change proposal from database…</p>
+        </ContentCard>
+      </div>
+    );
+  }
+
+  if (!proposal) {
+    return (
+      <div className="ym14-container">
+        <div className="ym14-breadcrumb" style={{ marginBottom: '16px' }}>
+          <Link to={id ? `/buyer/commitments/${id}` : '/buyer/commitments'}>← Back to Commitment Details</Link>
+        </div>
+        <ContentCard>
+          <Alert type="info">{errorMsg || 'No pending harvest modification proposal found.'}</Alert>
+        </ContentCard>
+      </div>
+    );
+  }
 
   return (
     <div className="ym14-container">

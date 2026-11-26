@@ -11,57 +11,16 @@ import { InputField } from '../../components/InputField';
 import { SelectField } from '../../components/SelectField';
 import type { ReceivedOffer, OfferStatus } from './types';
 
-// Verified fallback mock data matching Figma YM14_01
-const defaultMockOffer: ReceivedOffer = {
-  id: 'e1111111-1111-1111-1111-111111111111',
-  reference: 'OFF-2026-0842',
-  status: 'pending',
-  offeredKg: 1200.0,
-  unitPriceCents: 18000, // LKR 180 / kg
-  lineTotalCents: 21600000, // LKR 216,000
-  availabilityWindow: '12 Nov 2026',
-  expiresAt: new Date(Date.now() + 4 * 3600 * 1000 + 28 * 60 * 1000 + 15 * 1000).toISOString(),
-  tags: ['Tomato - Grade A', 'Welimada Origin', 'GlobalGAP Certified'],
-  notes:
-    'Crops harvested at peak maturity in terrace fields. All tomatoes pre-sorted, washed, and packed in reusable 20kg food-grade plastic crates. Transported via climate-controlled vehicle to Colombo Central Hub within 6 hours of morning field harvest.',
-  qualityChecklist: [
-    { label: 'Grade verification', value: '100% inspected against YieldMatrix Grade A produce specs.' },
-    { label: 'Color & firmness', value: '85-90% red turn, firm skin suitable for retail shelf life.' },
-    { label: 'Uniform sizing', value: 'Diameter 55-65 mm per sample crate verification.' },
-  ],
-  demand: {
-    id: 'd1111111-1111-1111-1111-111111111111',
-    reference: 'DM-1042',
-    cropName: 'Fresh Salad Tomatoes',
-    gradeName: 'Grade A',
-    quantityKg: 1500.0,
-    destinationHub: 'Colombo Central Hub',
-    targetWindow: '12 Nov - 14 Nov 2026',
-    budgetPerKgCents: 18500, // LKR 185 / kg
-  },
-  supplier: {
-    id: '11111111-1111-1111-1111-111111111111',
-    name: 'Nimal Perera',
-    farmName: 'Green Valley Farm',
-    estate: 'Green Valley Estate',
-    location: 'Welimada, Badulla',
-    rating: 4.9,
-    completedTrades: 48,
-    isVerified: true,
-  },
-  batch: {
-    id: 'b1111111-1111-1111-1111-111111111111',
-    code: 'BT-9024',
-  },
-};
-
 export default function ReceivedOfferDetails() {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
-  const [offer, setOffer] = useState<ReceivedOffer>(defaultMockOffer);
-  const [loading, setLoading] = useState(false);
-  const [countdown, setCountdown] = useState('04h 28m 15s');
+  const [offer, setOffer] = useState<ReceivedOffer | null>(null);
+  const [createdCommitmentId, setCreatedCommitmentId] = useState<string | null>(null);
+  const [createdCommitmentRef, setCreatedCommitmentRef] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState('--h --m --s');
 
   // Modals and user actions
   const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
@@ -71,8 +30,8 @@ export default function ReceivedOfferDetails() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Counter-offer state
-  const [counterPrice, setCounterPrice] = useState('175');
-  const [counterQty, setCounterQty] = useState('1500');
+  const [counterPrice, setCounterPrice] = useState('');
+  const [counterQty, setCounterQty] = useState('');
   const [counterNotes, setCounterNotes] = useState('');
 
   // Decline state
@@ -80,28 +39,35 @@ export default function ReceivedOfferDetails() {
   const [declineNotes, setDeclineNotes] = useState('');
   const [declineError, setDeclineError] = useState('');
 
-  // Fetch offer from API with fallback
+  // Fetch offer from PostgreSQL-backed API
   useEffect(() => {
     let mounted = true;
     async function loadOffer() {
-      const offerId = id || 'OFF-2026-0842';
-      const localStatus = localStorage.getItem(`ym14_offer_${offerId}`);
-      setLoading(true);
-      try {
-        const res = await api.get(`/ym14/offers/${offerId}`);
-        if (mounted && res.data?.offer) {
-          const finalStatus = localStatus || res.data.offer.status;
-          setOffer({ ...res.data.offer, status: finalStatus as any });
-        }
-      } catch (_err) {
-        // Safe offline fallback
+      if (!id) {
         if (mounted) {
-          const finalStatus = localStatus || defaultMockOffer.status;
-          setOffer({
-            ...defaultMockOffer,
-            reference: offerId.startsWith('OFF-') ? offerId : `OFF-${offerId.substring(0, 4).toUpperCase()}`,
-            status: finalStatus as any,
-          });
+          setErrorMsg('No offer ID specified.');
+          setLoading(false);
+        }
+        return;
+      }
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const res = await api.get(`/ym14/offers/${id}`);
+        if (mounted && res.data?.offer) {
+          setOffer(res.data.offer);
+        } else if (mounted) {
+          setOffer(null);
+          setErrorMsg('Offer not found in the database.');
+        }
+      } catch (err: any) {
+        if (mounted) {
+          setOffer(null);
+          setErrorMsg(
+            err?.response?.status === 404
+              ? 'Offer record not found in the database.'
+              : 'Unable to load offer details from the database.'
+          );
         }
       } finally {
         if (mounted) setLoading(false);
@@ -115,7 +81,8 @@ export default function ReceivedOfferDetails() {
 
   // Expiry countdown timer (Asia/Colombo)
   useEffect(() => {
-    const targetTime = offer.expiresAt ? new Date(offer.expiresAt).getTime() : Date.now() + 16095000;
+    if (!offer?.expiresAt) return;
+    const targetTime = new Date(offer.expiresAt).getTime();
 
     const updateTimer = () => {
       const now = Date.now();
@@ -137,31 +104,26 @@ export default function ReceivedOfferDetails() {
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [offer.expiresAt]);
+  }, [offer?.expiresAt]);
 
   // Handle Accept Offer (FR-YM14-01 / FR-YM14-03)
   const handleAcceptConfirm = async () => {
+    if (!offer) return;
     setActionBusy(true);
-    const offerKey = offer.reference || offer.id;
-    localStorage.setItem(`ym14_offer_${offerKey}`, 'accepted');
-    localStorage.setItem(`ym14_offer_${id || 'OFF-2026-0842'}`, 'accepted');
     try {
-      const res = await api.post(`/ym14/offers/${offer.reference || offer.id}/accept`, {
+      const res = await api.post(`/ym14/offers/${offer.id}/accept`, {
         operationKey: `op-accept-${offer.reference}-${Date.now()}`,
       });
-      setOffer((prev) => ({ ...prev, status: 'accepted' as OfferStatus }));
+      setOffer((prev) => (prev ? { ...prev, status: 'accepted' as OfferStatus } : prev));
+      if (res.data?.commitmentId) setCreatedCommitmentId(res.data.commitmentId);
+      if (res.data?.reference) setCreatedCommitmentRef(res.data.reference);
       setAcceptDialogOpen(false);
       setToastMessage(
-        res.data?.message ||
-          'Offer accepted successfully! Forward commitment COM-1042 initiated with LKR 216,000 escrow locked.'
+        res.data?.message || 'Offer accepted successfully! Forward commitment initiated with escrow locked.'
       );
-    } catch (_err: any) {
-      // Offline simulation fallback
-      setOffer((prev) => ({ ...prev, status: 'accepted' as OfferStatus }));
+    } catch (err: any) {
       setAcceptDialogOpen(false);
-      setToastMessage(
-        'Offer accepted successfully! Forward commitment initiated with LKR 216,000 held in Agri Wallet escrow.'
-      );
+      setToastMessage(err?.response?.data?.error || 'Failed to accept offer.');
     } finally {
       setActionBusy(false);
     }
@@ -169,43 +131,64 @@ export default function ReceivedOfferDetails() {
 
   // Handle Counter-Offer
   const handleCounterSubmit = () => {
+    if (!offer) return;
     setActionBusy(true);
     setTimeout(() => {
       setActionBusy(false);
       setCounterModalOpen(false);
       setToastMessage(
-        `Counter-offer for ${counterQty} kg @ LKR ${counterPrice}/kg submitted to ${offer.supplier.name}.`
+        `Counter-offer for ${counterQty || offer.offeredKg} kg @ LKR ${counterPrice || offer.unitPriceCents / 100}/kg submitted to ${offer.supplier.name}.`
       );
     }, 600);
   };
 
   // Handle Decline Offer
   const handleDeclineSubmit = async () => {
+    if (!offer) return;
     if (!declineReason.trim()) {
       setDeclineError('Please select or specify a reason.');
       return;
     }
     setDeclineError('');
     setActionBusy(true);
-    const offerKey = offer.reference || offer.id;
-    localStorage.setItem(`ym14_offer_${offerKey}`, 'rejected');
-    localStorage.setItem(`ym14_offer_${id || 'OFF-2026-0842'}`, 'rejected');
     try {
-      await api.post(`/ym14/offers/${offer.reference || offer.id}/decline`, {
+      await api.post(`/ym14/offers/${offer.id}/decline`, {
         reason: `${declineReason}${declineNotes ? ': ' + declineNotes : ''}`,
         operationKey: `op-decline-${offer.reference}-${Date.now()}`,
       });
-      setOffer((prev) => ({ ...prev, status: 'rejected' as OfferStatus }));
+      setOffer((prev) => (prev ? { ...prev, status: 'rejected' as OfferStatus } : prev));
       setDeclineModalOpen(false);
       setToastMessage('Offer declined. The supplier has been notified with the recorded reason.');
-    } catch (_err: any) {
-      setOffer((prev) => ({ ...prev, status: 'rejected' as OfferStatus }));
+    } catch (err: any) {
       setDeclineModalOpen(false);
-      setToastMessage('Offer declined. The supplier has been notified with the recorded reason.');
+      setToastMessage(err?.response?.data?.error || 'Failed to decline offer.');
     } finally {
       setActionBusy(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="ym14-container">
+        <ContentCard>
+          <p style={{ margin: 0, color: 'var(--muted)' }}>Loading offer details from database…</p>
+        </ContentCard>
+      </div>
+    );
+  }
+
+  if (!offer) {
+    return (
+      <div className="ym14-container">
+        <div className="ym14-breadcrumb" style={{ marginBottom: '16px' }}>
+          <Link to="/buyer/demands">← Back to Demands</Link>
+        </div>
+        <ContentCard>
+          <Alert type="error">{errorMsg || 'Offer not found in the database.'}</Alert>
+        </ContentCard>
+      </div>
+    );
+  }
 
   const isPending = offer.status === 'pending';
   const isAccepted = offer.status === 'accepted';
@@ -436,14 +419,18 @@ export default function ReceivedOfferDetails() {
               {isAccepted ? (
                 <div style={{ display: 'grid', gap: '12px' }}>
                   <Alert type="success">
-                    Offer accepted! Forward commitment COM-1042 is active and escrow is locked.
+                    Offer accepted! Forward commitment {createdCommitmentRef || ''} is active and escrow is locked.
                   </Alert>
                   <Button
                     variant="primary"
                     style={{ width: '100%' }}
-                    onClick={() => navigate('/buyer/commitments/c1042')}
+                    onClick={() =>
+                      navigate(createdCommitmentId ? `/buyer/commitments/${createdCommitmentId}` : '/buyer/commitments')
+                    }
                   >
-                    View Commitment Specifications (COM-1042)
+                    {createdCommitmentRef
+                      ? `View Commitment Specifications (${createdCommitmentRef})`
+                      : 'View Produce Commitments'}
                   </Button>
                 </div>
               ) : isRejected ? (
@@ -452,7 +439,7 @@ export default function ReceivedOfferDetails() {
                   <Button
                     variant="outline"
                     style={{ width: '100%' }}
-                    onClick={() => navigate(`/buyer/offers/compare/${offer.demand.reference}`)}
+                    onClick={() => navigate(`/buyer/offers/compare/${offer.demand.id || offer.demand.reference}`)}
                   >
                     Compare Other Offers
                   </Button>

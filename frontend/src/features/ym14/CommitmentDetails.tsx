@@ -6,103 +6,52 @@ import { ContentCard } from '../../components/ContentCard';
 import { Button } from '../../components/Button';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Toast } from '../../components/Toast';
+import { Alert } from '../../components/Alert';
 import { downloadAgreementPdf } from './pdfGenerator';
 import type { CommitmentDetail } from './types';
 
-// Fallback mock commitment details matching Figma YM14_04
-const defaultMockCommitmentDetail: CommitmentDetail = {
-  id: 'c1042',
-  reference: 'COM-1042',
-  contractHash: '#YM-8820-CC',
-  status: 'ready_to_fulfil',
-  hasChangePending: false,
-  linkedDemand: {
-    id: 'd1111111-1111-1111-1111-111111111111',
-    reference: 'DM-1042',
-    title: 'Salad Tomatoes 1,500 kg',
-  },
-  originatingOffer: {
-    id: 'o-highland-9104',
-    reference: 'OFF-2026-0842',
-    supplierName: 'Highland Harvest',
-  },
-  orderAllocationStatus: 'Pending Harvest Intake Scan',
-  stepper: [
-    {
-      step: 1,
-      title: '1. Proposed',
-      subtitle: '28 Oct • Offer Received',
-      status: 'completed',
-    },
-    {
-      step: 2,
-      title: '2. Accepted',
-      subtitle: '02 Nov • Escrow Locked',
-      status: 'completed',
-    },
-    {
-      step: 3,
-      title: '3. Ready to fulfil',
-      subtitle: 'Active • Harvesting Batch',
-      status: 'active',
-    },
-    {
-      step: 4,
-      title: '4. Fulfilled',
-      subtitle: 'Upcoming • Hub Scan & Payout',
-      status: 'upcoming',
-    },
-  ],
-  specs: {
-    buyerName: 'Mohomad Mushrif',
-    buyerWorkspace: 'YM14 • Mohomad Mushrif (Colombo Hub)',
-    supplierName: 'Highland Harvest (Kandy District)',
-    plannedFieldBatch: 'Batch #BT-9104 (Salad Tomatoes, Grade A)',
-    expectedKg: 1000.0,
-    agreedPricePerKgCents: 18425, // LKR 184.25
-    expectedTotalCents: 18425000, // LKR 184,250
-    targetHarvestWindow: '12 Nov - 14 Nov 2026 (08:00 AM Intake)',
-    cancellationTerms: 'Free cancellation prior to harvest dispatch; reason required',
-  },
-  originalTermsAnchor: {
-    summaryText:
-      '1,000 kg Fresh Salad Tomatoes (Grade A) @ LKR 184.25/kg = LKR 184,250 • Delivery 12-14 Nov 2026',
-  },
-  escrowStatus: {
-    balanceHeldCents: 18425000,
-    releaseTrigger:
-      'Auto-settles and transfers to farmer wallet upon digital warehouse acceptance scan at Colombo intake bay.',
-  },
-  logistics: {
-    receivingHub: 'Colombo Central Hub - Intake Dock 04',
-    gatePass: '#GP-8832 issued to driver',
-  },
-};
-
 export default function CommitmentDetails() {
-  const { id = 'c1042' } = useParams<{ id?: string }>();
+  const { id } = useParams<{ id?: string }>();
   const { user } = useAuth();
 
-  const [commitment, setCommitment] = useState<CommitmentDetail>(defaultMockCommitmentDetail);
+  const [commitment, setCommitment] = useState<CommitmentDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const rolePrefix = user?.role === 'farmer' ? '/farmer' : '/buyer';
 
   useEffect(() => {
     let mounted = true;
     async function loadCommitment() {
+      if (!id) {
+        if (mounted) {
+          setErrorMsg('No commitment ID specified.');
+          setLoading(false);
+        }
+        return;
+      }
+      setLoading(true);
+      setErrorMsg(null);
       try {
         const res = await api.get(`/ym14/commitments/${id}`);
         if (mounted && res.data?.commitment) {
           setCommitment(res.data.commitment);
+        } else if (mounted) {
+          setCommitment(null);
+          setErrorMsg('Commitment record not found in the database.');
         }
-      } catch (_err) {
-        // Fallback gracefully
+      } catch (err: any) {
         if (mounted) {
-          setCommitment({
-            ...defaultMockCommitmentDetail,
-            id,
-            reference: id.startsWith('COM-') ? id : `COM-${id.toUpperCase()}`,
-          });
+          setCommitment(null);
+          setErrorMsg(
+            err?.response?.status === 404
+              ? 'Commitment record not found in the database.'
+              : 'Unable to load commitment details from the database.'
+          );
         }
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
     loadCommitment();
@@ -111,7 +60,28 @@ export default function CommitmentDetails() {
     };
   }, [id]);
 
-  const rolePrefix = user?.role === 'farmer' ? '/farmer' : '/buyer';
+  if (loading) {
+    return (
+      <div className="ym14-container">
+        <ContentCard>
+          <p style={{ margin: 0, color: 'var(--muted)' }}>Loading commitment specifications from database…</p>
+        </ContentCard>
+      </div>
+    );
+  }
+
+  if (!commitment) {
+    return (
+      <div className="ym14-container">
+        <div className="ym14-breadcrumb" style={{ marginBottom: '16px' }}>
+          <Link to={`${rolePrefix}/commitments`}>← Back to Commitments List</Link>
+        </div>
+        <ContentCard>
+          <Alert type="error">{errorMsg || 'Commitment record not found.'}</Alert>
+        </ContentCard>
+      </div>
+    );
+  }
 
   return (
     <div className="ym14-container">
@@ -356,7 +326,7 @@ export default function CommitmentDetails() {
                 Download Agreement PDF
               </Button>
 
-              {commitment.hasChangePending && (
+              {commitment.hasChangePending && user?.role !== 'farmer' && (
                 <Link to={`${rolePrefix}/commitments/${commitment.id}/change-review`}>
                   <Button variant="primary">Review Harvest Change Proposal</Button>
                 </Link>

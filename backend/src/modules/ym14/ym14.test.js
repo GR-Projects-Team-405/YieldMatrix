@@ -45,6 +45,7 @@ function createMockReqRes({ user, params = {}, query = {}, body = {}, headers = 
 }
 
 async function runUnitTests() {
+  process.env.YM14_TEST_MODE = '1';
   console.log('🚀 Running YM14 Phase 2 & Phase 3 Backend Unit & Controller Tests...\n');
 
   // Test 1: getStatus for Buyer

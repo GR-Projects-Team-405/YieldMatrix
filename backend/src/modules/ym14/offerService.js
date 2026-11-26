@@ -15,6 +15,19 @@ const inMemoryOffers = new Map([
 const inMemoryCommitments = new Map();
 const processedOperationKeys = new Map();
 
+function formatDateShort(value) {
+  if (!value) return '';
+  try {
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+    return String(value);
+  } catch {
+    return String(value);
+  }
+}
+
 /**
  * Fetch received offer details by ID or reference, scoped to the authenticated buyer.
  * Checks PostgreSQL first; falls back gracefully to in-memory/mock fixtures if DB is empty or unreachable.
@@ -24,10 +37,10 @@ const processedOperationKeys = new Map();
  * @returns {Promise<object|null>} Detailed offer payload or null if not found
  */
 export async function fetchOfferById(offerId, buyerId) {
-  try {
+  if (process.env.YM14_TEST_MODE !== '1') {
     const query = `
       SELECT o.id, o.demand_id, o.farmer_id, o.batch_id, o.quantity_kg, o.unit_price_cents,
-             o.expires_at, o.status, o.operation_key, o.created_at,
+             o.expires_at, o.status, o.notes, o.quality_specs, o.decline_reason, o.operation_key, o.created_at,
              d.crop_id, d.grade_id, d.quantity_kg AS demand_quantity_kg, d.destination,
              d.destination_district, d.delivery_from, d.delivery_until, d.budget_cents,
              c.name AS crop_name, g.name AS grade_name,
@@ -44,63 +57,70 @@ export async function fetchOfferById(offerId, buyerId) {
     `;
 
     const { rows } = await pool.query(query, [offerId, buyerId]);
-
-    if (rows && rows.length > 0) {
-      const row = rows[0];
-      const offeredKg = parseFloat(row.quantity_kg);
-      const unitPriceCents = parseInt(row.unit_price_cents, 10);
-      const lineTotalCents = Math.round(offeredKg * unitPriceCents);
-
-      return {
-        id: row.id,
-        reference: `OFF-${row.id.substring(0, 8).toUpperCase()}`,
-        status: row.status,
-        offeredKg,
-        unitPriceCents,
-        lineTotalCents,
-        availabilityWindow: row.delivery_from ? `${row.delivery_from}` : 'Immediate',
-        expiresAt: row.expires_at,
-        tags: [
-          `${row.crop_name} - ${row.grade_name}`,
-          `${row.farm_district || 'Local'} Origin`,
-          'YieldMatrix Inspected'
-        ],
-        notes: 'Produce harvested at peak maturity. Fully sorted, washed, and packed in reusable food-grade crates.',
-        qualityChecklist: [
-          { label: 'Grade verification', value: `100% inspected against YieldMatrix ${row.grade_name} specs.` },
-          { label: 'Color & firmness', value: 'High uniformity, firm skin suitable for retail shelf life.' },
-          { label: 'Uniform sizing', value: 'Per sample crate verification.' },
-        ],
-        demand: {
-          id: row.demand_id,
-          reference: `DM-${row.demand_id.substring(0, 8).toUpperCase()}`,
-          cropName: row.crop_name,
-          gradeName: row.grade_name,
-          quantityKg: parseFloat(row.demand_quantity_kg),
-          destinationHub: row.destination || 'Colombo Central Hub',
-          targetWindow: row.delivery_from ? `${row.delivery_from} - ${row.delivery_until || ''}` : 'November 2026 Season',
-          budgetPerKgCents: parseInt(row.budget_cents, 10) || 19000,
-        },
-        supplier: {
-          id: row.farmer_id,
-          name: row.farmer_name,
-          farmName: row.farm_name || 'Grower Farm',
-          location: `${row.farm_district || row.farmer_district || 'Sri Lanka'}`,
-          rating: 4.9,
-          completedTrades: 48,
-          isVerified: true,
-        },
-        batch: {
-          id: row.batch_id,
-          code: `BT-${row.batch_id.substring(0, 8).toUpperCase()}`,
-        },
-      };
+    if (!rows || rows.length === 0) {
+      return null;
     }
-  } catch (_dbError) {
-    // Graceful fallback to in-memory / mock data
+
+    const row = rows[0];
+    const offeredKg = parseFloat(row.quantity_kg);
+    const unitPriceCents = parseInt(row.unit_price_cents, 10);
+    const lineTotalCents = Math.round(offeredKg * unitPriceCents);
+    const specs = row.quality_specs && typeof row.quality_specs === 'object' ? row.quality_specs : {};
+    const checklist = Array.isArray(specs.checklist) && specs.checklist.length > 0
+      ? specs.checklist
+      : [
+          { label: 'Grade verification', value: `Inspected against YieldMatrix ${row.grade_name} specs.` },
+          { label: 'Packaging & Handling', value: specs.packaging || 'Standard ventilated harvest crates.' },
+        ];
+
+    return {
+      id: row.id,
+      reference: `OFF-${row.id.substring(0, 8).toUpperCase()}`,
+      status: row.status,
+      declineReason: row.decline_reason || null,
+      offeredKg,
+      unitPriceCents,
+      lineTotalCents,
+      availabilityWindow: row.delivery_from ? formatDateShort(row.delivery_from) : 'Immediate',
+      expiresAt: row.expires_at,
+      tags: Array.isArray(specs.tags) && specs.tags.length > 0
+        ? specs.tags
+        : [
+            `${row.crop_name} - ${row.grade_name}`,
+            `${row.farm_district || row.farmer_district || 'Local'} Origin`,
+            'YieldMatrix Verified',
+          ],
+      notes: row.notes || 'Harvest offer submitted through YieldMatrix marketplace.',
+      qualityChecklist: checklist,
+      demand: {
+        id: row.demand_id,
+        reference: `DM-${row.demand_id.substring(0, 8).toUpperCase()}`,
+        cropName: row.crop_name,
+        gradeName: row.grade_name,
+        quantityKg: parseFloat(row.demand_quantity_kg),
+        destinationHub: row.destination || 'Colombo Central Hub',
+        targetWindow: row.delivery_from
+          ? `${formatDateShort(row.delivery_from)}${row.delivery_until ? ' - ' + formatDateShort(row.delivery_until) : ''}`
+          : 'November 2026 Season',
+        budgetPerKgCents: parseInt(row.budget_cents, 10) || 19000,
+      },
+      supplier: {
+        id: row.farmer_id,
+        name: row.farmer_name,
+        farmName: row.farm_name || 'Grower Farm',
+        location: `${row.farm_district || row.farmer_district || 'Sri Lanka'}`,
+        rating: 4.9,
+        completedTrades: 48,
+        isVerified: true,
+      },
+      batch: {
+        id: row.batch_id,
+        code: `BT-${row.batch_id.substring(0, 8).toUpperCase()}`,
+      },
+    };
   }
 
-  // Check in-memory store first
+  // Test-only in-memory / mock fixture path
   if (inMemoryOffers.has(offerId)) {
     return inMemoryOffers.get(offerId);
   }
@@ -135,9 +155,9 @@ export async function fetchOfferById(offerId, buyerId) {
  * @returns {Promise<object>} Comparison summary, metrics, and scored offer items
  */
 export async function fetchOfferComparisonByDemandId(demandId, buyerId) {
-  try {
+  if (process.env.YM14_TEST_MODE !== '1') {
     const demandQuery = `
-      SELECT d.id, d.crop_id, d.grade_id, d.quantity_kg, d.budget_cents,
+      SELECT d.id, d.crop_id, d.grade_id, d.quantity_kg, d.budget_cents, d.delivery_from,
              c.name AS crop_name, g.name AS grade_name
       FROM demands d
       JOIN crops c ON d.crop_id = c.id
@@ -147,93 +167,93 @@ export async function fetchOfferComparisonByDemandId(demandId, buyerId) {
     `;
 
     const { rows: demandRows } = await pool.query(demandQuery, [demandId, buyerId]);
-
-    if (demandRows && demandRows.length > 0) {
-      const d = demandRows[0];
-      const demandBudget = parseInt(d.budget_cents, 10) || 19000;
-      const demandKg = parseFloat(d.quantity_kg);
-
-      const offersQuery = `
-        SELECT o.id, o.quantity_kg, o.unit_price_cents, o.expires_at, o.status,
-               hb.id AS batch_id, u.name AS supplier_name, u.district AS supplier_district
-        FROM offers o
-        JOIN harvest_batches hb ON o.batch_id = hb.id
-        JOIN users u ON o.farmer_id = u.id
-        WHERE o.demand_id = $1
-        ORDER BY o.unit_price_cents ASC
-      `;
-
-      const { rows: offerRows } = await pool.query(offersQuery, [d.id]);
-
-      if (offerRows && offerRows.length > 0) {
-        const offers = offerRows.map((o) => {
-          const offeredKg = parseFloat(o.quantity_kg);
-          const priceCents = parseInt(o.unit_price_cents, 10);
-          const shortageKg = Math.max(0, demandKg - offeredKg);
-          const priceDiff = priceCents - demandBudget;
-          const isExpired = o.status === 'expired' || new Date(o.expires_at) < new Date();
-
-          let badge = '';
-          if (isExpired) {
-            badge = 'EXPIRED • NEW SUPPLIER';
-          } else if (offeredKg >= demandKg) {
-            badge = 'FULL DEMAND VOLUME MATCH';
-          } else if (priceDiff <= 0) {
-            badge = 'RECOMMENDED • BEST VALUE';
-          }
-
-          return {
-            id: o.id,
-            badge,
-            supplierName: o.supplier_name,
-            district: o.supplier_district || 'Local',
-            batchCode: `BT-${o.batch_id.substring(0, 4).toUpperCase()}`,
-            grade: `${d.grade_name} Produce`,
-            offeredKg,
-            shortageKg,
-            pricePerKgCents: priceCents,
-            priceDifferenceCents: priceDiff,
-            lineTotalCents: Math.round(offeredKg * priceCents),
-            availabilityWindow: 'Ready for pickup',
-            expiresAt: o.expires_at,
-            status: isExpired ? 'expired' : o.status,
-            supplierRating: 4.8,
-            completedTrades: 35,
-            onTimePercentage: 98,
-          };
-        });
-
-        const activeOffers = offers.filter((o) => o.status !== 'expired');
-        const lowestOffer = activeOffers[0] || offers[0];
-        const fullMatches = offers.filter((o) => o.offeredKg >= demandKg).length;
-        const partialMatches = offers.length - fullMatches;
-
-        return {
-          demand: {
-            id: d.id,
-            reference: `DM-${d.id.substring(0, 4).toUpperCase()}`,
-            cropName: d.crop_name,
-            quantityKg: demandKg,
-            budgetPerKgCents: demandBudget,
-          },
-          metrics: {
-            totalOffers: offers.length,
-            pendingOffers: activeOffers.length,
-            expiredOffers: offers.length - activeOffers.length,
-            lowestPricePerKgCents: lowestOffer ? lowestOffer.pricePerKgCents : demandBudget,
-            lowestPriceSupplier: lowestOffer ? lowestOffer.supplierName : 'None',
-            demandCoverageText: `${fullMatches} Full Match (${demandKg.toLocaleString()} kg), ${partialMatches} Partial`,
-            earliestPickupDate: '08 Nov 2026',
-          },
-          offers,
-        };
-      }
+    if (!demandRows || demandRows.length === 0) {
+      return null;
     }
-  } catch (_dbError) {
-    // Database query failed or unseeded; fall back to verified mock fixture
+
+    const d = demandRows[0];
+    const demandBudget = parseInt(d.budget_cents, 10) || 19000;
+    const demandKg = parseFloat(d.quantity_kg);
+
+    const offersQuery = `
+      SELECT o.id, o.quantity_kg, o.unit_price_cents, o.expires_at, o.status,
+             hb.id AS batch_id, hb.planned_harvest_date, u.name AS supplier_name, u.district AS supplier_district
+      FROM offers o
+      JOIN harvest_batches hb ON o.batch_id = hb.id
+      JOIN users u ON o.farmer_id = u.id
+      WHERE o.demand_id = $1
+      ORDER BY o.unit_price_cents ASC
+    `;
+
+    const { rows: offerRows } = await pool.query(offersQuery, [d.id]);
+
+    const offers = (offerRows || []).map((o) => {
+      const offeredKg = parseFloat(o.quantity_kg);
+      const priceCents = parseInt(o.unit_price_cents, 10);
+      const shortageKg = Math.max(0, demandKg - offeredKg);
+      const priceDiff = priceCents - demandBudget;
+      const isExpired = o.status === 'expired' || new Date(o.expires_at) < new Date();
+
+      let badge = '';
+      if (isExpired) {
+        badge = 'EXPIRED • NEW SUPPLIER';
+      } else if (offeredKg >= demandKg) {
+        badge = 'FULL DEMAND VOLUME MATCH';
+      } else if (priceDiff <= 0) {
+        badge = 'RECOMMENDED • BEST VALUE';
+      }
+
+      return {
+        id: o.id,
+        badge,
+        supplierName: o.supplier_name,
+        district: o.supplier_district || 'Local',
+        batchCode: `BT-${o.batch_id.substring(0, 4).toUpperCase()}`,
+        grade: `${d.grade_name} Produce`,
+        offeredKg,
+        shortageKg,
+        pricePerKgCents: priceCents,
+        priceDifferenceCents: priceDiff,
+        lineTotalCents: Math.round(offeredKg * priceCents),
+        availabilityWindow: o.planned_harvest_date ? formatDateShort(o.planned_harvest_date) : 'Ready for pickup',
+        expiresAt: formatDateShort(o.expires_at) || o.expires_at,
+        status: isExpired ? 'expired' : o.status,
+        supplierRating: 4.8,
+        completedTrades: 35,
+        onTimePercentage: 98,
+      };
+    });
+
+    const activeOffers = offers.filter((o) => o.status !== 'expired');
+    const lowestOffer = activeOffers[0] || offers[0];
+    const fullMatches = offers.filter((o) => o.offeredKg >= demandKg).length;
+    const partialMatches = offers.length - fullMatches;
+
+    return {
+      demand: {
+        id: d.id,
+        reference: `DM-${d.id.substring(0, 4).toUpperCase()}`,
+        cropName: d.crop_name,
+        quantityKg: demandKg,
+        budgetPerKgCents: demandBudget,
+      },
+      metrics: {
+        totalOffers: offers.length,
+        pendingOffers: activeOffers.length,
+        expiredOffers: offers.length - activeOffers.length,
+        lowestPricePerKgCents: lowestOffer ? lowestOffer.pricePerKgCents : 0,
+        lowestPriceSupplier: lowestOffer ? lowestOffer.supplierName : 'None',
+        demandCoverageText:
+          offers.length === 0
+            ? 'No offers received yet'
+            : `${fullMatches} Full Match (${demandKg.toLocaleString()} kg), ${partialMatches} Partial`,
+        earliestPickupDate: d.delivery_from ? formatDateShort(d.delivery_from) : 'TBD',
+      },
+      offers,
+    };
   }
 
-  // Return verified mock fixture matching Screen 2 (YM14_02) with in-memory status overrides
+  // Test-only in-memory / mock fixture path
   const offersWithOverrides = mockOfferComparisonDM1042.offers.map((o) => {
     const mem = inMemoryOffers.get(o.id);
     if (mem) {
@@ -367,7 +387,9 @@ export async function acceptOffer({ offerId, buyerId, operationKey }) {
         // Ignore rollback failure
       }
     }
-    // Database failed or offline; record transition in-memory for testing resilience
+    if (process.env.YM14_TEST_MODE !== '1') {
+      throw dbError;
+    }
   } finally {
     if (client) {
       client.release();
@@ -431,14 +453,12 @@ export async function declineOffer({ offerId, buyerId, reason, operationKey }) {
     throw error;
   }
 
-  // Try updating PostgreSQL
-  try {
+  // Persist rejection and decline reason in PostgreSQL
+  if (process.env.YM14_TEST_MODE !== '1') {
     await pool.query(
-      "UPDATE offers SET status = 'rejected' WHERE id = $1",
-      [offer.id]
+      "UPDATE offers SET status = 'rejected', decline_reason = $2 WHERE id = $1",
+      [offer.id, reason.trim()]
     );
-  } catch (_dbError) {
-    // Database offline; fallback to in-memory state
   }
 
   offer.status = 'rejected';

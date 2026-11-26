@@ -1,131 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatCard } from '../../components/StatCard';
 import { StatusBadge } from '../../components/StatusBadge';
+import { Alert } from '../../components/Alert';
 import type { CommitmentListItem, CommitmentStats, CommitmentStatus } from './types';
-
-// Fallback mock commitments list matching Figma YM14_03
-const defaultMockCommitments: CommitmentListItem[] = [
-  {
-    id: 'c1042',
-    reference: 'COM-1042',
-    supplierName: 'Highland Harvest',
-    cropName: 'Tomato',
-    grade: 'Grade A',
-    expectedKg: 1000.0,
-    agreedPricePerKgCents: 18425, // LKR 184.25
-    harvestWindow: '12 - 14 Nov 2026',
-    status: 'ready_to_fulfil',
-    changePending: false,
-    actionType: 'view_details',
-  },
-  {
-    id: 'c1041',
-    reference: 'COM-1041',
-    supplierName: 'Green Valley Farm',
-    cropName: 'Carrot',
-    grade: 'Grade A',
-    expectedKg: 600.0,
-    agreedPricePerKgCents: 22000, // LKR 220.00
-    harvestWindow: '10 - 11 Nov 2026',
-    status: 'change_pending',
-    changePending: true,
-    actionType: 'review_change',
-  },
-  {
-    id: 'c1039',
-    reference: 'COM-1039',
-    supplierName: 'Welimada Co-op',
-    cropName: 'Cabbage',
-    grade: 'Grade B',
-    expectedKg: 1200.0,
-    agreedPricePerKgCents: 13000, // LKR 130.00
-    harvestWindow: '15 - 17 Nov 2026',
-    status: 'accepted',
-    changePending: false,
-    actionType: 'view_details',
-  },
-  {
-    id: 'c1036',
-    reference: 'COM-1036',
-    supplierName: 'Nuwara Eliya Farms',
-    cropName: 'Leeks',
-    grade: 'Grade A',
-    expectedKg: 850.0,
-    agreedPricePerKgCents: 17000, // LKR 170.00
-    harvestWindow: '16 - 18 Nov 2026',
-    status: 'proposed',
-    changePending: false,
-    actionType: 'view_details',
-  },
-  {
-    id: 'c1030',
-    reference: 'COM-1030',
-    supplierName: 'Dambulla Growers',
-    cropName: 'Red Onion',
-    grade: 'Grade A',
-    expectedKg: 2800.0,
-    agreedPricePerKgCents: 20000, // LKR 200.00
-    harvestWindow: '01 - 03 Nov 2026',
-    status: 'fulfilled',
-    changePending: false,
-    actionType: 'view_archive',
-  },
-  {
-    id: 'c1025',
-    reference: 'COM-1025',
-    supplierName: 'Kandy Valley Agris',
-    cropName: 'Bell Pepper',
-    grade: 'Grade A',
-    expectedKg: 500.0,
-    agreedPricePerKgCents: 31000, // LKR 310.00
-    harvestWindow: '25 - 28 Oct 2026',
-    status: 'cancelled',
-    changePending: false,
-    actionType: 'view_archive',
-  },
-  {
-    id: 'c1020',
-    reference: 'COM-1020',
-    supplierName: 'Ella Organic Fields',
-    cropName: 'Potatoes',
-    grade: 'Grade A',
-    expectedKg: 1500.0,
-    agreedPricePerKgCents: 24000,
-    harvestWindow: '20 - 22 Nov 2026',
-    status: 'accepted',
-    changePending: false,
-    actionType: 'view_details',
-  },
-  {
-    id: 'c1018',
-    reference: 'COM-1018',
-    supplierName: 'Matale Spice & Veg',
-    cropName: 'Green Chilli',
-    grade: 'Grade B',
-    expectedKg: 400.0,
-    agreedPricePerKgCents: 45000,
-    harvestWindow: '18 - 20 Nov 2026',
-    status: 'ready_to_fulfil',
-    changePending: false,
-    actionType: 'view_details',
-  },
-];
-
-const defaultStats: CommitmentStats = {
-  activeCount: 8,
-  committedKg: 6450,
-  heldInEscrowCents: 118025000, // LKR 1,180,250
-  actionRequiredCount: 1,
-};
 
 type FilterTab = 'all' | 'accepted' | 'change_pending' | 'ready_to_fulfil' | 'fulfilled' | 'cancelled';
 
 export default function CommitmentsList() {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const [commitments, setCommitments] = useState<CommitmentListItem[]>([]);
   const [stats, setStats] = useState<CommitmentStats>({
@@ -135,24 +20,26 @@ export default function CommitmentsList() {
     actionRequiredCount: 0,
   });
   const [tabCounts, setTabCounts] = useState({
-    all: 8,
-    accepted: 2,
-    change_pending: 1,
-    ready_to_fulfil: 2,
-    fulfilled: 1,
-    cancelled: 1,
+    all: 0,
+    accepted: 0,
+    change_pending: 0,
+    ready_to_fulfil: 0,
+    fulfilled: 0,
+    cancelled: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 6;
 
-  // Load from backend API with fallback
+  // Load live commitments from PostgreSQL-backed API
   useEffect(() => {
     let mounted = true;
     async function loadData() {
       setLoading(true);
+      setErrorMsg(null);
       try {
         const res = await api.get('/ym14/commitments', {
           params: {
@@ -162,16 +49,15 @@ export default function CommitmentsList() {
             limit: pageSize,
           },
         });
-        if (mounted && res.data?.commitments) {
-          setCommitments(res.data.commitments);
+        if (mounted && res.data) {
+          setCommitments(Array.isArray(res.data.commitments) ? res.data.commitments : []);
           if (res.data.stats) setStats(res.data.stats);
           if (res.data.tabCounts) setTabCounts(res.data.tabCounts);
         }
       } catch (_err) {
-        // Fallback to local fixtures if backend is unreachable
         if (mounted) {
-          setCommitments(defaultMockCommitments);
-          setStats(defaultStats);
+          setCommitments([]);
+          setErrorMsg('Unable to load commitments from the database. Please verify the backend API connection.');
         }
       } finally {
         if (mounted) setLoading(false);
@@ -183,7 +69,6 @@ export default function CommitmentsList() {
     };
   }, [activeTab, searchQuery, currentPage]);
 
-  // Client-side filtering when working with mock fallback
   const filteredItems = useMemo(() => {
     let list = [...commitments];
     if (activeTab !== 'all') {
@@ -200,6 +85,11 @@ export default function CommitmentsList() {
     }
     return list;
   }, [commitments, activeTab, searchQuery]);
+
+  const uniqueCropsCount = useMemo(
+    () => new Set(commitments.map((c) => c.cropName)).size,
+    [commitments]
+  );
 
   const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
   const paginatedItems = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -239,17 +129,23 @@ export default function CommitmentsList() {
         </div>
       </div>
 
+      {errorMsg && (
+        <div style={{ marginBottom: '16px' }}>
+          <Alert type="error">{errorMsg}</Alert>
+        </div>
+      )}
+
       {/* 4 StatCards Bar */}
       <div className="ym14-stats-bar">
         <StatCard
           label="Active Commitments"
           value={String(stats.activeCount).padStart(2, '0')}
-          subtext="3 awaiting harvest schedule"
+          subtext={`${tabCounts.accepted + tabCounts.ready_to_fulfil} scheduled for harvest`}
         />
         <StatCard
           label="Committed Volume"
           value={`${stats.committedKg.toLocaleString()} kg`}
-          subtext="Across 4 crop varieties"
+          subtext={uniqueCropsCount > 0 ? `Across ${uniqueCropsCount} crop varieties` : 'No active crop volume'}
         />
         <StatCard
           label="Held in Escrow"
@@ -259,8 +155,12 @@ export default function CommitmentsList() {
         <StatCard
           label="Action Required"
           value={String(stats.actionRequiredCount).padStart(2, '0')}
-          subtext="1 harvest modification pending review"
-          highlight
+          subtext={
+            stats.actionRequiredCount > 0
+              ? `${stats.actionRequiredCount} harvest modification pending review`
+              : 'No pending change requests'
+          }
+          highlight={stats.actionRequiredCount > 0}
         />
       </div>
 
@@ -400,7 +300,7 @@ export default function CommitmentsList() {
                       )}
                     </td>
                     <td>
-                      {c.actionType === 'review_change' ? (
+                      {c.actionType === 'review_change' && user?.role !== 'farmer' ? (
                         <Link
                           to={`${rolePrefix}/commitments/${c.id}/change-review`}
                           style={{ color: '#b56208', fontWeight: 600, textDecoration: 'none' }}

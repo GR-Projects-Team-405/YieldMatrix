@@ -81,6 +81,10 @@ export async function getOfferComparison(req, res, next) {
     }
 
     const comparison = await fetchOfferComparisonByDemandId(demandId, req.user.id);
+    if (!comparison) {
+      return res.status(404).json({ error: 'Demand not found or unauthorized', requestId: req.requestId });
+    }
+
     return res.json({
       ...comparison,
       requestId: req.requestId,

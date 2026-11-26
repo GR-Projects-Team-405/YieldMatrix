@@ -50,7 +50,7 @@ export async function fetchCommitmentsList({
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.max(1, Math.min(50, parseInt(limit, 10) || 10));
 
-  try {
+  if (process.env.YM14_TEST_MODE !== '1') {
     const roleColumn = role === 'farmer' ? 'fc.farmer_id' : 'fc.buyer_id';
     const query = `
       SELECT fc.id, fc.buyer_id, fc.farmer_id, fc.batch_id, fc.offer_id,
@@ -67,95 +67,88 @@ export async function fetchCommitmentsList({
       ORDER BY fc.created_at DESC
     `;
 
-    const { rows } = await pool.query(query, [userId]);
+    const { rows = [] } = await pool.query(query, [userId]);
 
-    if (rows && rows.length > 0) {
-      let items = rows.map((r) => {
-        const expectedKg = parseFloat(r.quantity_kg);
-        const agreedPrice = parseInt(r.agreed_unit_price_cents, 10);
-        const isChangePending = r.status === 'change_pending';
-        return {
-          id: r.id,
-          reference: `COM-${r.id.substring(0, 4).toUpperCase()}`,
-          supplierName: r.supplier_name,
-          cropName: r.crop_name,
-          grade: r.grade_name,
-          expectedKg,
-          agreedPricePerKgCents: agreedPrice,
-          harvestWindow: formatWindow(r.window_start, r.window_end),
-          status: r.status,
-          changePending: isChangePending,
-          actionType: isChangePending
-            ? 'review_change'
-            : ['fulfilled', 'cancelled'].includes(r.status)
-            ? 'view_archive'
-            : 'view_details',
-        };
-      });
-
-      // Filter by status if requested
-      if (status && status !== 'all') {
-        const normalized = status.toLowerCase().replace(/[\s-]/g, '_');
-        items = items.filter((i) => i.status.toLowerCase() === normalized);
-      }
-
-      // Filter by keyword search
-      if (search && search.trim()) {
-        const term = search.trim().toLowerCase();
-        items = items.filter(
-          (i) =>
-            i.reference.toLowerCase().includes(term) ||
-            i.supplierName.toLowerCase().includes(term) ||
-            i.cropName.toLowerCase().includes(term)
-        );
-      }
-
-      const total = items.length;
-      const startIndex = (pageNum - 1) * limitNum;
-      const paginatedItems = items.slice(startIndex, startIndex + limitNum);
-
-      // Compute aggregate stats across all active commitments
-      const activeCount = rows.filter((r) =>
-        ['proposed', 'accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status)
-      ).length;
-      const committedKg = rows
-        .filter((r) => ['proposed', 'accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status))
-        .reduce((sum, r) => sum + parseFloat(r.quantity_kg), 0);
-      const heldInEscrowCents = rows
-        .filter((r) => ['accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status))
-        .reduce((sum, r) => sum + Math.round(parseFloat(r.quantity_kg) * parseInt(r.agreed_unit_price_cents, 10)), 0);
-      const actionRequiredCount = rows.filter((r) => r.status === 'change_pending').length;
-      const tabCounts = {
-        all: rows.length,
-        accepted: rows.filter((r) => r.status === 'accepted').length,
-        change_pending: rows.filter((r) => r.status === 'change_pending').length,
-        ready_to_fulfil: rows.filter((r) => r.status === 'ready_to_fulfil').length,
-        fulfilled: rows.filter((r) => r.status === 'fulfilled').length,
-        cancelled: rows.filter((r) => r.status === 'cancelled').length,
-      };
-
+    let items = rows.map((r) => {
+      const expectedKg = parseFloat(r.quantity_kg);
+      const agreedPrice = parseInt(r.agreed_unit_price_cents, 10);
+      const isChangePending = r.status === 'change_pending';
       return {
-        stats: {
-          activeCount,
-          committedKg,
-          heldInEscrowCents,
-          actionRequiredCount,
-        },
-        tabCounts,
-        commitments: paginatedItems,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          totalPages: Math.ceil(total / limitNum) || 1,
-        },
+        id: r.id,
+        reference: `COM-${r.id.substring(0, 4).toUpperCase()}`,
+        supplierName: r.supplier_name,
+        cropName: r.crop_name,
+        grade: r.grade_name,
+        expectedKg,
+        agreedPricePerKgCents: agreedPrice,
+        harvestWindow: formatWindow(r.window_start, r.window_end),
+        status: r.status,
+        changePending: isChangePending,
+        actionType: isChangePending
+          ? 'review_change'
+          : ['fulfilled', 'cancelled'].includes(r.status)
+          ? 'view_archive'
+          : 'view_details',
       };
+    });
+
+    if (status && status !== 'all') {
+      const normalized = status.toLowerCase().replace(/[\s-]/g, '_');
+      items = items.filter((i) => i.status.toLowerCase() === normalized);
     }
-  } catch (_dbError) {
-    // Database query failed or unseeded; fall back to rich mock fixtures
+
+    if (search && search.trim()) {
+      const term = search.trim().toLowerCase();
+      items = items.filter(
+        (i) =>
+          i.reference.toLowerCase().includes(term) ||
+          i.supplierName.toLowerCase().includes(term) ||
+          i.cropName.toLowerCase().includes(term)
+      );
+    }
+
+    const total = items.length;
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginatedItems = items.slice(startIndex, startIndex + limitNum);
+
+    const activeCount = rows.filter((r) =>
+      ['proposed', 'accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status)
+    ).length;
+    const committedKg = rows
+      .filter((r) => ['proposed', 'accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status))
+      .reduce((sum, r) => sum + parseFloat(r.quantity_kg), 0);
+    const heldInEscrowCents = rows
+      .filter((r) => ['accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status))
+      .reduce((sum, r) => sum + Math.round(parseFloat(r.quantity_kg) * parseInt(r.agreed_unit_price_cents, 10)), 0);
+    const actionRequiredCount = rows.filter((r) => r.status === 'change_pending').length;
+    const tabCounts = {
+      all: rows.length,
+      accepted: rows.filter((r) => r.status === 'accepted').length,
+      change_pending: rows.filter((r) => r.status === 'change_pending').length,
+      ready_to_fulfil: rows.filter((r) => r.status === 'ready_to_fulfil').length,
+      fulfilled: rows.filter((r) => r.status === 'fulfilled').length,
+      cancelled: rows.filter((r) => r.status === 'cancelled').length,
+    };
+
+    return {
+      stats: {
+        activeCount,
+        committedKg,
+        heldInEscrowCents,
+        actionRequiredCount,
+      },
+      tabCounts,
+      commitments: paginatedItems,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum) || 1,
+      },
+    };
   }
 
-  // Fallback to validated mock dataset with in-memory status overlays
+  // Test-only in-memory / mock fixture path
   let items = mockCommitmentsList.map((c) => {
     const override = inMemoryCommitmentStates.get(c.id) || inMemoryCommitmentStates.get(c.reference);
     if (override) {
@@ -231,7 +224,7 @@ export async function fetchCommitmentsList({
  * @returns {Promise<object|null>} Detailed commitment payload or null
  */
 export async function fetchCommitmentById(commitmentId, userId, role) {
-  try {
+  if (process.env.YM14_TEST_MODE !== '1') {
     const roleCondition = role === 'farmer' ? 'fc.farmer_id = $2' : 'fc.buyer_id = $2';
     const query = `
       SELECT fc.*,
@@ -250,90 +243,89 @@ export async function fetchCommitmentById(commitmentId, userId, role) {
     `;
 
     const { rows } = await pool.query(query, [commitmentId, userId]);
-
-    if (rows && rows.length > 0) {
-      const r = rows[0];
-      const expectedKg = parseFloat(r.quantity_kg);
-      const agreedPrice = parseInt(r.agreed_unit_price_cents, 10);
-      const totalCents = Math.round(expectedKg * agreedPrice);
-
-      const isProposed = r.status === 'proposed';
-      const isAccepted = ['accepted', 'change_pending', 'ready_to_fulfil', 'fulfilled'].includes(r.status);
-      const isReady = ['ready_to_fulfil', 'fulfilled'].includes(r.status);
-      const isFulfilled = r.status === 'fulfilled';
-
-      return {
-        id: r.id,
-        reference: `COM-${r.id.substring(0, 4).toUpperCase()}`,
-        contractHash: `#YM-${r.id.substring(0, 4).toUpperCase()}-CC`,
-        status: r.status,
-        hasChangePending: r.status === 'change_pending',
-        linkedDemand: {
-          id: r.offer_id || 'dm-default',
-          reference: 'DM-1042',
-          title: `${r.crop_name} ${expectedKg.toLocaleString()} kg`,
-        },
-        originatingOffer: {
-          id: r.offer_id || 'off-default',
-          reference: 'OFF-2026-0842',
-          supplierName: r.farmer_name,
-        },
-        orderAllocationStatus: isReady ? 'Allocation Ready for Pickup' : 'Pending Harvest Intake Scan',
-        stepper: [
-          {
-            step: 1,
-            title: '1. Proposed',
-            subtitle: 'Offer Received',
-            status: isProposed ? 'active' : 'completed',
-          },
-          {
-            step: 2,
-            title: '2. Accepted',
-            subtitle: 'Escrow Locked',
-            status: isAccepted ? (r.status === 'accepted' ? 'active' : 'completed') : 'upcoming',
-          },
-          {
-            step: 3,
-            title: '3. Ready to fulfil',
-            subtitle: 'Harvesting Batch',
-            status: isReady ? (r.status === 'ready_to_fulfil' ? 'active' : 'completed') : 'upcoming',
-          },
-          {
-            step: 4,
-            title: '4. Fulfilled',
-            subtitle: 'Hub Scan & Payout',
-            status: isFulfilled ? 'completed' : 'upcoming',
-          },
-        ],
-        specs: {
-          buyerName: r.buyer_name,
-          buyerWorkspace: `Buyer Workspace (Colombo Hub)`,
-          supplierName: `${r.farmer_name} (${r.farmer_district || 'Grower'})`,
-          plannedFieldBatch: `Batch #${r.batch_id.substring(0, 8).toUpperCase()} (${r.crop_name}, ${r.grade_name})`,
-          expectedKg,
-          agreedPricePerKgCents: agreedPrice,
-          expectedTotalCents: totalCents,
-          targetHarvestWindow: `${r.window_start} - ${r.window_end}`,
-          cancellationTerms: r.cancellation_terms || 'Free cancellation prior to harvest dispatch; reason required',
-        },
-        originalTermsAnchor: {
-          summaryText: `${expectedKg.toLocaleString()} kg ${r.crop_name} (${r.grade_name}) @ LKR ${(agreedPrice / 100).toFixed(2)}/kg = LKR ${(totalCents / 100).toLocaleString()} • Delivery ${r.window_start} - ${r.window_end}`,
-        },
-        escrowStatus: {
-          balanceHeldCents: totalCents,
-          releaseTrigger: 'Auto-settles and transfers to farmer wallet upon digital warehouse acceptance scan at Colombo intake bay.',
-        },
-        logistics: {
-          receivingHub: 'Colombo Central Hub - Intake Dock 04',
-          gatePass: '#GP-8832 issued to driver',
-        },
-      };
+    if (!rows || rows.length === 0) {
+      return null;
     }
-  } catch (_dbError) {
-    // Database fallback
+
+    const r = rows[0];
+    const expectedKg = parseFloat(r.quantity_kg);
+    const agreedPrice = parseInt(r.agreed_unit_price_cents, 10);
+    const totalCents = Math.round(expectedKg * agreedPrice);
+
+    const isProposed = r.status === 'proposed';
+    const isAccepted = ['accepted', 'change_pending', 'ready_to_fulfil', 'fulfilled'].includes(r.status);
+    const isReady = ['ready_to_fulfil', 'fulfilled'].includes(r.status);
+    const isFulfilled = r.status === 'fulfilled';
+
+    return {
+      id: r.id,
+      reference: `COM-${r.id.substring(0, 4).toUpperCase()}`,
+      contractHash: `#YM-${r.id.substring(0, 4).toUpperCase()}-CC`,
+      status: r.status,
+      hasChangePending: r.status === 'change_pending',
+      linkedDemand: {
+        id: r.offer_id || 'dm-default',
+        reference: r.offer_id ? `OFF-${r.offer_id.substring(0, 4).toUpperCase()}` : 'Direct Match',
+        title: `${r.crop_name} ${expectedKg.toLocaleString()} kg`,
+      },
+      originatingOffer: {
+        id: r.offer_id || 'off-default',
+        reference: r.offer_id ? `OFF-${r.offer_id.substring(0, 8).toUpperCase()}` : `BAT-${r.batch_id.substring(0, 6).toUpperCase()}`,
+        supplierName: r.farmer_name,
+      },
+      orderAllocationStatus: isReady ? 'Allocation Ready for Pickup' : 'Pending Harvest Intake Scan',
+      stepper: [
+        {
+          step: 1,
+          title: '1. Proposed',
+          subtitle: 'Offer Received',
+          status: isProposed ? 'active' : 'completed',
+        },
+        {
+          step: 2,
+          title: '2. Accepted',
+          subtitle: 'Escrow Locked',
+          status: isAccepted ? (r.status === 'accepted' ? 'active' : 'completed') : 'upcoming',
+        },
+        {
+          step: 3,
+          title: '3. Ready to fulfil',
+          subtitle: 'Harvesting Batch',
+          status: isReady ? (r.status === 'ready_to_fulfil' ? 'active' : 'completed') : 'upcoming',
+        },
+        {
+          step: 4,
+          title: '4. Fulfilled',
+          subtitle: 'Hub Scan & Payout',
+          status: isFulfilled ? 'completed' : 'upcoming',
+        },
+      ],
+      specs: {
+        buyerName: r.buyer_name,
+        buyerWorkspace: 'Buyer Workspace (Colombo Hub)',
+        supplierName: `${r.farmer_name} (${r.farmer_district || 'Grower'})`,
+        plannedFieldBatch: `Batch #${r.batch_id.substring(0, 8).toUpperCase()} (${r.crop_name}, ${r.grade_name})`,
+        expectedKg,
+        agreedPricePerKgCents: agreedPrice,
+        expectedTotalCents: totalCents,
+        targetHarvestWindow: formatWindow(r.window_start, r.window_end),
+        cancellationTerms: r.cancellation_terms || 'Free cancellation prior to harvest dispatch; reason required',
+      },
+      originalTermsAnchor: {
+        summaryText: `${expectedKg.toLocaleString()} kg ${r.crop_name} (${r.grade_name}) @ LKR ${(agreedPrice / 100).toFixed(2)}/kg = LKR ${(totalCents / 100).toLocaleString()} • Delivery ${formatWindow(r.window_start, r.window_end)}`,
+      },
+      escrowStatus: {
+        balanceHeldCents: ['cancelled', 'rejected'].includes(r.status) ? 0 : totalCents,
+        releaseTrigger: 'Auto-settles and transfers to farmer wallet upon digital warehouse acceptance scan at Colombo intake bay.',
+      },
+      logistics: {
+        receivingHub: 'Colombo Central Hub - Intake Dock 04',
+        gatePass: '#GP-8832 issued to driver',
+      },
+    };
   }
 
-  // Match mock reference or fallback
+  // Test-only in-memory / mock fixture path
   const override = inMemoryCommitmentStates.get(commitmentId);
   const baseMock = { ...mockCommitmentDetails1042 };
   if (override) {
@@ -368,7 +360,7 @@ export async function fetchCommitmentById(commitmentId, userId, role) {
  * @returns {Promise<object|null>} Change proposal diff and escrow impact
  */
 export async function fetchChangeProposalByCommitmentId(commitmentId, buyerId) {
-  try {
+  if (process.env.YM14_TEST_MODE !== '1') {
     const query = `
       SELECT fc.id, fc.quantity_kg, fc.agreed_unit_price_cents, fc.window_start, fc.window_end,
              fc.status, fc.revisions, fc.original_terms,
@@ -379,81 +371,83 @@ export async function fetchChangeProposalByCommitmentId(commitmentId, buyerId) {
       JOIN crops c ON hb.crop_id = c.id
       JOIN grades g ON hb.grade_id = g.id
       JOIN users farmer ON fc.farmer_id = farmer.id
-      WHERE (fc.id::text = $1 OR fc.operation_key = $1)
+      WHERE (fc.id::text = $1 OR fc.operation_key = $1 OR fc.id::text ILIKE $1 || '%' OR fc.id::text ILIKE replace(replace($1, 'COM-', ''), 'com-', '') || '%')
         AND fc.buyer_id = $2
     `;
 
     const { rows } = await pool.query(query, [commitmentId, buyerId]);
-
-    if (rows && rows.length > 0) {
-      const r = rows[0];
-      const original = r.original_terms || {};
-      const originalKg = parseFloat(original.quantity_kg || r.quantity_kg);
-      const unitPriceCents = parseInt(original.agreed_unit_price_cents || r.agreed_unit_price_cents, 10);
-      const originalTotalCents = Math.round(originalKg * unitPriceCents);
-
-      // Latest pending revision from revisions JSONB array
-      const pendingRev = Array.isArray(r.revisions)
-        ? r.revisions.find((rev) => rev.status === 'pending') || r.revisions[r.revisions.length - 1]
-        : null;
-
-      const proposedKg = pendingRev ? parseFloat(pendingRev.proposed_quantity_kg) : 480.0;
-      const proposedWindowStart = pendingRev ? pendingRev.proposed_window_start : '14 Nov 2026';
-      const proposedWindowEnd = pendingRev ? pendingRev.proposed_window_end : '15 Nov 2026';
-      const revisedTotalCents = Math.round(proposedKg * unitPriceCents);
-      const escrowRefundCents = Math.max(0, originalTotalCents - revisedTotalCents);
-      const shortageKg = originalKg - proposedKg;
-
-      return {
-        commitmentId: r.id,
-        reference: `COM-${r.id.substring(0, 4).toUpperCase()}`,
-        cropBatch: `Batch #BT-${r.batch_id.substring(0, 4).toUpperCase()} • ${r.farmer_district || 'Welimada'} ${r.crop_name} ${r.grade_name}`,
-        proposalExpiresAt: pendingRev?.expires_at || new Date(Date.now() + 18 * 3600 * 1000).toISOString(),
-        diff: [
-          {
-            parameter: 'Harvest Quantity',
-            originalAgreed: `${originalKg.toLocaleString()} kg net`,
-            proposedChange: `${proposedKg.toLocaleString()} kg net`,
-            netVariance: `-${shortageKg.toFixed(0)} kg (-${Math.round((shortageKg / originalKg) * 100)}% Yield Shortage)`,
-            isNegative: true,
-          },
-          {
-            parameter: 'Delivery Window',
-            originalAgreed: `${r.window_start} - ${r.window_end}`,
-            proposedChange: `${proposedWindowStart} - ${proposedWindowEnd}`,
-            netVariance: '+4 Days Shift (Weather Hold)',
-            isShift: true,
-          },
-          {
-            parameter: 'Agreed Unit Price',
-            originalAgreed: `LKR ${(unitPriceCents / 100).toFixed(2)} / kg`,
-            proposedChange: `LKR ${(unitPriceCents / 100).toFixed(2)} / kg`,
-            netVariance: 'Unchanged (Agreed Cap Maintained)',
-          },
-          {
-            parameter: 'Total Escrow Value',
-            originalAgreed: `LKR ${(originalTotalCents / 100).toLocaleString()}`,
-            proposedChange: `LKR ${(revisedTotalCents / 100).toLocaleString()}`,
-            netVariance: `-LKR ${(escrowRefundCents / 100).toLocaleString()} (Escrow Refund to Wallet)`,
-            isNegative: true,
-          },
-        ],
-        growerStatement: pendingRev?.statement || 'Due to unseasonal heavy rainfall, 20% of the carrot field experienced waterlogging. To preserve Grade-A standards, we are harvesting only unaffected heads from upper drainage terraces.',
-        agronomyVerified: true,
-        verificationNotes: '3 field photos and rainfall gauge log verified by Badulla Regional Agricultural Extension Officer.',
-        financialImpact: {
-          escrowAutoRefundCents: escrowRefundCents,
-          revisedEscrowHoldCents: revisedTotalCents,
-          timelineShift: '+4 Days Delay',
-          newIntakeDate: `${proposedWindowStart} (08:00 AM)`,
-        },
-      };
+    if (!rows || rows.length === 0) {
+      return null;
     }
-  } catch (_dbError) {
-    // Fallback to verified mock fixture
+
+    const r = rows[0];
+    const pendingRev = Array.isArray(r.revisions)
+      ? r.revisions.find((rev) => rev.status === 'pending') || r.revisions[r.revisions.length - 1]
+      : null;
+
+    if (r.status !== 'change_pending' || !pendingRev) {
+      return null;
+    }
+
+    const original = r.original_terms || {};
+    const originalKg = parseFloat(original.quantity_kg || original.offered_kg || r.quantity_kg);
+    const unitPriceCents = parseInt(original.agreed_unit_price_cents || original.offered_unit_price_cents || r.agreed_unit_price_cents, 10);
+    const originalTotalCents = Math.round(originalKg * unitPriceCents);
+
+    const proposedKg = parseFloat(pendingRev.proposed_quantity_kg);
+    const proposedWindowStart = pendingRev.proposed_window_start || formatWindow(r.window_start, null);
+    const proposedWindowEnd = pendingRev.proposed_window_end || '';
+    const revisedTotalCents = Math.round(proposedKg * unitPriceCents);
+    const escrowRefundCents = Math.max(0, originalTotalCents - revisedTotalCents);
+    const shortageKg = originalKg - proposedKg;
+
+    return {
+      commitmentId: r.id,
+      reference: `COM-${r.id.substring(0, 4).toUpperCase()}`,
+      cropBatch: `Batch #BT-${r.batch_id.substring(0, 4).toUpperCase()} • ${r.farmer_district || 'Sri Lanka'} ${r.crop_name} ${r.grade_name}`,
+      proposalExpiresAt: pendingRev.expires_at,
+      diff: [
+        {
+          parameter: 'Harvest Quantity',
+          originalAgreed: `${originalKg.toLocaleString()} kg net`,
+          proposedChange: `${proposedKg.toLocaleString()} kg net`,
+          netVariance: `-${shortageKg.toFixed(0)} kg (-${Math.round((shortageKg / originalKg) * 100)}% Yield Shortage)`,
+          isNegative: shortageKg > 0,
+        },
+        {
+          parameter: 'Delivery Window',
+          originalAgreed: formatWindow(r.window_start, r.window_end),
+          proposedChange: proposedWindowEnd ? `${proposedWindowStart} - ${proposedWindowEnd}` : proposedWindowStart,
+          netVariance: pendingRev.timeline_shift || 'Schedule Adjustment Requested',
+          isShift: true,
+        },
+        {
+          parameter: 'Agreed Unit Price',
+          originalAgreed: `LKR ${(unitPriceCents / 100).toFixed(2)} / kg`,
+          proposedChange: `LKR ${(unitPriceCents / 100).toFixed(2)} / kg`,
+          netVariance: 'Unchanged (Agreed Cap Maintained)',
+        },
+        {
+          parameter: 'Total Escrow Value',
+          originalAgreed: `LKR ${(originalTotalCents / 100).toLocaleString()}`,
+          proposedChange: `LKR ${(revisedTotalCents / 100).toLocaleString()}`,
+          netVariance: `-LKR ${(escrowRefundCents / 100).toLocaleString()} (Escrow Refund to Wallet)`,
+          isNegative: escrowRefundCents > 0,
+        },
+      ],
+      growerStatement: pendingRev.statement || '',
+      agronomyVerified: Boolean(pendingRev.agronomy_verified),
+      verificationNotes: pendingRev.verification_notes || '',
+      financialImpact: {
+        escrowAutoRefundCents: escrowRefundCents,
+        revisedEscrowHoldCents: revisedTotalCents,
+        timelineShift: pendingRev.timeline_shift || 'Revised Window',
+        newIntakeDate: `${proposedWindowStart} (08:00 AM)`,
+      },
+    };
   }
 
-  // Return verified mock fixture matching Screen 5 (YM14_05)
+  // Test-only mock fixture matching Screen 5 (YM14_05)
   return mockHarvestChangeProposal1041;
 }
 
@@ -494,18 +488,21 @@ export async function approveChangeProposal({ commitmentId, buyerId, operationKe
              'actor_id', $2::uuid,
              'escrow_refund_cents', $3
            ))
-       WHERE id = $1`,
-      [commitmentId, buyerId, escrowRefundCents]
+       WHERE id::text = $1`,
+      [proposal.commitmentId || commitmentId, buyerId, escrowRefundCents]
     );
 
     await client.query('COMMIT');
-  } catch (_dbError) {
+  } catch (dbError) {
     if (client) {
       try {
         await client.query('ROLLBACK');
       } catch (_rollbackErr) {
         // Ignore rollback failure
       }
+    }
+    if (process.env.YM14_TEST_MODE !== '1') {
+      throw dbError;
     }
   } finally {
     if (client) {
@@ -558,7 +555,7 @@ export async function rejectChangeProposal({ commitmentId, buyerId, reason, oper
   }
 
   // Update PostgreSQL
-  try {
+  if (process.env.YM14_TEST_MODE !== '1') {
     await pool.query(
       `UPDATE future_commitments
        SET status = 'accepted',
@@ -568,11 +565,9 @@ export async function rejectChangeProposal({ commitmentId, buyerId, reason, oper
              'decided_at', now(),
              'actor_id', $3::uuid
            ))
-       WHERE id = $1`,
-      [commitmentId, reason || 'Buyer requested retention of original binding terms', buyerId]
+       WHERE id::text = $1`,
+      [proposal.commitmentId || commitmentId, reason || 'Buyer requested retention of original binding terms', buyerId]
     );
-  } catch (_dbError) {
-    // Database offline fallback
   }
 
   // Revert status in memory to accepted with original terms
@@ -616,8 +611,8 @@ export async function cancelCommitment({ commitmentId, buyerId, reason, operatio
   }
 
   // Update PostgreSQL
-  try {
-    await pool.query(
+  if (process.env.YM14_TEST_MODE !== '1') {
+    const { rows: cancelledRows } = await pool.query(
       `UPDATE future_commitments
        SET status = 'cancelled',
            decision_reason = $2,
@@ -627,14 +622,32 @@ export async function cancelCommitment({ commitmentId, buyerId, reason, operatio
              'decided_at', now(),
              'actor_id', $3::uuid
            ))
-       WHERE id = $1`,
+       WHERE (id::text = $1 OR operation_key = $1 OR id::text ILIKE replace(replace($1, 'COM-', ''), 'com-', '') || '%')
+         AND buyer_id = $3::uuid
+       RETURNING id, quantity_kg, agreed_unit_price_cents`,
       [commitmentId, reason.trim(), buyerId]
     );
-  } catch (_dbError) {
-    // Database offline fallback
+
+    if (!cancelledRows || cancelledRows.length === 0) {
+      const error = new Error('Commitment not found or unauthorized');
+      error.status = 404;
+      throw error;
+    }
+
+    const row = cancelledRows[0];
+    const refundCents = Math.round(parseFloat(row.quantity_kg) * parseInt(row.agreed_unit_price_cents, 10));
+    return {
+      success: true,
+      commitmentId: row.id,
+      reference: `COM-${row.id.substring(0, 4).toUpperCase()}`,
+      status: 'cancelled',
+      reason: reason.trim(),
+      escrowRefundCents: refundCents,
+      message: `Commitment cancelled successfully. 100% of escrow funds (LKR ${(refundCents / 100).toLocaleString()}) released back to Agri Wallet.`,
+    };
   }
 
-  // Update in-memory state
+  // Test-only in-memory state
   inMemoryCommitmentStates.set(commitmentId, {
     status: 'cancelled',
     quantityKg: 600,
