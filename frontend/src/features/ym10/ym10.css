@@ -1,0 +1,386 @@
+.ym10-page {
+  display: grid;
+  gap: 24px;
+  color: var(--text);
+}
+
+.ym10-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ym10-page-heading p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ym10-page-heading .ym-button {
+  flex: 0 0 auto;
+}
+
+.ym10-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ym10-stats .ym-stat-card {
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.ym10-stats .ym-stat-label {
+  min-height: 2.6em;
+}
+
+.ym10-stats .ym-stat-value {
+  white-space: nowrap;
+}
+
+.ym10-stats .ym-stat-card:nth-child(4) .ym-stat-value {
+  font-size: 24px;
+}
+
+.ym10-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(130px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.ym10-request-card {
+  min-width: 0;
+  padding: 24px;
+}
+
+.ym10-request-card .ym-card-heading {
+  margin-bottom: 16px;
+}
+
+.ym10-request-table {
+  min-width: 940px;
+}
+
+.ym10-request-table td:first-child,
+.ym10-request-table td:nth-child(2) {
+  min-width: 145px;
+}
+
+.ym10-offers-table {
+  min-width: 1100px;
+}
+
+.ym10-offers-table td:first-child,
+.ym10-offers-table td:nth-child(2) {
+  min-width: 145px;
+}
+
+.ym10-offers-table .ym-table-row td {
+  padding: 8px 14px;
+  vertical-align: middle;
+}
+
+.ym10-offer-filters {
+  grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(150px, 1fr));
+}
+
+.ym10-table-primary,
+.ym10-table-secondary {
+  display: block;
+  line-height: 16px;
+}
+
+.ym10-table-primary {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ym10-table-secondary {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ym10-request-table .ym-table-row td {
+  padding: 8px 16px;
+  vertical-align: middle;
+}
+
+.ym10-table-footer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.ym10-view-link {
+  color: var(--accent-text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ym10-view-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ym10-status--open .ym-status {
+  color: var(--accent-text);
+  background: var(--soft);
+}
+
+.ym10-status--closing .ym-status {
+  color: #854500;
+  background: #fff0e3;
+}
+
+.ym10-status--sent .ym-status {
+  color: #245b80;
+  background: #e8f2f8;
+}
+
+.ym10-status--matching .ym-status {
+  color: var(--accent-text);
+  background: var(--soft);
+}
+
+.ym10-status--closed .ym-status {
+  color: var(--muted);
+  background: var(--soft);
+}
+
+:root[data-theme='dark'] .ym10-status--closing .ym-status {
+  color: #ffd2a1;
+  background: #483322;
+}
+
+:root[data-theme='dark'] .ym10-status--sent .ym-status {
+  color: #b5ddf8;
+  background: #213c4e;
+}
+
+.ym10-placeholder,
+.ym10-not-found {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ym10-detail-topbar,
+.ym10-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ym10-detail-topbar {
+  justify-content: space-between;
+}
+
+.ym10-detail-grid,
+.ym10-summary-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+  margin: 0;
+}
+
+.ym10-detail-grid dt,
+.ym10-summary-list dt {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ym10-detail-grid dd,
+.ym10-summary-list dd {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.ym10-detail-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.ym10-value-range {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.ym10-muted-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ym10-batch-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ym10-batch-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 20px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.ym10-batch-list li:first-child {
+  padding-top: 0;
+}
+
+.ym10-batch-list li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.ym10-batch-list li span:last-child {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ym10-offer-layout {
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  align-items: start;
+}
+
+.ym10-offer-form {
+  display: grid;
+  gap: 24px;
+}
+
+.ym10-form-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+  align-items: start;
+}
+
+.ym10-form-fields .ym-field:last-child {
+  grid-column: 1 / -1;
+}
+
+.ym10-price-warning {
+  margin-bottom: 18px;
+}
+
+.ym10-offer-info {
+  margin-top: 20px;
+}
+
+.ym10-offer-form .ym10-detail-actions {
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.ym10-offer-summary {
+  position: sticky;
+  top: 24px;
+}
+
+.ym10-summary-list {
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.ym10-summary-list .ym10-value-range {
+  font-size: 20px;
+}
+
+@media (max-width: 1100px) {
+  .ym10-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ym10-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ym10-filters .ym-field:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .ym10-page {
+    gap: 16px;
+  }
+
+  .ym10-page-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ym10-page-heading .ym-button {
+    width: 100%;
+  }
+
+  .ym10-stats {
+    gap: 12px;
+  }
+
+  .ym10-stats .ym-stat-card {
+    padding: 16px;
+  }
+
+  .ym10-stats .ym-stat-value {
+    font-size: 24px;
+  }
+
+  .ym10-filters {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .ym10-filters .ym-field:first-child {
+    grid-column: auto;
+  }
+
+  .ym10-request-card {
+    padding: 16px 16px 24px;
+  }
+
+  .ym10-offer-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ym10-offer-summary {
+    position: static;
+  }
+
+  .ym10-detail-grid,
+  .ym10-form-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ym10-detail-grid__wide,
+  .ym10-form-fields .ym-field:last-child {
+    grid-column: auto;
+  }
+
+  .ym10-batch-list li {
+    grid-template-columns: 1fr auto;
+    gap: 8px 16px;
+  }
+
+  .ym10-batch-list li span:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .ym10-detail-actions {
+    flex-wrap: wrap;
+  }
+}
