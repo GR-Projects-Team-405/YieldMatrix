@@ -276,9 +276,13 @@ export async function runBulkMatch(req, res, next) {
     const matchedKg = Number((requestedKg - remainingNeededKg).toFixed(3));
     const shortageKg = remainingNeededKg;
     const status = shortageKg === 0 ? 'complete' : 'partial';
+    const partialBlocked = status === 'partial' && !allowPartial;
+    const matchedPercent = requestedKg > 0 ? Math.min(100, Math.round((matchedKg / requestedKg) * 100)) : 0;
+    const shortagePercent = requestedKg > 0 ? Math.max(0, 100 - matchedPercent) : 0;
 
     return res.json({
       status,
+      partialBlocked,
       methodLabel: 'Rule-based method',
       crop: cropName,
       grade: gradeName,
@@ -288,6 +292,8 @@ export async function runBulkMatch(req, res, next) {
       requestedKg,
       matchedKg,
       shortageKg,
+      matchedPercent,
+      shortagePercent,
       goodsTotalLkr: runningGoodsTotalLkr,
       maxBudgetLkr,
       withinBudget: maxBudgetLkr === null ? true : runningGoodsTotalLkr <= maxBudgetLkr,

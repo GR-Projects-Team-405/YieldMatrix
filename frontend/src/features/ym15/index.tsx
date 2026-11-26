@@ -3,13 +3,14 @@ import api from '../../services/api';
 import { BulkMatchingRequestPage } from './BulkMatchingRequestPage';
 import { CompleteMatchResultsPage } from './CompleteMatchResultsPage';
 import { GrowerAllocationBreakdownPage } from './GrowerAllocationBreakdownPage';
+import { PartialMatchShortagePage } from './PartialMatchShortagePage';
 import type {
   BulkMatchRequestInput,
   BulkMatchResponseData,
   ValidatedBulkMatchRequest,
 } from './types';
 
-type ActiveScreen = 'request' | 'results' | 'breakdown';
+type ActiveScreen = 'request' | 'results' | 'breakdown' | 'partial';
 
 export default function YM15() {
   const [formValues, setFormValues] = useState<BulkMatchRequestInput>({
@@ -35,7 +36,11 @@ export default function YM15() {
     try {
       const { data } = await api.post<BulkMatchResponseData>('/ym15/match', payload);
       setMatchResult(data);
-      setActiveScreen('results');
+      if (data.status === 'partial' && data.matchedKg > 0) {
+        setActiveScreen('partial');
+      } else {
+        setActiveScreen('results');
+      }
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
@@ -47,19 +52,37 @@ export default function YM15() {
     }
   };
 
+  if (matchResult && activeScreen === 'partial') {
+    return (
+      <PartialMatchShortagePage
+        data={matchResult}
+        onBackToRequest={() => {
+          setMatchResult(null);
+          setActiveScreen('request');
+          setFeedbackMessage('');
+        }}
+        onAcceptPartialPlan={() => {
+          setActiveScreen('breakdown');
+        }}
+      />
+    );
+  }
+
   if (matchResult && activeScreen === 'breakdown') {
     return (
       <GrowerAllocationBreakdownPage
         data={matchResult}
         onBackToResults={() => {
-          setActiveScreen('results');
+          setActiveScreen(matchResult.status === 'partial' ? 'partial' : 'results');
         }}
         onContinue={() => {
           setActiveScreen('request');
           setMatchResult(null);
           setFeedbackType('success');
           setFeedbackMessage(
-            'Allocation breakdown reviewed. Ready for the next step or a new bulk matching request.'
+            matchResult.status === 'partial'
+              ? 'Partial allocation plan reviewed and ready for the next step.'
+              : 'Allocation breakdown reviewed. Ready for the next step or a new bulk matching request.'
           );
         }}
       />

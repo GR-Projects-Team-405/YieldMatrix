@@ -24,6 +24,7 @@ export interface SelectedGrowerAllocation {
   id: string;
   rank: number;
   growerName: string;
+  farmName?: string;
   batchCode: string;
   distanceKm: number | null;
   allocatedKg: number;
@@ -38,6 +39,7 @@ export interface SelectedGrowerAllocation {
 export interface AlternativeGrowerCandidate {
   id: string;
   growerName: string;
+  farmName?: string;
   batchCode: string;
   crop?: string;
   grade?: string;
@@ -50,6 +52,7 @@ export interface AlternativeGrowerCandidate {
 
 export interface BulkMatchResponseData {
   status: 'complete' | 'partial';
+  partialBlocked?: boolean;
   methodLabel: 'Rule-based method';
   crop?: string;
   grade?: string;
@@ -59,6 +62,8 @@ export interface BulkMatchResponseData {
   requestedKg: number;
   matchedKg: number;
   shortageKg: number;
+  matchedPercent?: number;
+  shortagePercent?: number;
   goodsTotalLkr: number;
   maxBudgetLkr: number | null;
   withinBudget: boolean;
