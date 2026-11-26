@@ -1,4 +1,5 @@
 import { ArrowUpRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { StatusBadge } from '../../../components/StatusBadge';
 import type { AllocationItem } from '../types';
 
@@ -6,18 +7,18 @@ interface AllocationTableProps {
   allocations: AllocationItem[];
 }
 
-/** Explanations shown with the disabled controls (Task 02 will enable them). */
-const REVIEW_TITLE = 'Allocation review will be available in Task 02';
-const DETAILS_TITLE = 'Allocation details will be available in Task 02';
+/** Absolute path of the Allocation Inbox (see App.tsx). */
+const INBOX_PATH = '/farmer/allocations';
 
 /**
  * Allocation Requests table matching Figma mockup:
  * - Columns: ALLOCATION / BUYER, PRODUCE / BATCH, QUANTITY, AGREED VALUE, RESERVATION EXPIRES, STATUS, ACTIONS
  *
  * The action cell is derived from the row itself:
- * - awaiting + live hold  -> Review Request (disabled until Task 02)
+ * - awaiting + live hold  -> Review Request (opens the Allocation Details page)
  * - awaiting + dead hold  -> unavailable hold state, never an actionable request
- * - anything else         -> unavailable View Details (no decision button)
+ * - anything else         -> View Details (same read-only details page)
+ * Neither action submits a decision; that arrives with Decision Review.
  */
 export function AllocationTable({ allocations }: AllocationTableProps) {
   return (
@@ -64,9 +65,6 @@ export function AllocationTable({ allocations }: AllocationTableProps) {
                 {/* Allocation / Buyer */}
                 <td className="p-3.5 align-middle">
                   <div className="font-semibold text-[var(--text)]">{item.buyerName}</div>
-                  <div className="text-xs text-[var(--muted)] mt-0.5" title={item.allocationId}>
-                    {item.allocationReference}
-                  </div>
                 </td>
 
                 {/* Produce / Batch */}
@@ -74,9 +72,9 @@ export function AllocationTable({ allocations }: AllocationTableProps) {
                   <div className="text-[var(--text)] font-medium">
                     {item.cropName} &middot; {item.gradeName}
                   </div>
-                  <div className="text-xs text-[var(--muted)] mt-0.5" title={item.batchId}>
-                    {item.batchReference}
-                  </div>
+                  {item.batchDisplayId && (
+                    <div className="text-xs text-[var(--muted)] mt-0.5">Batch {item.batchDisplayId}</div>
+                  )}
                 </td>
 
                 {/* Quantity */}
@@ -106,33 +104,43 @@ export function AllocationTable({ allocations }: AllocationTableProps) {
                 {/* Status */}
                 <td className="p-3.5 align-middle whitespace-nowrap">
                   <StatusBadge status={item.statusDisplay} />
+                  {/* Stored status stays server-authoritative; when the hold is
+                      dead the row is still `held` but can no longer be acted on,
+                      so the effective eligibility is spelled out beneath it. */}
+                  {item.status === 'held' && item.holdState !== 'active' && (
+                    <div className="text-xs text-[#b45309] mt-1">
+                      {item.holdState === 'expired'
+                        ? 'Response window closed'
+                        : item.holdState === 'consumed'
+                          ? 'Hold used'
+                          : 'No live hold'}
+                    </div>
+                  )}
                 </td>
 
                 {/* Actions */}
                 <td className="p-3.5 align-middle text-center whitespace-nowrap">
                   {reviewable ? (
-                    <button
-                      type="button"
-                      disabled
-                      title={REVIEW_TITLE}
-                      className="ym-button ym-button--primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg opacity-95 cursor-not-allowed"
+                    <Link
+                      to={`${INBOX_PATH}/${item.allocationId}`}
+                      title="Open Allocation Details"
+                      className="ym-button ym-button--primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg"
                     >
                       <span>Review Request</span>
                       <ArrowUpRight size={14} aria-hidden="true" />
-                    </button>
+                    </Link>
                   ) : awaiting ? (
-                    <span className="ym-status ym-tone--neutral" title={DETAILS_TITLE}>
+                    <span className="ym-status ym-tone--neutral" title="This hold is no longer actionable">
                       {holdLabel}
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      disabled
-                      title={DETAILS_TITLE}
-                      className="ym-button ym-button--unavailable inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg"
+                    <Link
+                      to={`${INBOX_PATH}/${item.allocationId}`}
+                      title="Open Allocation Details"
+                      className="ym-button ym-button--outline inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg cursor-pointer"
                     >
                       View Details
-                    </button>
+                    </Link>
                   )}
                 </td>
               </tr>

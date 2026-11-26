@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Info } from 'lucide-react';
+import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { History, Info } from 'lucide-react';
 import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { SummaryCards } from './components/SummaryCards';
 import { AllocationFilterBar } from './components/AllocationFilterBar';
 import { AllocationTable } from './components/AllocationTable';
+import AllocationDetails from './AllocationDetails';
+import DecisionReview from './DecisionReview';
+import AllocationHistory from './AllocationHistory';
 import {
   fetchAllocations,
   fetchSummary,
@@ -13,7 +17,15 @@ import {
   toAllocationItem,
 } from './api';
 import { formatDashboardDate } from './format';
-import type { AllocationItem, AllocationSummary, Pagination, TabKey } from './types';
+import type {
+  AllocationItem,
+  AllocationSummary,
+  DecisionFilter,
+  EligibilityFilter,
+  Pagination,
+  SummaryCardKey,
+  TabKey,
+} from './types';
 
 type LoadState = 'loading' | 'ready' | 'error';
 
@@ -22,14 +34,43 @@ const PAGE_SIZE = 10;
 const SEARCH_DEBOUNCE_MS = 300;
 
 /**
- * Single-status mapping for the tabs the backend can express.
- * `all` and `accepted` are absent: `all` sends no status, and `accepted` groups
- * several statuses which a one-status-per-request API cannot filter, so that tab
- * is disabled in the UI and refused in handleTabChange.
+ * Single-status mapping for the tabs the backend can express as a stored
+ * status. `all` and `accepted` are absent: `all` sends no status, and
+ * `accepted` is not a status filter at all — it is filtered by the
+ * audit-backed farmer decision (see TAB_DECISION).
  */
 const TAB_STATUS: Partial<Record<TabKey, string>> = {
   awaiting: 'held',
   declined: 'declined',
+  expired: 'expired',
+};
+
+/**
+ * Tabs whose filter is a genuine, audit-backed farmer decision instead of an
+ * operational status. `accepted` asks the backend for `decision=accepted`,
+ * which matches only allocations whose earliest recorded farmer decision is
+ * the `allocation.accepted` audit event. Allocations with no decision event
+ * are excluded (SRS FR-RES-04: a missing response is never acceptance), and
+ * no status group is ever fabricated for this tab.
+ */
+const TAB_DECISION: Partial<Record<TabKey, DecisionFilter>> = {
+  accepted: 'accepted',
+};
+
+/**
+ * Statuses whose business meaning is a server-side response-eligibility
+ * filter instead of the raw column value, so the list can never offer a
+ * response the server would refuse:
+ *   'held'    -> eligibility=pending (live hold, deadline in the future) — the
+ *                exact predicate the Pending Responses card counts, so the tab
+ *                and the dashboard can never disagree;
+ *   'expired' -> eligibility=expired (stored `expired`, or still `held` while
+ *                its reservation is no longer live).
+ * Stored-`held` rows whose deadline passed stay visible under the All tab with
+ * their real status; nothing here ever writes to the backend.
+ */
+const STATUS_ELIGIBILITY: Partial<Record<string, EligibilityFilter>> = {
+  held: 'pending',
   expired: 'expired',
 };
 
@@ -42,14 +83,22 @@ function tabForStatus(status: string): TabKey | undefined {
  * YM17: Farmer Allocations - Allocation Inbox
  * Task 01B-3: live search, status tabs, status dropdown, sorting and
  * server-side pagination. Summary cards stay independent of every table filter.
+ *
+ * Mounted by App.tsx at `allocations/*`; the nested routes live in the default
+ * export at the bottom of this file.
  */
-export default function YM17() {
+export function AllocationInbox() {
   // --- table filters (all of these drive GET /api/ym17/allocations) ---
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [search, setSearch] = useState(''); // what the input shows straight away
   const [debouncedSearch, setDebouncedSearch] = useState(''); // what the API is asked for
   const [statusFilter, setStatusFilter] = useState('');
-  const [cropFilter, setCropFilter] = useState(''); // control is disabled, stays empty
+  /**
+   * One-off response-eligibility override, set only by the summary-card
+   * shortcuts (e.g. "Expiring Soon" = pending holds inside the deadline
+   * window). Any manual tab/status change clears it back to the tab default.
+   */
+  const [eligibilityFilter, setEligibilityFilter] = useState<EligibilityFilter | ''>('');
   const [sortOrder, setSortOrder] = useState('newest');
   const [page, setPage] = useState(1);
 
@@ -68,6 +117,18 @@ export default function YM17() {
 
   /** The tab and the dropdown are two views of the same single status filter. */
   const effectiveStatus = statusFilter || TAB_STATUS[activeTab] || undefined;
+
+  /**
+   * What the table actually asks the server for. `held` and `expired` are
+   * expressed as eligibility predicates (see STATUS_ELIGIBILITY), and an
+   * eligibility filter always implies its own status condition, so the status
+   * parameter is only sent for plain stored-status filters such as `declined`.
+   * The Accepted tab sends `decision=accepted` and never a status.
+   */
+  const eligibility: EligibilityFilter | undefined =
+    eligibilityFilter || STATUS_ELIGIBILITY[effectiveStatus ?? ''] || undefined;
+  const statusParam = eligibility ? undefined : effectiveStatus;
+  const decision = TAB_DECISION[activeTab];
 
   // Debounce: hold the raw search for 300 ms, then publish it and jump to page 1.
   useEffect(() => {
@@ -112,9 +173,10 @@ export default function YM17() {
       {
         page,
         limit: PAGE_SIZE,
-        status: effectiveStatus,
+        status: statusParam,
+        eligibility,
+        decision,
         search: debouncedSearch,
-        crop: cropFilter || undefined,
         sort: sortOrder,
       },
       controller.signal,
@@ -136,19 +198,20 @@ export default function YM17() {
         setTableState('error');
       });
     return () => controller.abort();
-  }, [page, effectiveStatus, debouncedSearch, cropFilter, sortOrder, tableAttempt]);
+  }, [page, statusParam, eligibility, decision, debouncedSearch, sortOrder, tableAttempt]);
 
   /* ----------------------------- filter handlers ---------------------------- */
 
   const handleTabChange = (tab: TabKey) => {
-    if (tab === 'accepted') return; // grouped filtering is not supported yet
     setActiveTab(tab);
     setStatusFilter(''); // the tab is now the only status source
+    setEligibilityFilter(''); // and the tab's own eligibility default applies
     setPage(1);
   };
 
   const handleStatusChange = (value: string) => {
     setStatusFilter(value);
+    setEligibilityFilter('');
     // Keep the highlighted tab in step with the dropdown so they never disagree.
     if (value !== '') setActiveTab(tabForStatus(value) ?? 'all');
     setPage(1);
@@ -163,8 +226,44 @@ export default function YM17() {
     setSearch('');
     setDebouncedSearch('');
     setStatusFilter('');
+    setEligibilityFilter('');
     setActiveTab('all');
     setPage(1);
+  };
+
+  /**
+   * Summary-card shortcuts (Issue 04). Every destination is the list counted
+   * with the card's own server-side predicate:
+   *   pending  -> Awaiting Response tab (eligibility=pending)
+   *   expiring -> same tab, narrowed to the deadline window, soonest first
+   *   declined -> Declined tab (status=declined)
+   *   accepted -> Allocation History's Progressed tab (the URL keeps
+   *               ?tab=accepted for compatibility), the one endpoint that can
+   *               filter the several progressed statuses as a group
+   * Existing filters are cleared so the destination really shows the records
+   * the card counted.
+   */
+  const navigate = useNavigate();
+  const handleSummaryCard = (card: SummaryCardKey) => {
+    if (card === 'accepted') {
+      navigate('/farmer/allocations/history?tab=accepted');
+      return;
+    }
+    setSearch('');
+    setDebouncedSearch('');
+    setStatusFilter('');
+    setPage(1);
+    if (card === 'pending') {
+      setActiveTab('awaiting');
+      setEligibilityFilter('');
+    } else if (card === 'expiring') {
+      setActiveTab('awaiting');
+      setEligibilityFilter('expiring');
+      setSortOrder('expiry');
+    } else {
+      setActiveTab('declined');
+      setEligibilityFilter('');
+    }
   };
 
   const hasActiveFilters = activeTab !== 'all' || statusFilter !== '' || debouncedSearch !== '';
@@ -202,7 +301,7 @@ export default function YM17() {
 
         <div className="flex flex-col md:items-end text-left md:text-right">
           <span className="text-xs font-semibold tracking-wider uppercase text-[var(--muted)]">
-            DEMO DASHBOARD &bull; {formatDashboardDate()}
+            {formatDashboardDate()}
           </span>
           <span className="text-sm font-semibold text-[#b45309] mt-1">
             {summaryState === 'ready' && summary
@@ -211,15 +310,6 @@ export default function YM17() {
                 ? 'Checking pending responses…'
                 : 'Pending response count unavailable'}
           </span>
-          <button
-            type="button"
-            disabled
-            title="Allocation history will be implemented in a future task"
-            className="inline-flex items-center gap-1 text-xs text-[var(--muted)] hover:text-[var(--text)] mt-1 opacity-70 cursor-not-allowed group transition-colors"
-          >
-            <span>View allocation history</span>
-            <ArrowRight size={12} aria-hidden="true" />
-          </button>
         </div>
       </header>
 
@@ -236,14 +326,14 @@ export default function YM17() {
       )}
 
       {/* 2. Four Summary Cards */}
-      <SummaryCards summary={summary} loading={summaryState === 'loading'} />
+      <SummaryCards summary={summary} loading={summaryState === 'loading'} onSelect={handleSummaryCard} />
 
       {/* 3. Main Allocation Requests Card Container */}
       <section
         className="ym-content-card bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 md:p-6 shadow-sm"
         aria-labelledby="allocation-requests-heading"
       >
-        {/* Section title & subtitle */}
+        {/* Section title, record count and the history action (Issue 05) */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
           <div>
             <h2 id="allocation-requests-heading" className="text-lg md:text-xl font-bold text-[var(--text)]">
@@ -253,7 +343,16 @@ export default function YM17() {
               Manage incoming requests for your available harvest batches.
             </p>
           </div>
-          <span className="text-xs text-[var(--muted)]">{totalLabel}</span>
+          <div className="flex items-center gap-3 sm:justify-end">
+            <span className="text-xs text-[var(--muted)]">{totalLabel}</span>
+            <Link
+              to="/farmer/allocations/history"
+              className="ym-button ym-button--outline inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg"
+            >
+              <History size={14} aria-hidden="true" />
+              <span>View History</span>
+            </Link>
+          </div>
         </div>
 
         {/* Filter controls & tabs */}
@@ -264,8 +363,6 @@ export default function YM17() {
           onSearchChange={setSearch}
           statusFilter={statusFilter}
           onStatusChange={handleStatusChange}
-          cropFilter={cropFilter}
-          onCropChange={setCropFilter}
           sortOrder={sortOrder}
           onSortChange={handleSortChange}
         />
@@ -289,7 +386,15 @@ export default function YM17() {
           </div>
         )}
 
-        {tableState === 'ready' && allocations.length === 0 && hasActiveFilters && (
+        {tableState === 'ready' && allocations.length === 0 && activeTab === 'accepted' && debouncedSearch === '' && (
+          <EmptyState
+            title="No accepted allocations found."
+            description="Allocations you have accepted will be listed here. Requests still waiting for your response appear under the Awaiting Response tab."
+            action={<Button variant="outline" onClick={clearFilters}>Clear filters</Button>}
+          />
+        )}
+
+        {tableState === 'ready' && allocations.length === 0 && hasActiveFilters && !(activeTab === 'accepted' && debouncedSearch === '') && (
           <EmptyState
             title="No allocations match your filters"
             description="Try a different search term or status, or clear the filters to see every allocation."
@@ -311,13 +416,30 @@ export default function YM17() {
 
         {tableState === 'ready' && allocations.length > 0 && <AllocationTable allocations={allocations} />}
 
-        {/* Reservation Information Notice Banner */}
-        <div className="mt-4 rounded-xl bg-[var(--soft)] text-[var(--accent-text)] p-3 px-4 flex items-center gap-2.5 text-xs md:text-sm">
-          <Info size={16} className="shrink-0" aria-hidden="true" />
-          <span>
-            Allocated stock is temporarily reserved while you review. Respond before the reservation expires.
-          </span>
-        </div>
+        {/* Reservation Information Notice Banner (Issue 03) — conditional on the
+            server's own pending-response count, the same predicate the Pending
+            Responses card uses. While the summary is loading or unavailable no
+            claim is made either way, so the banner can never contradict the
+            dashboard. */}
+        {summaryState === 'ready' && summary && summary.pendingResponses > 0 && (
+          <div className="mt-4 rounded-xl bg-[var(--soft)] text-[var(--accent-text)] p-3 px-4 flex items-center gap-2.5 text-xs md:text-sm">
+            <Info size={16} className="shrink-0" aria-hidden="true" />
+            <span>
+              {summary.pendingResponses} allocation{summary.pendingResponses === 1 ? ' is' : 's are'} awaiting your
+              response. Allocated stock is temporarily reserved while you review &mdash; respond before the reservation
+              expires.
+            </span>
+          </div>
+        )}
+        {summaryState === 'ready' && summary && summary.pendingResponses === 0 && (
+          <div className="mt-4 rounded-xl bg-[var(--canvas)] border border-[var(--border)] text-[var(--muted)] p-3 px-4 flex items-center gap-2.5 text-xs md:text-sm">
+            <Info size={16} className="shrink-0" aria-hidden="true" />
+            <span>
+              No allocations currently require your response. Requests whose response window has closed remain listed for
+              reference.
+            </span>
+          </div>
+        )}
 
         {/* Pagination & Status Footer */}
         <div className="mt-6 pt-4 border-t border-[var(--border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-[var(--muted)]">
@@ -368,5 +490,30 @@ export default function YM17() {
         </span>
       </footer>
     </div>
+  );
+}
+
+/* -------------------------------- routing -------------------------------- */
+
+/**
+ * App.tsx mounts this module at `allocations/*`, so the feature owns its own
+ * sub-routes without touching App.tsx:
+ *   /farmer/allocations                        -> Allocation Inbox (unchanged)
+ *   /farmer/allocations/history                -> Allocation History (Task 04B-2)
+ *   /farmer/allocations/:allocationId/decision -> Decision Review (Task 03C-1)
+ *   /farmer/allocations/:allocationId          -> Allocation Details (Task 02B-1)
+ * Anything else under the wildcard returns to the inbox.
+ */
+export { AllocationHistory };
+
+export default function YM17() {
+  return (
+    <Routes>
+      <Route index element={<AllocationInbox />} />
+      <Route path="history" element={<AllocationHistory />} />
+      <Route path=":allocationId/decision" element={<DecisionReview />} />
+      <Route path=":allocationId" element={<AllocationDetails />} />
+      <Route path="*" element={<Navigate to="/farmer/allocations" replace />} />
+    </Routes>
   );
 }

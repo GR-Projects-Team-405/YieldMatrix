@@ -68,15 +68,28 @@ export function formatDashboardDate(date: Date = new Date()): string {
 }
 
 /**
- * Shortens a UUID to its first 8 characters for display.
- * The schema has no human friendly reference code, and the operation_key it
- * does have exists for idempotency rather than for showing to people, so the
- * record's own id is shortened instead.
+ * "04 Nov 2026" for a calendar date such as orders.delivery_date.
+ * DATE columns are plain calendar dates with no time zone, so the parts are
+ * read straight from the string instead of being pushed through Date/time zone
+ * conversion, which could shift the day for a viewer west of UTC.
  */
-export function shortId(id: string | null | undefined): string {
-  if (!id) return '—';
-  return id.length > 12 ? `${id.slice(0, 8)}…` : id;
+export function formatColomboDate(dateOnly: string | null | undefined): string {
+  if (!dateOnly) return '—';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateOnly).trim());
+  if (!match) return '—';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[Number(match[2]) - 1];
+  if (!month) return '—';
+  return `${match[3]} ${month} ${match[1]}`;
 }
+
+/**
+ * NOTE (Issue 01): the previous `shortId()` helper — which truncated a UUID to
+ * its first 8 characters for display — was removed. A shortened UUID is still
+ * a technical identifier, not a business reference, and must not be presented
+ * to farmers as one. Until the platform ships real reference numbers (see
+ * PROPOSALS.md), screens simply omit identifiers that have no public form.
+ */
 
 const STATUS_LABELS: Record<string, string> = {
   held: 'Awaiting Response',
