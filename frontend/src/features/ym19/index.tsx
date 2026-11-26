@@ -1,11 +1,82 @@
-import { ContentCard } from '../../components/ContentCard';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { DeliveryAcceptanceReview } from './DeliveryAcceptanceReview';
+import { PartialAcceptance } from './PartialAcceptance';
+import { MyDisputes } from './MyDisputes';
+import { DisputeDetails } from './DisputeDetails';
+import { PackageCheck, ShieldAlert } from 'lucide-react';
+
 // YM19 · Pasan Kalhara · Acceptance & disputes
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["Delivery acceptance review", "Partial acceptance", "My disputes", "Dispute details"];
+// Module entry point with local sub-routes. WorkspaceLayout provides the topbar and sidebar.
 export default function YM19() {
-  return <ContentCard title="YM19 · Acceptance &amp; disputes" subtitle="Owner: Pasan Kalhara">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isDisputes = location.pathname.includes('/disputes');
+
+  return (
+    <div className="ym19-module-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Module Navigation Tabs */}
+      <nav
+        aria-label="Module navigation"
+        style={{
+          display: 'flex',
+          gap: '8px',
+          borderBottom: '1px solid #e5e7eb',
+          paddingBottom: '8px',
+          alignItems: 'center',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => navigate('/buyer/acceptance')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            borderRadius: '6px',
+            border: 'none',
+            fontSize: '14px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            backgroundColor: !isDisputes ? '#16a34a' : '#f3f4f6',
+            color: !isDisputes ? '#ffffff' : '#4b5563',
+            transition: 'all 0.15s ease-in-out',
+          }}
+        >
+          <PackageCheck size={16} />
+          Delivery Acceptance
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/buyer/disputes')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            borderRadius: '6px',
+            border: 'none',
+            fontSize: '14px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            backgroundColor: isDisputes ? '#16a34a' : '#f3f4f6',
+            color: isDisputes ? '#ffffff' : '#4b5563',
+            transition: 'all 0.15s ease-in-out',
+          }}
+        >
+          <ShieldAlert size={16} />
+          My Disputes
+        </button>
+      </nav>
+
+      {/* Subroutes within YM19 */}
+      <Routes>
+        <Route index element={isDisputes ? <MyDisputes /> : <DeliveryAcceptanceReview />} />
+        <Route path="partial/:id" element={<PartialAcceptance />} />
+        <Route path=":id" element={isDisputes ? <DisputeDetails /> : <PartialAcceptance />} />
+      </Routes>
+    </div>
+  );
 }
