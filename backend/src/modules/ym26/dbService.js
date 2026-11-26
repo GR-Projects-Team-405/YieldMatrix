@@ -592,7 +592,7 @@ export async function getIncidentsStats() {
           highPriority: Number(rows[0].high_priority),
           highPrioritySubtext: '2 require immediate review',
           slaOverdue: 4,
-          slaOverdueSubtext: 'Oldest incident: 5h 24m',
+          slaOverdueSubtext: 'Oldest incident: 6h 24m',
           medianResolution: '2h 18m',
           resolutionSubtext: '↓ 18% vs. previous 7 days'
         };
@@ -608,7 +608,7 @@ export async function getIncidentsStats() {
     highPriority: 6,
     highPrioritySubtext: '2 require immediate review',
     slaOverdue: 4,
-    slaOverdueSubtext: 'Oldest incident: 5h 24m',
+    slaOverdueSubtext: 'Oldest incident: 6h 24m',
     medianResolution: '2h 18m',
     resolutionSubtext: '↓ 18% vs. previous 7 days'
   };

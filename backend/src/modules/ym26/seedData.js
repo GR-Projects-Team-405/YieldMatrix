@@ -1296,7 +1296,7 @@ export const initialIncidents = [
     status: 'in_review',
     statusLabel: 'In review',
     slaStatus: 'overdue',
-    slaText: 'Overdue by 5h 24m',
+    slaText: 'Overdue by 6h 24m',
     description: 'Buyer inspection reported tampered container seal upon arrival at terminal.',
     stage: 'Buyer delivery',
     reportedBy: 'Terminal Security Officer',

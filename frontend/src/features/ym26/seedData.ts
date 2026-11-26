@@ -1274,7 +1274,7 @@ export const initialIncidents: IncidentItem[] = [
     status: 'in_review',
     statusLabel: 'In review',
     slaStatus: 'overdue',
-    slaText: 'Overdue by 5h 24m',
+    slaText: 'Overdue by 6h 24m',
     description: 'Buyer inspection reported tampered container seal upon arrival at terminal.',
     stage: 'Buyer delivery',
     reportedBy: 'Terminal Security Officer',
@@ -1683,7 +1683,7 @@ export const initialIncidentsStats: IncidentsStatsData = {
   highPriority: 6,
   highPrioritySubtext: '2 require immediate review',
   slaOverdue: 4,
-  slaOverdueSubtext: 'Oldest incident: 5h 24m',
+  slaOverdueSubtext: 'Oldest incident: 6h 24m',
   medianResolution: '2h 18m',
   resolutionSubtext: '↓ 18% vs. previous 7 days'
 };

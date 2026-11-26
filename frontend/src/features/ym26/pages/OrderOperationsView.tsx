@@ -304,7 +304,7 @@ export function OrderOperationsView() {
               {stats?.awaitingConfirmation ?? 32}
             </span>
           </div>
-          <p className="text-xs text-[#9a5b18] mt-2 font-normal">
+          <p className="text-xs text-[#718276] mt-2">
             {stats?.awaitingOverdueCount ?? 8} awaiting for more than 24h
           </p>
         </div>
@@ -329,14 +329,14 @@ export function OrderOperationsView() {
         <div className="bg-white border border-[#e2e7e1] rounded-2xl p-5 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-[#596c60] text-xs font-semibold">
             <span>Open Order Exceptions</span>
-            <TriangleAlert size={18} className="text-[#b43b37] stroke-[1.75]" />
+            <TriangleAlert size={18} className="text-[#e08a3c] stroke-[1.75]" />
           </div>
           <div className="flex items-baseline gap-2.5 mt-3">
             <span className="text-3xl font-extrabold text-[#1e2f24] tracking-tight">
               {String(stats?.openExceptions ?? 7).padStart(2, '0')}
             </span>
           </div>
-          <p className="text-xs text-[#b43b37] mt-2 font-normal">
+          <p className="text-xs text-[#c25e3a] mt-2 font-normal">
             {stats?.immediateAttentionCount ?? 3} require immediate attention
           </p>
         </div>
@@ -355,24 +355,24 @@ export function OrderOperationsView() {
             </div>
 
             {/* Multi-Segment Stacked Progress Bar */}
-            <div className="w-full h-3.5 rounded-full overflow-hidden flex bg-[#f0f3ee] mt-3">
+            <div className="w-full h-6 rounded-md overflow-hidden flex bg-[#f0f3ee] mt-3">
               <div
                 style={{ width: `${stats?.pipeline?.awaitingConfirmationPercent ?? 22}%` }}
-                className="bg-[#b8cfbd] h-full flex items-center justify-center text-[10px] font-bold text-[#1e2f24] transition-all"
+                className="bg-[#b8cfbd] h-full flex items-center justify-center text-[11px] font-bold text-[#1e2f24] transition-all"
                 title="Awaiting confirmation"
               >
                 {stats?.pipeline?.awaitingConfirmationPercent ?? 22}%
               </div>
               <div
                 style={{ width: `${stats?.pipeline?.allocatedPercent ?? 20}%` }}
-                className="bg-[#72977f] h-full flex items-center justify-center text-[10px] font-bold text-white transition-all"
+                className="bg-[#72977f] h-full flex items-center justify-center text-[11px] font-bold text-white transition-all"
                 title="Allocated"
               >
                 {stats?.pipeline?.allocatedPercent ?? 20}%
               </div>
               <div
                 style={{ width: `${stats?.pipeline?.inFulfilmentPercent ?? 58}%` }}
-                className="bg-[#315A42] h-full flex items-center justify-center text-[10px] font-bold text-white transition-all"
+                className="bg-[#275238] h-full flex items-center justify-center text-[11px] font-bold text-white transition-all"
                 title="In fulfilment"
               >
                 {stats?.pipeline?.inFulfilmentPercent ?? 58}%
@@ -694,7 +694,7 @@ export function OrderOperationsView() {
                     } else if (order.status === 'awaiting_confirmation') {
                       statusBadge = { bg: 'bg-[#fff0e3]', text: 'text-[#854500]', dot: 'bg-[#854500]' };
                     } else if (order.status === 'allocated') {
-                      statusBadge = { bg: 'bg-[#e8f2f8]', text: 'text-[#245b80]', dot: 'bg-[#245b80]' };
+                      statusBadge = { bg: 'bg-[#ede9fe]', text: 'text-[#4338ca]', dot: 'bg-[#4338ca]' };
                     } else if (order.status === 'exception' || order.status === 'cancelled') {
                       statusBadge = { bg: 'bg-[#fcebea]', text: 'text-[#a51c19]', dot: 'bg-[#a51c19]' };
                     }

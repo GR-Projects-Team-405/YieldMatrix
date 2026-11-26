@@ -296,7 +296,7 @@ export function IncidentReviewView() {
             </span>
           </div>
           <p className="text-xs text-[#718276] mt-2">
-            {stats?.slaOverdueSubtext ?? 'Oldest incident: 5h 24m'}
+            {stats?.slaOverdueSubtext ?? 'Oldest incident: 6h 24m'}
           </p>
         </div>
 

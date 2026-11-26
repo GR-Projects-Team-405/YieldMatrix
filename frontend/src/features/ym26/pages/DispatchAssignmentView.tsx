@@ -13,6 +13,7 @@ import {
   Navigation,
   AlertCircle,
   Crosshair,
+  Calendar,
 } from "lucide-react";
 import {
   fetchDispatchStats,
@@ -74,7 +75,7 @@ export function DispatchAssignmentView() {
     if (breadcrumb) {
       prevHtml = breadcrumb.innerHTML;
       breadcrumb.innerHTML =
-        '<span class="text-[#596c60]">Admin</span> <span class="mx-1 text-[#8b9e91]">/</span> <strong class="text-[#263A31] font-semibold">Dispatch</strong>';
+        '<div class="flex flex-col"><div class="text-[11px] text-[#596c60] font-normal leading-tight">Admin / Dispatch</div><div class="text-xs font-semibold text-[#1e2f24] leading-tight mt-0.5">Dispatch &amp; Driver Assignment</div></div>';
     }
     return () => {
       if (heading) {
@@ -397,7 +398,7 @@ export function DispatchAssignmentView() {
         <div className="bg-white border border-[#e2e7e1] rounded-2xl p-5 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-[#596c60] text-xs font-semibold">
             <span>Dispatch Exceptions</span>
-            <TriangleAlert size={18} className="text-[#b43b37] stroke-[1.75]" />
+            <TriangleAlert size={18} className="text-[#e08a3c] stroke-[1.75]" />
           </div>
           <div className="mt-3">
             <span className="text-3xl font-extrabold text-[#1e2f24] tracking-tight">
@@ -406,8 +407,8 @@ export function DispatchAssignmentView() {
           </div>
           <div className="mt-2 text-xs space-y-0.5">
             <p className="text-[#718276]">Require your attention</p>
-            <p className="text-[#b43b37] font-normal flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#b43b37] shrink-0" />
+            <p className="text-[#c25e3a] font-normal flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#c25e3a] shrink-0" />
               <span>2 delays · 1 vehicle issue</span>
             </p>
           </div>
@@ -512,18 +513,24 @@ export function DispatchAssignmentView() {
                 <option value="badulla">Badulla</option>
               </select>
 
-              <select
-                value={deliveryDateFilter}
-                onChange={(e) => setDeliveryDateFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-lg border border-[#d2d9d0] bg-white text-xs text-[#263A31] focus:outline-none focus:ring-1 focus:ring-[#315A42] cursor-pointer"
-              >
-                <option value="all">Delivery date</option>
-                <option value="10 Nov">10 Nov 2026</option>
-                <option value="11 Nov">11 Nov 2026</option>
-                <option value="12 Nov">12 Nov 2026</option>
-                <option value="13 Nov">13 Nov 2026</option>
-                <option value="14 Nov">14 Nov 2026</option>
-              </select>
+              <div className="relative">
+                <Calendar
+                  size={13}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#718276] pointer-events-none"
+                />
+                <select
+                  value={deliveryDateFilter}
+                  onChange={(e) => setDeliveryDateFilter(e.target.value)}
+                  className="h-8 pl-7 pr-2.5 rounded-lg border border-[#d2d9d0] bg-white text-xs text-[#263A31] focus:outline-none focus:ring-1 focus:ring-[#315A42] cursor-pointer"
+                >
+                  <option value="all">Delivery date</option>
+                  <option value="10 Nov">10 Nov 2026</option>
+                  <option value="11 Nov">11 Nov 2026</option>
+                  <option value="12 Nov">12 Nov 2026</option>
+                  <option value="13 Nov">13 Nov 2026</option>
+                  <option value="14 Nov">14 Nov 2026</option>
+                </select>
+              </div>
             </div>
 
             {/* Sub-Tabs Row */}
