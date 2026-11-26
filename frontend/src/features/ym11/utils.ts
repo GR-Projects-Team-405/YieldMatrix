@@ -142,3 +142,73 @@ export function formatOrderStatusDisplay(status: string): string {
       return status.replaceAll('_', ' ');
   }
 }
+
+const CATEGORY_LABELS: Record<string, string> = {
+  vegetables: 'vegetables',
+  fruits: 'fruits',
+  leafy_greens: 'leafy greens',
+  root_crops: 'root crops',
+  grains: 'grains',
+  other: 'other produce',
+};
+
+export function normalizeCropKey(name: string | null | undefined): string {
+  const cleaned = (name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  if (!cleaned) return '';
+  if (cleaned.endsWith('ies') && cleaned.length > 4) {
+    return `${cleaned.slice(0, -3)}y`;
+  }
+  if (/(o|ch|sh|x|z)es$/.test(cleaned) && cleaned.length > 4) {
+    return cleaned.slice(0, -2);
+  }
+  if (cleaned.endsWith('s') && !cleaned.endsWith('ss') && cleaned.length > 3) {
+    return cleaned.slice(0, -1);
+  }
+  return cleaned;
+}
+
+export function matchesSearchQuery(
+  item: {
+    cropName: string;
+    farmName: string;
+    district: string;
+    gradeName: string;
+    category: string;
+    availabilityStatus: 'available_now' | 'planned';
+  },
+  rawQuery: string
+): boolean {
+  const tokens = rawQuery
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  const cropLower = item.cropName.toLowerCase();
+  const cropNorm = normalizeCropKey(item.cropName);
+  const farmLower = item.farmName.toLowerCase();
+  const districtLower = item.district.toLowerCase();
+  const gradeLower = item.gradeName.toLowerCase();
+  const catLabel = CATEGORY_LABELS[item.category] || '';
+  const availLabel =
+    item.availabilityStatus === 'available_now'
+      ? 'available now ready harvested'
+      : 'planned upcoming expected';
+
+  return tokens.every((token) => {
+    const tokenNorm = normalizeCropKey(token);
+    return (
+      cropLower.includes(token) ||
+      (tokenNorm.length >= 2 && cropNorm.includes(tokenNorm)) ||
+      farmLower.includes(token) ||
+      districtLower.includes(token) ||
+      gradeLower.includes(token) ||
+      catLabel.includes(token) ||
+      availLabel.includes(token)
+    );
+  });
+}

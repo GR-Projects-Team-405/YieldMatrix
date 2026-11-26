@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -32,7 +32,12 @@ import type {
   MarketplaceOverviewResponse,
   MarketplaceSearchResponse,
 } from './types';
-import { formatColomboShortDate, formatKg } from './utils';
+import {
+  formatColomboShortDate,
+  formatKg,
+  matchesSearchQuery,
+  normalizeCropKey,
+} from './utils';
 import './ym11.css';
 
 function CategoryIcon({ category }: { category: CropCategoryKey }) {
@@ -138,7 +143,65 @@ export default function MarketplacePage() {
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadMarketplace]);
 
-  // Immediately filter when dropdowns change, and debounce free-text search by 250ms
+  // Instant client-side filtering on the loaded DB items so search bar & dropdowns respond in 0ms
+  const instantFilteredItems = useMemo(() => {
+    if (!data || !hasQuickFilter) return null;
+    const allItems = [...data.availableNow, ...data.comingSoon];
+    const selectedCropName = cropId
+      ? data.filters.crops.find((c) => c.id === cropId)?.name || ''
+      : '';
+    const targetCropKey = selectedCropName ? normalizeCropKey(selectedCropName) : '';
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const in7DaysIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const in30DaysIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    return allItems.filter((item) => {
+      if (queryText.trim() && !matchesSearchQuery(item, queryText)) return false;
+      if (cropId) {
+        const matchesCrop =
+          item.cropId === cropId ||
+          (targetCropKey && normalizeCropKey(item.cropName) === targetCropKey);
+        if (!matchesCrop) return false;
+      }
+      if (gradeId && item.gradeId !== gradeId) return false;
+      if (district && item.district.trim().toLowerCase() !== district.trim().toLowerCase()) {
+        return false;
+      }
+      if (pricePreset === 'under_200') {
+        if (item.unitPriceCents === null || item.unitPriceCents > 20000) return false;
+      } else if (pricePreset === '200_400') {
+        if (item.unitPriceCents === null || item.unitPriceCents < 20000 || item.unitPriceCents > 40000) {
+          return false;
+        }
+      } else if (pricePreset === 'over_400') {
+        if (item.unitPriceCents === null || item.unitPriceCents < 40000) return false;
+      }
+      if (availability === 'available_now' && item.availabilityStatus !== 'available_now') {
+        return false;
+      }
+      if (availability === 'planned' && item.availabilityStatus !== 'planned') {
+        return false;
+      }
+      if (availability === 'within_7_days') {
+        const ok =
+          item.availabilityStatus === 'available_now' ||
+          (item.availabilityStatus === 'planned' &&
+            Boolean(item.plannedHarvestDate && item.plannedHarvestDate >= todayIso && item.plannedHarvestDate <= in7DaysIso));
+        if (!ok) return false;
+      }
+      if (availability === 'within_30_days') {
+        const ok =
+          item.availabilityStatus === 'available_now' ||
+          (item.availabilityStatus === 'planned' &&
+            Boolean(item.plannedHarvestDate && item.plannedHarvestDate >= todayIso && item.plannedHarvestDate <= in30DaysIso));
+        if (!ok) return false;
+      }
+      return true;
+    });
+  }, [data, hasQuickFilter, queryText, cropId, gradeId, district, pricePreset, availability]);
+
+  // Background sync with backend search so newly added DB items/crops also arrive
   useEffect(() => {
     if (!hasQuickFilter) {
       setFilteredItems(null);
@@ -148,8 +211,6 @@ export default function MarketplacePage() {
     }
 
     const controller = new AbortController();
-    const delayMs = queryText.trim() ? 250 : 0;
-
     const timerId = window.setTimeout(() => {
       setFilterLoading(true);
       setFilterError('');
@@ -175,27 +236,19 @@ export default function MarketplacePage() {
         .then((res) => {
           if (controller.signal.aborted) return;
           setFilteredItems(res.data.items);
-          // Sync latest dynamic filter lists (newly added crops, grades, districts) from DB
           if (res.data.filters) {
             setData((prev) => (prev ? { ...prev, filters: res.data.filters } : prev));
           }
         })
-        .catch((err) => {
-          if (
-            controller.signal.aborted ||
-            (err as { code?: string })?.code === 'ERR_CANCELED' ||
-            (err as { name?: string })?.name === 'CanceledError'
-          ) {
-            return;
-          }
-          setFilterError('Could not apply filters right now. Please try again.');
+        .catch(() => {
+          // Keep instant client-filtered results visible if background sync encounters transient network latency
         })
         .finally(() => {
           if (!controller.signal.aborted) {
             setFilterLoading(false);
           }
         });
-    }, delayMs);
+    }, 300);
 
     return () => {
       window.clearTimeout(timerId);
@@ -262,7 +315,9 @@ export default function MarketplacePage() {
     );
   }
 
-  const displayedHarvests = hasQuickFilter ? filteredItems || [] : data.availableNow;
+  const displayedHarvests = hasQuickFilter
+    ? instantFilteredItems ?? filteredItems ?? []
+    : data.availableNow;
   const fullSearchUrl = (() => {
     const qs = buildMarketplaceSearchParams({
       q: queryText,
@@ -317,6 +372,16 @@ export default function MarketplacePage() {
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
               />
+              {queryText && (
+                <button
+                  type="button"
+                  className="ym11-search-clear"
+                  aria-label="Clear search query"
+                  onClick={() => setQueryText('')}
+                >
+                  <X size={13} aria-hidden="true" />
+                </button>
+              )}
             </div>
             <Button type="submit" variant="primary" className="ym11-search-btn">
               <Search size={15} aria-hidden="true" />
@@ -473,9 +538,7 @@ export default function MarketplacePage() {
             </h3>
             <p className="ym11-card-sub">
               {hasQuickFilter
-                ? filterLoading
-                  ? 'Filtering matching harvests…'
-                  : `Showing ${displayedHarvests.length} matching ${displayedHarvests.length === 1 ? 'harvest' : 'harvests'}.`
+                ? `Showing ${displayedHarvests.length} matching ${displayedHarvests.length === 1 ? 'harvest' : 'harvests'}${filterLoading ? ' · syncing…' : ''}.`
                 : 'Explore active produce listings from approved farmers.'}
             </p>
           </div>
@@ -491,14 +554,7 @@ export default function MarketplacePage() {
 
         {filterError && <Alert type="error">{filterError}</Alert>}
 
-        {filterLoading ? (
-          <ContentCard>
-            <div className="ym11-loading-card" role="status">
-              <RefreshCw size={18} aria-hidden="true" />
-              <span>Updating marketplace results…</span>
-            </div>
-          </ContentCard>
-        ) : displayedHarvests.length === 0 ? (
+        {displayedHarvests.length === 0 ? (
           <EmptyState
             title={hasQuickFilter ? 'No harvests match these filters' : 'No ready harvests right now'}
             description={

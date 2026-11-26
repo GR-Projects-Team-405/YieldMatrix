@@ -730,8 +730,33 @@
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  padding: 0 16px 0 42px;
+  padding: 0 38px 0 42px;
   font-size: 14px;
+}
+
+.ym11-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.ym11-search-clear {
+  position: absolute;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--border);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.ym11-search-clear:hover {
+  background: var(--control-border);
+  color: #ffffff;
 }
 
 .ym11-search-input--soft {

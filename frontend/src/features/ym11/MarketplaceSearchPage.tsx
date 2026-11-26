@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeftRight,
@@ -20,6 +20,7 @@ import type {
   SearchAvailabilityMode,
   SearchSortMode,
 } from './types';
+import { matchesSearchQuery } from './utils';
 import './ym11.css';
 
 const AVAILABILITY_OPTIONS: { value: SearchAvailabilityMode; label: string }[] = [
@@ -143,6 +144,34 @@ export default function MarketplaceSearchPage() {
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [fetchSearch]);
+
+  // Live debounced search as the user types in the top search bar
+  useEffect(() => {
+    const urlQ = (new URLSearchParams(paramsKey).get('q') || '').trim();
+    const typedQ = qInput.trim();
+    if (typedQ === urlQ) return;
+
+    const timerId = window.setTimeout(() => {
+      const next = new URLSearchParams(paramsKey);
+      if (typedQ) next.set('q', typedQ);
+      else next.delete('q');
+      next.delete('page');
+      setSearchParams(next, { replace: true });
+    }, 300);
+
+    return () => window.clearTimeout(timerId);
+  }, [qInput, paramsKey, setSearchParams]);
+
+  // Instant client-side narrowing while typing so cards respond in 0ms
+  const visibleItems = useMemo(() => {
+    if (!result) return [];
+    const urlQ = (new URLSearchParams(paramsKey).get('q') || '').trim();
+    const typedQ = qInput.trim();
+    if (typedQ && typedQ !== urlQ && typedQ.toLowerCase().startsWith(urlQ.toLowerCase())) {
+      return result.items.filter((item) => matchesSearchQuery(item, typedQ));
+    }
+    return result.items;
+  }, [result, qInput, paramsKey]);
 
   function commitFilters(overrides?: Partial<SearchFilterDraft>) {
     setValidationError('');
@@ -325,6 +354,19 @@ export default function MarketplaceSearchPage() {
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
             />
+            {qInput && (
+              <button
+                type="button"
+                className="ym11-search-clear"
+                aria-label="Clear search query"
+                onClick={() => {
+                  setQInput('');
+                  removeSingleParam('q');
+                }}
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            )}
           </div>
           <Button type="submit" variant="primary" className="ym11-search-btn">
             <Search size={15} aria-hidden="true" />
@@ -478,9 +520,9 @@ export default function MarketplaceSearchPage() {
             <div>
               <h3 className="ym11-card-title">Matching Harvests</h3>
               <p className="ym11-card-sub">
-                {loading
+                {loading && !result
                   ? 'Searching harvests…'
-                  : `Showing ${result?.items.length ?? 0} of ${result?.pagination.totalItems ?? 0} matching listings`}
+                  : `Showing ${visibleItems.length} of ${result?.pagination.totalItems ?? visibleItems.length} matching listings${loading ? ' · syncing…' : ''}`}
               </p>
             </div>
             <SelectField
@@ -540,14 +582,14 @@ export default function MarketplaceSearchPage() {
             </Link>
           </div>
 
-          {loading ? (
+          {loading && !result ? (
             <ContentCard>
               <div className="ym11-loading-card" role="status">
                 <RefreshCw size={18} aria-hidden="true" />
                 <span>Loading matching harvests…</span>
               </div>
             </ContentCard>
-          ) : error ? (
+          ) : error && !result ? (
             <ContentCard>
               <div className="ym11-error-box">
                 <Alert type="error">{error}</Alert>
@@ -557,7 +599,7 @@ export default function MarketplaceSearchPage() {
                 </Button>
               </div>
             </ContentCard>
-          ) : !result || result.items.length === 0 ? (
+          ) : !result || visibleItems.length === 0 ? (
             <EmptyState
               title="No matching harvests found"
               description="Try widening your filters, lowering the minimum quantity, or posting a bulk demand request for growers."
@@ -575,7 +617,7 @@ export default function MarketplaceSearchPage() {
           ) : (
             <>
               <div className="ym11-produce-grid ym11-produce-grid--two">
-                {result.items.map((item) => (
+                {visibleItems.map((item) => (
                   <ProduceCard
                     key={item.id}
                     item={item}
