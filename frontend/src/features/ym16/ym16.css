@@ -1,0 +1,76 @@
+.ym16 { --forest: #163d32; --forest-2: #1b4b3d; --mint: #e7f4ec; --mint-2: #d4eadc; --ink: #1c332b; color: var(--text); }
+.ym16-shell { display: grid; gap: 16px; }
+.ym16-toolbar { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.ym16-toolbar h2 { font-size: 28px; font-weight: 700; color: var(--forest); letter-spacing: -0.03em; }
+.ym16-toolbar p { color: var(--muted); font-size: 13px; margin-top: 6px; max-width: 640px; line-height: 1.5; }
+.ym16-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ym16-actions .ym-button { height: 40px; padding: 0 16px; font-size: 13px; }
+.ym16-stepper { display: flex; gap: 8px; flex-wrap: wrap; }
+.ym16-step { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--mint); color: var(--forest); font-size: 12px; font-weight: 600; border: 1px solid transparent; }
+.ym16-step.is-active { background: var(--forest); color: #fff; }
+.ym16-step.is-complete { background: var(--mint-2); }
+.ym16-step b { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #fff3; font-size: 11px; }
+.ym16-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr); gap: 16px; align-items: start; }
+.ym16-stack { display: grid; gap: 16px; }
+.ym16-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
+.ym16-card h3 { font-size: 15px; font-weight: 700; color: var(--forest); margin-bottom: 12px; }
+.ym16-kicker { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.ym16-produce { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ym16-lot { border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: var(--mint); min-height: 132px; display: grid; grid-template-rows: 88px auto; }
+.ym16-lot-art { display: grid; place-items: center; color: #fff; font-weight: 700; letter-spacing: .04em; }
+.ym16-lot-art.tomato { background: linear-gradient(135deg, #9a2e2e, #d96a4e); }
+.ym16-lot-art.carrot { background: linear-gradient(135deg, #c45c12, #ef9a3f); }
+.ym16-lot-art.cabbage { background: linear-gradient(135deg, #2f6a3f, #7dae6a); }
+.ym16-lot-art.potato { background: linear-gradient(135deg, #8a6a3b, #c4a36a); }
+.ym16-lot-art.produce { background: linear-gradient(135deg, #163d32, #4d8f72); }
+.ym16-lot footer { padding: 8px 10px; font-size: 12px; background: var(--surface); }
+.ym16-lot footer strong { display: block; }
+.ym16-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.ym16-meta div, .ym16-stat { background: var(--mint); border-radius: 12px; padding: 12px; }
+.ym16-meta span, .ym16-stat span { display: block; font-size: 11px; color: var(--muted); }
+.ym16-meta strong, .ym16-stat strong { display: block; margin-top: 6px; font-size: 14px; }
+.ym16-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ym16-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px; background: var(--mint); }
+.ym16-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.ym16-side { background: var(--forest); color: #e9f6ee; border-radius: 16px; padding: 18px; }
+.ym16-side h3, .ym16-side p, .ym16-side strong { color: inherit; }
+.ym16-side .price { font-size: 28px; font-weight: 800; margin: 8px 0 12px; }
+.ym16-side .ym-button { width: 100%; }
+.ym16-wallet { background: var(--mint); color: var(--ink); border-radius: 12px; padding: 12px; margin: 12px 0; }
+.ym16-wallet span { font-size: 11px; color: var(--muted); }
+.ym16-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ym16-map { border: 0; width: 100%; height: 220px; border-radius: 12px; background: var(--mint-2); }
+.ym16-map-status { height: 220px; border-radius: 12px; background: var(--mint-2); display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; }
+.ym16-map-error { grid-template-columns: 1fr; align-content: center; gap: 8px; padding: 16px; }
+.ym16-map-error a { color: var(--forest); font-weight: 700; }
+.ym16-map-marker { border: 2px solid #fff; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 800; box-shadow: 0 2px 8px #163d3244; }
+.ym16-map-marker--farm { background: #5b8f43; }
+.ym16-map-marker--hub { background: #163d32; }
+.ym16-hero { background: linear-gradient(135deg, #12352c, #1f5a47); color: #f3fbf6; border-radius: 18px; padding: 22px; display: grid; gap: 8px; }
+.ym16-hero .clock { font-size: 42px; font-weight: 800; letter-spacing: -0.04em; }
+.ym16-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.ym16-pill { background: #ffffff22; border-radius: 999px; padding: 6px 10px; font-size: 12px; }
+.ym16-split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ym16-farmer { border: 1px solid var(--border); border-radius: 16px; padding: 16px; background: var(--surface); display: grid; gap: 10px; }
+.ym16-farmer header { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.ym16-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; }
+.ym16-notes { background: var(--mint); border-radius: 10px; padding: 10px; font-size: 13px; line-height: 1.5; }
+.ym16-banner { background: linear-gradient(135deg, #0f3a2e, #1c5b45); color: #f4fbf6; border-radius: 18px; padding: 20px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ym16-banner h2 { font-size: 24px; }
+.ym16-roadmap { display: grid; gap: 10px; }
+.ym16-roadmap li { list-style: none; padding: 12px; border-radius: 12px; background: var(--mint); }
+.ym16-roadmap b { display: block; margin-bottom: 4px; color: var(--forest); }
+.ym16-inline { display: flex; flex-wrap: wrap; gap: 8px; }
+.ym16-muted { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.ym16-modal { border: 1px solid var(--border); border-radius: 16px; padding: 18px; background: var(--surface); width: min(480px, calc(100vw - 32px)); }
+.ym16-modal::backdrop { background: #163d32aa; }
+.ym16-field { display: grid; gap: 6px; margin: 12px 0; }
+.ym16-field textarea { width: 100%; min-height: 96px; border-radius: 12px; border: 1px solid var(--control-border); padding: 10px; background: var(--surface); color: var(--text); }
+@media (max-width: 1100px) {
+  .ym16-grid, .ym16-split, .ym16-produce, .ym16-meta, .ym16-checks { grid-template-columns: 1fr; }
+  .ym16-hero .clock { font-size: 32px; }
+}
+@media (max-width: 767px) {
+  .ym16-toolbar h2 { font-size: 22px; }
+  .ym16-table { font-size: 12px; }
+}

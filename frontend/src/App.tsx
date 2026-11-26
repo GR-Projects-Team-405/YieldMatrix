@@ -52,6 +52,7 @@ export default function App() {
         <Route path="harvest-calendar/*" element={<YM08 />} />
         <Route path="buyer-requests/*" element={<YM10 />} />
         <Route path="allocations/*" element={<YM17 />} />
+        <Route path="reservations/*" element={<YM16 />} />
         <Route path="wallet/*" element={<YM27 />} />
         <Route path="market-insights/*" element={<YM29 />} />
         <Route path="offers/*" element={<YM10 />} />
