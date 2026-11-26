@@ -27,15 +27,24 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
 import { Alert } from '../../components/Alert';
 import { EmptyState } from '../../components/EmptyState';
-import api from '../../services/api';
+import api from './services/api';
 import { Crop, Grade, OverviewData, getErrorMessage } from './types';
 
 export default function ReferenceDataOverview() {
   const navigate = useNavigate();
 
-  // Live state
-  const [data, setData] = useState<OverviewData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Live state with instant in-memory cache initialization
+  const cachedOverview = api.getCached<OverviewData>('/ym04/overview');
+  const [data, setData] = useState<OverviewData | null>(() => cachedOverview);
+  const [loading, setLoading] = useState<boolean>(() => !cachedOverview);
   const [error, setError] = useState<string | null>(null);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -82,18 +91,30 @@ export default function ReferenceDataOverview() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  // Fetch live overview from backend
-  const fetchOverview = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+  // Fetch live overview from backend (with cache & stale-while-revalidate)
+  const fetchOverview = useCallback(async (signal?: AbortSignal, isManual = false) => {
+    if (!api.getCached('/ym04/overview') || isManual) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const response = await api.get('/ym04/overview', { signal });
+      const response = await api.get('/ym04/overview', { signal, skipCache: isManual });
+      if (!isMountedRef.current || signal?.aborted) return;
       setData(response.data);
+      setError(null);
     } catch (err) {
-      if (axios.isCancel(err)) return;
+      const isCanceled =
+        axios.isCancel(err) ||
+        (err instanceof Error && (err.name === 'AbortError' || err.name === 'CanceledError')) ||
+        (axios.isAxiosError(err) && (err.code === 'ERR_CANCELED' || err.name === 'CanceledError')) ||
+        Boolean(signal?.aborted);
+
+      if (isCanceled || !isMountedRef.current) return;
       setError(getErrorMessage(err, 'Failed to load reference data overview.'));
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && !signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -261,12 +282,12 @@ export default function ReferenceDataOverview() {
       </header>
 
       {/* Global Error Banner with Retry */}
-      {error && (
+      {!loading && error && (
         <div className="ym04-alert-wrap" role="alert">
           <Alert type="error">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', width: '100%' }}>
               <span>{error}</span>
-              <Button variant="outline" onClick={() => fetchOverview()}>
+              <Button variant="outline" onClick={() => fetchOverview(undefined, true)}>
                 <RefreshCw size={14} className={loading ? 'ym04-spin' : ''} style={{ marginRight: '6px' }} />
                 Retry
               </Button>
@@ -294,7 +315,7 @@ export default function ReferenceDataOverview() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Crops</span>
-              <strong className="ym04-stat-value">{loading ? '...' : totalCropsCount}</strong>
+              <strong className="ym04-stat-value">{loading && !data ? '...' : totalCropsCount}</strong>
               <span className="ym04-stat-subtext">All registered crop types</span>
             </div>
           </div>
@@ -318,7 +339,7 @@ export default function ReferenceDataOverview() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Active Crops</span>
-              <strong className="ym04-stat-value">{loading ? '...' : activeCropsCount}</strong>
+              <strong className="ym04-stat-value">{loading && !data ? '...' : activeCropsCount}</strong>
               <span className="ym04-stat-subtext">Currently available crops</span>
             </div>
           </div>
@@ -343,7 +364,7 @@ export default function ReferenceDataOverview() {
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Grades</span>
               <strong className="ym04-stat-value">
-                {loading ? '...' : String(totalGradesCount).padStart(2, '0')}
+                {loading && !data ? '...' : String(totalGradesCount).padStart(2, '0')}
               </strong>
               <span className="ym04-stat-subtext">All registered produce grades</span>
             </div>
@@ -369,7 +390,7 @@ export default function ReferenceDataOverview() {
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Active Grades</span>
               <strong className="ym04-stat-value">
-                {loading ? '...' : String(activeGradesCount).padStart(2, '0')}
+                {loading && !data ? '...' : String(activeGradesCount).padStart(2, '0')}
               </strong>
               <span className="ym04-stat-subtext">Currently available grades</span>
             </div>

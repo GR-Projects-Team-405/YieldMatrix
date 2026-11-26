@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -25,7 +25,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { Alert } from '../../components/Alert';
 import { Table, TableRow } from '../../components/Table';
 import { Toast } from '../../components/Toast';
-import api from '../../services/api';
+import api from './services/api';
 import {
   AuditEventItem,
   formatColomboDate,
@@ -33,42 +33,75 @@ import {
   getErrorMessage
 } from './types';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function AuditEventDetails() {
-  const { eventId } = useParams<{ eventId: string }>();
+  const params = useParams<{ eventId?: string; id?: string }>();
+  const rawId = (params.eventId || params.id || '').trim();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [event, setEvent] = useState<AuditEventItem | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedEvent = rawId ? api.getCached<AuditEventItem>(`/ym04/audit-logs/${rawId}`) : null;
+  const [event, setEvent] = useState<AuditEventItem | null>(() => cachedEvent);
+  const [loading, setLoading] = useState<boolean>(() => !cachedEvent);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Fetch event details directly from live backend
   const fetchEventDetails = useCallback(
     async (signal?: AbortSignal) => {
-      if (!eventId) {
+      if (!rawId || rawId === 'undefined' || rawId === 'null') {
         setError('No audit event ID provided in URL.');
         setLoading(false);
         return;
       }
 
-      setLoading(true);
+      if (!UUID_REGEX.test(rawId)) {
+        setError(`Invalid audit event ID format: "${rawId}". Expected a valid UUID.`);
+        setLoading(false);
+        return;
+      }
+
+      if (!api.getCached(`/ym04/audit-logs/${rawId}`)) {
+        setLoading(true);
+      }
       setError(null);
       try {
-        const response = await api.get(`/ym04/audit-logs/${eventId}`, { signal });
+        const response = await api.get(`/ym04/audit-logs/${rawId}`, { signal });
+        if (!isMountedRef.current || signal?.aborted) return;
+
         const data = response.data;
         const item: AuditEventItem = data.event || data;
         setEvent(item);
+        setError(null);
       } catch (err) {
-        if (axios.isCancel(err)) return;
+        const isCanceled =
+          axios.isCancel(err) ||
+          (err instanceof Error && (err.name === 'AbortError' || err.name === 'CanceledError')) ||
+          (axios.isAxiosError(err) && (err.code === 'ERR_CANCELED' || err.name === 'CanceledError')) ||
+          Boolean(signal?.aborted);
+
+        if (isCanceled || !isMountedRef.current) {
+          return;
+        }
         setError(getErrorMessage(err, 'Failed to load audit event details.'));
         setEvent(null);
       } finally {
-        setLoading(false);
+        if (isMountedRef.current && !signal?.aborted) {
+          setLoading(false);
+        }
       }
     },
-    [eventId]
+    [rawId]
   );
 
   useEffect(() => {
@@ -164,7 +197,7 @@ export default function AuditEventDetails() {
           </div>
           <h2 className="ym04-not-found-title">Audit Event Not Found</h2>
           <Alert type="error">
-            {error || `No audit event could be found matching ID "${eventId || 'unknown'}".`}
+            {error || `No audit event could be found matching ID "${rawId || 'unknown'}".`}
           </Alert>
           <div style={{ display: 'flex', gap: '12px', marginTop: '16px', justifyContent: 'center' }}>
             <Button
@@ -382,7 +415,7 @@ export default function AuditEventDetails() {
               <td>{targetDisplayName}</td>
               <td>{event.targetType}</td>
               <td>
-                <StatusBadge status={event.status || 'Success'} />
+                <StatusBadge status={event.status ?? 'Success'} />
               </td>
             </TableRow>
           </Table>

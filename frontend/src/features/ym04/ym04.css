@@ -1677,10 +1677,14 @@
 
 .ym04-spin {
   animation: ym04Spin 0.75s linear infinite;
+  display: inline-block;
 }
 
 @keyframes ym04Spin {
-  100% {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
     transform: rotate(360deg);
   }
 }

@@ -13,7 +13,7 @@ export interface Grade {
 
 export interface SafeChanges {
   targetName?: string;
-  status?: string;
+  status?: string | any;
   previousValues?: Record<string, any> | null;
   newValues?: Record<string, any> | null;
   changeDescription?: string | null;
@@ -34,7 +34,7 @@ export interface AuditEventItem {
   targetRecordId?: string;
   requestId?: string;
   reason?: string;
-  status: 'Success' | 'Failed' | string;
+  status?: 'Success' | 'Failed' | string | any;
   safeChanges: SafeChanges;
   previousValues?: Record<string, any> | null;
   newValues?: Record<string, any> | null;

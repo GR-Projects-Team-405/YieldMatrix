@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -26,7 +26,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { Table, TableRow } from '../../components/Table';
 import { Toast } from '../../components/Toast';
 import { Alert } from '../../components/Alert';
-import api from '../../services/api';
+import api from './services/api';
 import { AuditEventItem, Pagination, formatColomboDate, getErrorMessage } from './types';
 
 export type { AuditEventItem };
@@ -78,14 +78,25 @@ export default function AuditTrail() {
   const [targetFilter, setTargetFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All');
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const defaultAuditParams = { page: 1, limit: 5 };
+  const cachedAudit = api.getCached<{ events: AuditEventItem[]; pagination: Pagination; summary: any }>('/ym04/audit-logs', defaultAuditParams);
+
   // Interactive UI & Data State
-  const [events, setEvents] = useState<AuditEventItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<AuditEventItem[]>(() => cachedAudit?.events || (Array.isArray(cachedAudit) ? cachedAudit : []));
+  const [loading, setLoading] = useState<boolean>(() => !cachedAudit);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
-  const [pagination, setPagination] = useState<Pagination>({
+  const [pagination, setPagination] = useState<Pagination>(() => cachedAudit?.pagination || {
     page: 1,
     limit: 5,
     total: 0,
@@ -96,7 +107,7 @@ export default function AuditTrail() {
     todayEvents: number;
     referenceChanges: number;
     adminActions: number;
-  }>({
+  }>(() => cachedAudit?.summary || {
     totalEvents: 0,
     todayEvents: 0,
     referenceChanges: 0,
@@ -105,13 +116,11 @@ export default function AuditTrail() {
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Fetch live audit logs
+  // Fetch live audit logs (with cache & stale-while-revalidate)
   const fetchAuditLogs = useCallback(
     async (signal?: AbortSignal, isManualRefresh = false) => {
       if (isManualRefresh) {
         setIsRefreshing(true);
-      } else {
-        setLoading(true);
       }
       setError(null);
 
@@ -138,21 +147,44 @@ export default function AuditTrail() {
         if (dateParams.dateFrom) params.dateFrom = dateParams.dateFrom;
         if (dateParams.dateTo) params.dateTo = dateParams.dateTo;
 
-        const response = await api.get('/ym04/audit-logs', { params, signal });
-        const { events: list, pagination: pag, summary: sum } = response.data;
-        setEvents(list || []);
-        if (pag) setPagination(pag);
-        if (sum) setSummary(sum);
+        if (!api.getCached('/ym04/audit-logs', params) && !isManualRefresh) {
+          setLoading(true);
+        }
+
+        const response = await api.get('/ym04/audit-logs', { params, signal, skipCache: isManualRefresh });
+
+        if (!isMountedRef.current || signal?.aborted) return;
+
+        const data = response?.data || {};
+        const list: AuditEventItem[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data.events)
+          ? data.events
+          : [];
+        setEvents(list);
+        if (data.pagination) setPagination(data.pagination);
+        if (data.summary) setSummary(data.summary);
+        setError(null);
 
         if (isManualRefresh) {
           setToastMessage('Audit log data refreshed successfully.');
         }
       } catch (err) {
-        if (axios.isCancel(err)) return;
+        const isCanceled =
+          axios.isCancel(err) ||
+          (err instanceof Error && (err.name === 'AbortError' || err.name === 'CanceledError')) ||
+          (axios.isAxiosError(err) && (err.code === 'ERR_CANCELED' || err.name === 'CanceledError')) ||
+          Boolean(signal?.aborted);
+
+        if (isCanceled || !isMountedRef.current) {
+          return;
+        }
         setError(getErrorMessage(err, 'Failed to load audit logs.'));
       } finally {
-        setLoading(false);
-        setIsRefreshing(false);
+        if (isMountedRef.current && !signal?.aborted) {
+          setLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     [currentPage, pageSize, searchTerm, actionFilter, actorFilter, targetFilter, dateFilter]
@@ -184,6 +216,7 @@ export default function AuditTrail() {
 
   // Handle View Details
   const handleViewDetails = (item: AuditEventItem) => {
+    if (!item?.id) return;
     if (location.pathname.startsWith('/admin/audit-trail')) {
       navigate(`/admin/audit-trail/${item.id}`);
     } else {
@@ -215,7 +248,7 @@ export default function AuditTrail() {
       </div>
 
       {/* Global Error Banner */}
-      {error && (
+      {!loading && error && (
         <div className="ym04-alert-wrap" role="alert">
           <Alert type="error">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', width: '100%' }}>
@@ -248,7 +281,7 @@ export default function AuditTrail() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Events</span>
-              <strong className="ym04-stat-value">{summary.totalEvents}</strong>
+              <strong className="ym04-stat-value">{summary?.totalEvents ?? 0}</strong>
               <span className="ym04-stat-subtext">All audit events</span>
             </div>
           </div>
@@ -281,7 +314,7 @@ export default function AuditTrail() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Today Events</span>
-              <strong className="ym04-stat-value">{summary.todayEvents}</strong>
+              <strong className="ym04-stat-value">{summary?.todayEvents ?? 0}</strong>
               <span className="ym04-stat-subtext">Events today</span>
             </div>
           </div>
@@ -314,7 +347,7 @@ export default function AuditTrail() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Reference Changes</span>
-              <strong className="ym04-stat-value">{summary.referenceChanges}</strong>
+              <strong className="ym04-stat-value">{summary?.referenceChanges ?? 0}</strong>
               <span className="ym04-stat-subtext">Crop &amp; Grade changes</span>
             </div>
           </div>
@@ -347,7 +380,7 @@ export default function AuditTrail() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Admin Actions</span>
-              <strong className="ym04-stat-value">{summary.adminActions}</strong>
+              <strong className="ym04-stat-value">{summary?.adminActions ?? 0}</strong>
               <span className="ym04-stat-subtext">Admin activities</span>
             </div>
           </div>
@@ -484,7 +517,7 @@ export default function AuditTrail() {
       {/* ------------------------------------------------------------------ */}
       <section className="ym04-audit-card" aria-label="Audit Events List">
         <div className="ym04-table-wrap">
-          {loading ? (
+          {loading && events.length === 0 ? (
             <div style={{ padding: '48px', textAlign: 'center' }}>
               <Loader2 size={32} className="ym04-spin" style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
               <p style={{ color: 'var(--muted)' }}>Loading audit events...</p>
@@ -496,24 +529,34 @@ export default function AuditTrail() {
               aria-label="Audit Events List"
             >
               {events.length > 0 ? (
-                events.map((item) => {
+                events.map((item, index) => {
                   const displayTime =
-                    item.dateTime || formatColomboDate(item.occurredAt);
-                  const displayActor = item.actor || 'System';
+                    item.dateTime || (item.occurredAt ? formatColomboDate(item.occurredAt) : '—');
+                  const displayActor =
+                    typeof item.actor === 'string' && item.actor.trim() ? item.actor : 'System';
                   const avatarLetter =
-                    item.actorAvatar || displayActor.charAt(0).toUpperCase();
+                    typeof item.actorAvatar === 'string' && item.actorAvatar.trim()
+                      ? item.actorAvatar.trim().charAt(0).toUpperCase()
+                      : displayActor.charAt(0).toUpperCase() || 'S';
+                  const actionText =
+                    typeof item.action === 'string' && item.action.trim() ? item.action : 'Updated';
+                  const actionClass = actionText.toLowerCase();
+                  const eventIdStr = String(item.id ?? '');
+                  const displayEventId =
+                    eventIdStr.length > 8 ? `${eventIdStr.slice(0, 8)}...` : eventIdStr || '—';
+                  const targetNameStr = String(item.targetName || item.target || 'System');
 
                   return (
-                    <TableRow key={item.id}>
+                    <TableRow key={eventIdStr || `audit-event-${index}`}>
                       {/* Event ID */}
                       <td
                         className="ym04-cell-event-id"
                         style={{ cursor: 'pointer' }}
                         onClick={() => handleViewDetails(item)}
-                        title={`View event ${item.id} details`}
+                        title={`View event ${eventIdStr} details`}
                       >
                         <span style={{ fontFamily: 'monospace' }}>
-                          {item.id.length > 8 ? `${item.id.slice(0, 8)}...` : item.id}
+                          {displayEventId}
                         </span>
                       </td>
 
@@ -530,11 +573,9 @@ export default function AuditTrail() {
                       {/* Action */}
                       <td>
                         <span
-                          className={`ym04-badge-action ym04-badge-action--${(
-                            item.action || 'updated'
-                          ).toLowerCase()}`}
+                          className={`ym04-badge-action ym04-badge-action--${actionClass}`}
                         >
-                          {item.action}
+                          {actionText}
                         </span>
                       </td>
 
@@ -560,7 +601,7 @@ export default function AuditTrail() {
                               aria-hidden="true"
                             />
                           )}
-                          <span>{item.targetName || item.target}</span>
+                          <span>{targetNameStr}</span>
                         </div>
                       </td>
 
@@ -569,7 +610,7 @@ export default function AuditTrail() {
 
                       {/* Status */}
                       <td>
-                        <StatusBadge status={item.status || 'Success'} />
+                        <StatusBadge status={item.status ?? 'Success'} />
                       </td>
 
                       {/* Actions */}
@@ -579,7 +620,7 @@ export default function AuditTrail() {
                           variant="outline"
                           className="ym04-btn-view-details"
                           onClick={() => handleViewDetails(item)}
-                          aria-label={`View audit details for event ${item.id}`}
+                          aria-label={`View audit details for event ${eventIdStr}`}
                         >
                           View Details
                         </Button>

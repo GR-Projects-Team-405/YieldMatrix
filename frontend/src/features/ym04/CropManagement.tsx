@@ -23,7 +23,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { Table, TableRow } from '../../components/Table';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
-import api from '../../services/api';
+import api from './services/api';
 import { Crop, Pagination, getErrorMessage } from './types';
 
 function getPaginationItems(current: number, total: number): (number | string)[] {
@@ -41,17 +41,28 @@ function getPaginationItems(current: number, total: number): (number | string)[]
 }
 
 export default function CropManagement() {
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const defaultParams = { page: 1, limit: 5, status: 'all' };
+  const cachedCrops = api.getCached<{ crops: Crop[]; pagination: Pagination; summary: any }>('/ym04/crops', defaultParams);
+
   // Master records & data state
-  const [crops, setCrops] = useState<Crop[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [crops, setCrops] = useState<Crop[]>(() => cachedCrops?.crops || []);
+  const [loading, setLoading] = useState<boolean>(() => !cachedCrops);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<Pagination>({
+  const [pagination, setPagination] = useState<Pagination>(() => cachedCrops?.pagination || {
     page: 1,
     limit: 5,
     total: 0,
     totalPages: 1
   });
-  const [summary, setSummary] = useState<{ total: number; active: number; inactive: number }>({
+  const [summary, setSummary] = useState<{ total: number; active: number; inactive: number }>(() => cachedCrops?.summary || {
     total: 0,
     active: 0,
     inactive: 0
@@ -88,30 +99,43 @@ export default function CropManagement() {
   } | null>(null);
 
 
-  // Fetch crops from live backend
-  const fetchCrops = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+  // Fetch crops from live backend (with cache & stale-while-revalidate)
+  const fetchCrops = useCallback(async (signal?: AbortSignal, isManual = false) => {
+    const params: Record<string, any> = {
+      page: currentPage,
+      limit: pageSize,
+      status: statusFilter.toLowerCase()
+    };
+    if (searchQuery.trim()) {
+      params.search = searchQuery.trim();
+    }
+
+    if (!api.getCached('/ym04/crops', params) || isManual) {
+      setLoading(true);
+    }
     setPageError(null);
     try {
-      const params: Record<string, any> = {
-        page: currentPage,
-        limit: pageSize,
-        status: statusFilter.toLowerCase()
-      };
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
-      }
+      const response = await api.get('/ym04/crops', { params, signal, skipCache: isManual });
+      if (!isMountedRef.current || signal?.aborted) return;
 
-      const response = await api.get('/ym04/crops', { params, signal });
       const { crops: list, pagination: pag, summary: sum } = response.data;
       setCrops(list || []);
       if (pag) setPagination(pag);
       if (sum) setSummary(sum);
+      setPageError(null);
     } catch (err) {
-      if (axios.isCancel(err)) return;
+      const isCanceled =
+        axios.isCancel(err) ||
+        (err instanceof Error && (err.name === 'AbortError' || err.name === 'CanceledError')) ||
+        (axios.isAxiosError(err) && (err.code === 'ERR_CANCELED' || err.name === 'CanceledError')) ||
+        Boolean(signal?.aborted);
+
+      if (isCanceled || !isMountedRef.current) return;
       setPageError(getErrorMessage(err, 'Failed to load crops list.'));
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && !signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [currentPage, pageSize, statusFilter, searchQuery]);
 
@@ -283,12 +307,12 @@ export default function CropManagement() {
       </header>
 
       {/* Global Page Error Banner */}
-      {pageError && (
+      {!loading && pageError && (
         <div className="ym04-alert-wrap" role="alert">
           <Alert type="error">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', width: '100%' }}>
               <span>{pageError}</span>
-              <Button variant="outline" onClick={() => fetchCrops()}>
+              <Button variant="outline" onClick={() => fetchCrops(undefined, true)}>
                 <RefreshCw size={14} className={loading ? 'ym04-spin' : ''} style={{ marginRight: '6px' }} />
                 Retry
               </Button>
@@ -320,7 +344,7 @@ export default function CropManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Crops</span>
-              <strong className="ym04-stat-value">{summary.total}</strong>
+              <strong className="ym04-stat-value">{loading && crops.length === 0 ? '...' : summary.total}</strong>
               <span className="ym04-stat-subtext">All registered crops</span>
             </div>
           </div>
@@ -348,7 +372,7 @@ export default function CropManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Active Crops</span>
-              <strong className="ym04-stat-value">{summary.active}</strong>
+              <strong className="ym04-stat-value">{loading && crops.length === 0 ? '...' : summary.active}</strong>
               <span className="ym04-stat-subtext">Currently available</span>
             </div>
           </div>
@@ -376,7 +400,7 @@ export default function CropManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Inactive Crops</span>
-              <strong className="ym04-stat-value">{summary.inactive}</strong>
+              <strong className="ym04-stat-value">{loading && crops.length === 0 ? '...' : summary.inactive}</strong>
               <span className="ym04-stat-subtext">Not available</span>
             </div>
           </div>
@@ -486,7 +510,7 @@ export default function CropManagement() {
 
           {/* Table */}
           <div className="ym04-table-wrap">
-            {loading ? (
+            {loading && crops.length === 0 ? (
               <div style={{ padding: '48px', textAlign: 'center' }}>
                 <Loader2 size={32} className="ym04-spin" style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
                 <p style={{ color: 'var(--muted)' }}>Loading crops...</p>

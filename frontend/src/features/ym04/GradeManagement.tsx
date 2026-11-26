@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
   Ribbon,
@@ -24,7 +24,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { Table, TableRow } from '../../components/Table';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
-import api from '../../services/api';
+import api from './services/api';
 import { Grade, Pagination, getErrorMessage } from './types';
 
 function getPaginationItems(current: number, total: number): (number | string)[] {
@@ -42,17 +42,28 @@ function getPaginationItems(current: number, total: number): (number | string)[]
 }
 
 export default function GradeManagement() {
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const defaultParams = { page: 1, limit: 5, status: 'all' };
+  const cachedGrades = api.getCached<{ grades: Grade[]; pagination: Pagination; summary: any }>('/ym04/grades', defaultParams);
+
   // Master records & data state
-  const [grades, setGrades] = useState<Grade[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [grades, setGrades] = useState<Grade[]>(() => cachedGrades?.grades || []);
+  const [loading, setLoading] = useState<boolean>(() => !cachedGrades);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<Pagination>({
+  const [pagination, setPagination] = useState<Pagination>(() => cachedGrades?.pagination || {
     page: 1,
     limit: 5,
     total: 0,
     totalPages: 1
   });
-  const [summary, setSummary] = useState<{ total: number; active: number; inactive: number }>({
+  const [summary, setSummary] = useState<{ total: number; active: number; inactive: number }>(() => cachedGrades?.summary || {
     total: 0,
     active: 0,
     inactive: 0
@@ -90,30 +101,43 @@ export default function GradeManagement() {
     reason: string;
   } | null>(null);
 
-  // Fetch grades from live backend
-  const fetchGrades = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+  // Fetch grades from live backend (with cache & stale-while-revalidate)
+  const fetchGrades = useCallback(async (signal?: AbortSignal, isManual = false) => {
+    const params: Record<string, any> = {
+      page: currentPage,
+      limit: pageSize,
+      status: statusFilter.toLowerCase()
+    };
+    if (searchQuery.trim()) {
+      params.search = searchQuery.trim();
+    }
+
+    if (!api.getCached('/ym04/grades', params) || isManual) {
+      setLoading(true);
+    }
     setPageError(null);
     try {
-      const params: Record<string, any> = {
-        page: currentPage,
-        limit: pageSize,
-        status: statusFilter.toLowerCase()
-      };
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
-      }
+      const response = await api.get('/ym04/grades', { params, signal, skipCache: isManual });
+      if (!isMountedRef.current || signal?.aborted) return;
 
-      const response = await api.get('/ym04/grades', { params, signal });
       const { grades: list, pagination: pag, summary: sum } = response.data;
       setGrades(list || []);
       if (pag) setPagination(pag);
       if (sum) setSummary(sum);
+      setPageError(null);
     } catch (err) {
-      if (axios.isCancel(err)) return;
+      const isCanceled =
+        axios.isCancel(err) ||
+        (err instanceof Error && (err.name === 'AbortError' || err.name === 'CanceledError')) ||
+        (axios.isAxiosError(err) && (err.code === 'ERR_CANCELED' || err.name === 'CanceledError')) ||
+        Boolean(signal?.aborted);
+
+      if (isCanceled || !isMountedRef.current) return;
       setPageError(getErrorMessage(err, 'Failed to load produce grades list.'));
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && !signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [currentPage, pageSize, statusFilter, searchQuery]);
 
@@ -298,12 +322,12 @@ export default function GradeManagement() {
       </header>
 
       {/* Global Page Error Banner */}
-      {pageError && (
+      {!loading && pageError && (
         <div className="ym04-alert-wrap" role="alert">
           <Alert type="error">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', width: '100%' }}>
               <span>{pageError}</span>
-              <Button variant="outline" onClick={() => fetchGrades()}>
+              <Button variant="outline" onClick={() => fetchGrades(undefined, true)}>
                 <RefreshCw size={14} className={loading ? 'ym04-spin' : ''} style={{ marginRight: '6px' }} />
                 Retry
               </Button>
@@ -335,7 +359,7 @@ export default function GradeManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Total Grades</span>
-              <strong className="ym04-stat-value">{summary.total}</strong>
+              <strong className="ym04-stat-value">{loading && grades.length === 0 ? '...' : summary.total}</strong>
               <span className="ym04-stat-subtext">All registered grades</span>
             </div>
           </div>
@@ -363,7 +387,7 @@ export default function GradeManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Active Grades</span>
-              <strong className="ym04-stat-value">{summary.active}</strong>
+              <strong className="ym04-stat-value">{loading && grades.length === 0 ? '...' : summary.active}</strong>
               <span className="ym04-stat-subtext">Currently available</span>
             </div>
           </div>
@@ -391,7 +415,7 @@ export default function GradeManagement() {
             </div>
             <div className="ym04-stat-info">
               <span className="ym04-stat-label">Inactive Grades</span>
-              <strong className="ym04-stat-value">{summary.inactive}</strong>
+              <strong className="ym04-stat-value">{loading && grades.length === 0 ? '...' : summary.inactive}</strong>
               <span className="ym04-stat-subtext">Not available</span>
             </div>
           </div>
@@ -501,7 +525,7 @@ export default function GradeManagement() {
 
           {/* Table */}
           <div className="ym04-table-wrap">
-            {loading ? (
+            {loading && grades.length === 0 ? (
               <div style={{ padding: '48px', textAlign: 'center' }}>
                 <Loader2 size={32} className="ym04-spin" style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
                 <p style={{ color: 'var(--muted)' }}>Loading produce grades...</p>

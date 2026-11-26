@@ -778,7 +778,11 @@ export async function getAuditLogs(req, res, next) {
     const events = listRes.rows.map((row) => {
       const targetName = row.resolved_target_name || row.safe_changes?.targetName || 'Unknown';
       const actor = row.actor_name || 'System';
-      const status = row.safe_changes?.status || 'Success';
+      let rawStatus = row.safe_changes?.status;
+      if (typeof rawStatus === 'object' && rawStatus !== null) {
+        rawStatus = rawStatus.status || rawStatus.label || rawStatus.name || rawStatus.value || 'Success';
+      }
+      const status = typeof rawStatus === 'string' && rawStatus.trim() ? rawStatus.trim() : (rawStatus ? String(rawStatus) : 'Success');
 
       return {
         id: row.id,
@@ -889,7 +893,11 @@ export async function getAuditLogById(req, res, next) {
     const row = rows[0];
     const targetName = row.resolved_target_name || row.safe_changes?.targetName || 'Unknown';
     const actor = row.actor_name || 'System';
-    const status = row.safe_changes?.status || 'Success';
+    let rawStatus = row.safe_changes?.status;
+    if (typeof rawStatus === 'object' && rawStatus !== null) {
+      rawStatus = rawStatus.status || rawStatus.label || rawStatus.name || rawStatus.value || 'Success';
+    }
+    const status = typeof rawStatus === 'string' && rawStatus.trim() ? rawStatus.trim() : (rawStatus ? String(rawStatus) : 'Success');
 
     const event = {
       id: row.id,
