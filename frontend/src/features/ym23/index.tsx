@@ -1,11 +1,19 @@
-import { ContentCard } from '../../components/ContentCard';
-// YM23 · Sandeepa Subashini · Pickup management
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["Pickup stops", "Pickup stop details", "Record pickup", "Pickup history"];
+import { Route, Routes } from 'react-router-dom';
+import PickupStopsPage from './PickupStopsPage';
+import PickupStopDetailsPage from './PickupStopDetailsPage';
+import RecordPickupPage from './RecordPickupPage';
+import PickupHistoryPage from './PickupHistoryPage';
+import './ym23.css';
+
+// WorkspaceLayout owns the sidebar and topbar; YM23 renders module content only.
 export default function YM23() {
-  return <ContentCard title="YM23 · Pickup management" subtitle="Owner: Sandeepa Subashini">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  return (
+    <Routes>
+      <Route index element={<PickupStopsPage />} />
+      <Route path="history" element={<PickupHistoryPage />} />
+      <Route path=":stopId/record" element={<RecordPickupPage />} />
+      <Route path=":stopId" element={<PickupStopDetailsPage />} />
+      <Route path="*" element={<PickupStopsPage />} />
+    </Routes>
+  );
 }

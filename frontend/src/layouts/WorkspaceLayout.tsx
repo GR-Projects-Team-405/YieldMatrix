@@ -1,7 +1,7 @@
 import yieldMatrixLogo from '../assets/yieldmatrix-logo.webp';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Bell, Boxes, CalendarDays, ChartNoAxesCombined, CircleHelp, ClipboardCheck, ClipboardList, LandPlot, LayoutDashboard, LogOut, MapPin, Menu, Moon, Sun, Package, PackageCheck, Route, ScanLine, Search, Settings, ShieldCheck, Sprout, Store, TriangleAlert, Truck, UserRound, Users, Wallet, X, type LucideIcon } from 'lucide-react';
+import { Bell, Boxes, CalendarDays, ChartNoAxesCombined, CircleHelp, ClipboardCheck, ClipboardList, LandPlot, LayoutDashboard, ListOrdered, LogOut, MapPin, Menu, Moon, Sun, Package, PackageCheck, Route, ScanLine, Search, Settings, ShieldCheck, Sprout, Store, TriangleAlert, Truck, UserRound, Users, Wallet, X, type LucideIcon } from 'lucide-react';
 import { useAuth, type Role } from '../context/AuthContext';
 export const workspaceLabels: Record<Role, string> = { farmer: 'Farmer', buyer: 'Buyer / Shop', driver: 'Driver', admin: 'Admin' };
 const navigation: Record<Role, { label: string; path: string; icon: LucideIcon; end?: boolean }[]> = {
@@ -31,6 +31,7 @@ const navigation: Record<Role, { label: string; path: string; icon: LucideIcon; 
   driver: [
     { label: "Overview", path: 'overview', icon: LayoutDashboard },
     { label: "Assigned trips", path: 'trips', icon: Route },
+    { label: "Pickup sequence", path: 'trips?view=sequence', icon: ListOrdered },
     { label: "Pickup stops", path: 'pickups', icon: MapPin },
     { label: "My vehicle", path: 'vehicle', icon: Truck },
     { label: "Delivery history", path: 'history', icon: PackageCheck },
@@ -50,7 +51,7 @@ const navigation: Record<Role, { label: string; path: string; icon: LucideIcon; 
 };
 export default function WorkspaceLayout() {
   const { user, logout } = useAuth();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => document.documentElement.dataset.theme === 'dark');
   useEffect(() => {
