@@ -193,6 +193,10 @@ export default function ReceivedOfferDetails() {
   const isPending = offer.status === 'pending';
   const isAccepted = offer.status === 'accepted';
   const isRejected = offer.status === 'rejected';
+  const isWithdrawn = offer.status === 'withdrawn';
+  const isExpired =
+    offer.status === 'expired' ||
+    (isPending && offer.expiresAt ? new Date(offer.expiresAt).getTime() <= Date.now() : false);
 
   const priceDiffCents = offer.demand.budgetPerKgCents - offer.unitPriceCents;
   const isUnderBudget = priceDiffCents >= 0;
@@ -319,9 +323,14 @@ export default function ReceivedOfferDetails() {
 
             {/* Tags / Certifications */}
             <div className="ym14-tags-row">
-              <span className="ym14-tag-pill green">Tomato - Grade A</span>
-              <span className="ym14-tag-pill">Welimada Origin</span>
-              <span className="ym14-tag-pill orange">GlobalGAP Certified</span>
+              {(offer.tags || []).map((tag, idx) => (
+                <span
+                  key={idx}
+                  className={`ym14-tag-pill ${idx === 0 ? 'green' : idx === 2 ? 'orange' : ''}`}
+                >
+                  {tag}
+                </span>
+              ))}
             </div>
           </ContentCard>
 
@@ -444,6 +453,21 @@ export default function ReceivedOfferDetails() {
                     Compare Other Offers
                   </Button>
                 </div>
+              ) : isExpired || isWithdrawn ? (
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  <Alert type="warning">
+                    {isWithdrawn
+                      ? 'This offer was withdrawn by the supplier and cannot be accepted.'
+                      : 'This offer has expired and can no longer be accepted.'}
+                  </Alert>
+                  <Button
+                    variant="outline"
+                    style={{ width: '100%' }}
+                    onClick={() => navigate(`/buyer/offers/compare/${offer.demand.id || offer.demand.reference}`)}
+                  >
+                    Compare Other Offers
+                  </Button>
+                </div>
               ) : (
                 <>
                   {/* Primary: Accept Offer */}
@@ -488,7 +512,7 @@ export default function ReceivedOfferDetails() {
       <ConfirmDialog
         open={acceptDialogOpen}
         title="Accept Offer & Lock Escrow"
-        description={`Confirming will lock LKR ${(offer.lineTotalCents / 100).toLocaleString()} in Agri Wallet escrow and establish forward contract COM-1042 for ${offer.offeredKg.toLocaleString()} kg ${offer.demand.cropName}.`}
+        description={`Confirming will lock LKR ${(offer.lineTotalCents / 100).toLocaleString()} in Agri Wallet escrow and establish a binding forward commitment for ${offer.offeredKg.toLocaleString()} kg ${offer.demand.cropName}.`}
         simulationNote="Domain Rule DR-01: Future commitment creates forward reservation. Physical stock is inspected and allocated upon hub intake."
         confirmLabel="Confirm & Lock Escrow"
         busy={actionBusy}

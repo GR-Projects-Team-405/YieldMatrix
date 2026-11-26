@@ -123,6 +123,7 @@ export interface CommitmentStats {
   committedKg: number;
   heldInEscrowCents: number;
   actionRequiredCount: number;
+  uniqueCropsCount?: number;
 }
 
 export interface StepperStage {
@@ -152,6 +153,8 @@ export interface HarvestChangeProposal {
   commitmentId: string;
   reference: string;
   cropBatch: string;
+  supplierName?: string;
+  proposedQuantityKg?: number;
   proposalExpiresAt: string;
   diff: ParameterDiff[];
   growerStatement: string;

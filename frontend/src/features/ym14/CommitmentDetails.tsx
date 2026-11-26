@@ -267,12 +267,24 @@ export default function CommitmentDetails() {
 
             <div style={{ marginBottom: '16px' }}>
               <span className="ym14-verified-badge" style={{ height: '26px' }}>
-                Funds Held in Escrow
+                {commitment.status === 'cancelled' || commitment.status === 'rejected'
+                  ? 'Escrow Released / Refunded'
+                  : commitment.status === 'proposed'
+                  ? 'Awaiting Commitment Acceptance'
+                  : commitment.status === 'fulfilled'
+                  ? 'Escrow Settled to Grower'
+                  : 'Funds Held in Escrow'}
               </span>
             </div>
 
             <div className="ym14-spec-box" style={{ padding: '16px', marginBottom: '14px' }}>
-              <span className="ym14-spec-label">ESCROW BALANCE HELD</span>
+              <span className="ym14-spec-label">
+                {commitment.status === 'cancelled' || commitment.status === 'rejected'
+                  ? 'ESCROW BALANCE HELD (RELEASED)'
+                  : commitment.status === 'proposed'
+                  ? 'REQUIRED ESCROW UPON ACCEPTANCE'
+                  : 'ESCROW BALANCE HELD'}
+              </span>
               <span className="ym14-spec-value" style={{ fontSize: '28px', color: 'var(--accent-text)' }}>
                 LKR {(commitment.escrowStatus.balanceHeldCents / 100).toLocaleString()}
               </span>

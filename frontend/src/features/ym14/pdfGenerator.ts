@@ -44,7 +44,7 @@ export function downloadAgreementPdf(commitment: any) {
     `   Total Contract Value: LKR ${total} (Smart Escrow Held)`,
     '',
     '3. FULFILMENT & LOGISTICS:',
-    `   Target Harvest Window:${windowStr}`,
+    `   Target Harvest Window: ${windowStr}`,
     `   Receiving Hub:        ${hub}`,
     `   Digital Gate Pass:    ${gatePass}`,
     '',

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -32,6 +32,7 @@ export default function CommitmentsList() {
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
   const pageSize = 6;
 
   // Load live commitments from PostgreSQL-backed API
@@ -53,10 +54,17 @@ export default function CommitmentsList() {
           setCommitments(Array.isArray(res.data.commitments) ? res.data.commitments : []);
           if (res.data.stats) setStats(res.data.stats);
           if (res.data.tabCounts) setTabCounts(res.data.tabCounts);
+          if (res.data.pagination) {
+            setPagination({
+              total: res.data.pagination.total ?? 0,
+              totalPages: res.data.pagination.totalPages || 1,
+            });
+          }
         }
       } catch (_err) {
         if (mounted) {
           setCommitments([]);
+          setPagination({ total: 0, totalPages: 1 });
           setErrorMsg('Unable to load commitments from the database. Please verify the backend API connection.');
         }
       } finally {
@@ -69,30 +77,12 @@ export default function CommitmentsList() {
     };
   }, [activeTab, searchQuery, currentPage]);
 
-  const filteredItems = useMemo(() => {
-    let list = [...commitments];
-    if (activeTab !== 'all') {
-      list = list.filter((c) => c.status === activeTab);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (c) =>
-          c.reference.toLowerCase().includes(q) ||
-          c.supplierName.toLowerCase().includes(q) ||
-          c.cropName.toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [commitments, activeTab, searchQuery]);
+  const uniqueCropsCount =
+    stats.uniqueCropsCount ?? new Set(commitments.map((c) => c.cropName)).size;
 
-  const uniqueCropsCount = useMemo(
-    () => new Set(commitments.map((c) => c.cropName)).size,
-    [commitments]
-  );
-
-  const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
-  const paginatedItems = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = pagination.totalPages || 1;
+  const totalCount = pagination.total;
+  const paginatedItems = commitments;
 
   const getStatusText = (status: CommitmentStatus) => {
     switch (status) {
@@ -346,7 +336,7 @@ export default function CommitmentsList() {
         >
           <span>
             Showing {paginatedItems.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}-
-            {Math.min(currentPage * pageSize, filteredItems.length)} of {filteredItems.length} commitments • Filters preserved across page navigation
+            {Math.min((currentPage - 1) * pageSize + paginatedItems.length, totalCount)} of {totalCount} commitments • Filters preserved across page navigation
           </span>
 
           <div style={{ display: 'flex', gap: '6px' }}>

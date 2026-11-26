@@ -310,7 +310,7 @@ export default function HarvestChangeReview() {
 
             <div className="ym14-quote-box">
               &ldquo;{proposal.growerStatement}&rdquo;
-              <span className="ym14-quote-author">— Nimal Perera (Green Valley Farm • Welimada)</span>
+              <span className="ym14-quote-author">— {proposal.supplierName || 'Verified Producer'}</span>
             </div>
 
             <div className="ym14-photo-badge">
@@ -365,11 +365,12 @@ export default function HarvestChangeReview() {
               {decisionState === 'approved' ? (
                 <div style={{ display: 'grid', gap: '12px' }}>
                   <Alert type="success">
-                    Harvest modification approved. Contract terms updated and LKR 26,400 refunded.
+                    Harvest modification approved. Contract terms updated and LKR{' '}
+                    {(proposal.financialImpact.escrowAutoRefundCents / 100).toLocaleString()} refunded.
                   </Alert>
                   <Button
                     variant="primary"
-                    onClick={() => navigate(`/buyer/commitments/${proposal.reference || id}`)}
+                    onClick={() => navigate(`/buyer/commitments/${proposal.commitmentId || id}`)}
                   >
                     View Updated Commitment
                   </Button>
@@ -381,7 +382,7 @@ export default function HarvestChangeReview() {
                   </Alert>
                   <Button
                     variant="outline"
-                    onClick={() => navigate(`/buyer/commitments/${proposal.reference || id}`)}
+                    onClick={() => navigate(`/buyer/commitments/${proposal.commitmentId || id}`)}
                   >
                     Back to Commitment
                   </Button>
@@ -450,7 +451,7 @@ export default function HarvestChangeReview() {
       <ConfirmDialog
         open={approveDialogOpen}
         title="Approve Harvest Modification"
-        description={`Approving will update the contract to 480 kg net volume with delivery on 14-15 Nov 2026. LKR ${(proposal.financialImpact.escrowAutoRefundCents / 100).toLocaleString()} will be automatically credited to your Agri Wallet.`}
+        description={`Approving will update the contract to ${proposal.diff[0]?.proposedChange || 'revised volume'} with delivery on ${proposal.diff[1]?.proposedChange || 'proposed window'}. LKR ${(proposal.financialImpact.escrowAutoRefundCents / 100).toLocaleString()} will be automatically credited to your Agri Wallet.`}
         simulationNote="Domain Rule DR-02: Silence is never acceptance. Explicit approval applies changes and adjusts escrow atomically."
         confirmLabel="Approve & Credit Wallet"
         busy={actionBusy}
@@ -462,7 +463,7 @@ export default function HarvestChangeReview() {
       <ConfirmDialog
         open={rejectDialogOpen}
         title="Reject Modification & Retain Terms"
-        description="Rejecting will uphold the original binding agreement (600 kg net volume @ LKR 220/kg). The grower will be instructed to fulfill original commitments or source replacement produce."
+        description={`Rejecting will uphold the original binding agreement (${proposal.diff[0]?.originalAgreed || 'original volume'} @ ${proposal.diff[2]?.originalAgreed || 'agreed rate'}). The grower will be instructed to fulfill original commitments or source replacement produce.`}
         confirmLabel="Reject & Keep Original Terms"
         busy={actionBusy}
         onCancel={() => setRejectDialogOpen(false)}
@@ -485,7 +486,7 @@ export default function HarvestChangeReview() {
             </div>
             <div className="ym14-modal-body">
               <p className="ym14-prose">
-                Suggest an alternative volume or price adjustment back to grower Nimal Perera:
+                Suggest an alternative volume or price adjustment back to {proposal.supplierName || 'the grower'}:
               </p>
               <InputField
                 label="Proposed Price"
@@ -550,7 +551,7 @@ export default function HarvestChangeReview() {
             </div>
             <div className="ym14-modal-body">
               <p className="ym14-prose">
-                Cancellation releases 100% of held escrow funds (LKR 132,000) back to your Agri Wallet.
+                Cancellation releases 100% of held escrow funds ({proposal.diff[3]?.originalAgreed || 'held escrow'}) back to your Agri Wallet.
                 A valid explanation is mandatory under contract terms.
               </p>
               <SelectField
