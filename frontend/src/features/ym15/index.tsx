@@ -2,11 +2,14 @@ import { useState } from 'react';
 import api from '../../services/api';
 import { BulkMatchingRequestPage } from './BulkMatchingRequestPage';
 import { CompleteMatchResultsPage } from './CompleteMatchResultsPage';
+import { GrowerAllocationBreakdownPage } from './GrowerAllocationBreakdownPage';
 import type {
   BulkMatchRequestInput,
   BulkMatchResponseData,
   ValidatedBulkMatchRequest,
 } from './types';
+
+type ActiveScreen = 'request' | 'results' | 'breakdown';
 
 export default function YM15() {
   const [formValues, setFormValues] = useState<BulkMatchRequestInput>({
@@ -23,6 +26,7 @@ export default function YM15() {
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [feedbackType, setFeedbackType] = useState<'success' | 'warning' | 'error' | 'info'>('info');
   const [matchResult, setMatchResult] = useState<BulkMatchResponseData | null>(null);
+  const [activeScreen, setActiveScreen] = useState<ActiveScreen>('request');
 
   const handleSubmitRequest = async (payload: ValidatedBulkMatchRequest) => {
     setSubmitting(true);
@@ -31,6 +35,7 @@ export default function YM15() {
     try {
       const { data } = await api.post<BulkMatchResponseData>('/ym15/match', payload);
       setMatchResult(data);
+      setActiveScreen('results');
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
@@ -42,20 +47,36 @@ export default function YM15() {
     }
   };
 
-  if (matchResult) {
+  if (matchResult && activeScreen === 'breakdown') {
+    return (
+      <GrowerAllocationBreakdownPage
+        data={matchResult}
+        onBackToResults={() => {
+          setActiveScreen('results');
+        }}
+        onContinue={() => {
+          setActiveScreen('request');
+          setMatchResult(null);
+          setFeedbackType('success');
+          setFeedbackMessage(
+            'Allocation breakdown reviewed. Ready for the next step or a new bulk matching request.'
+          );
+        }}
+      />
+    );
+  }
+
+  if (matchResult && activeScreen === 'results') {
     return (
       <CompleteMatchResultsPage
         data={matchResult}
         onBackToRequest={() => {
           setMatchResult(null);
+          setActiveScreen('request');
           setFeedbackMessage('');
         }}
         onViewAllocationBreakdown={() => {
-          setMatchResult(null);
-          setFeedbackType('info');
-          setFeedbackMessage(
-            'Grower allocation breakdown screen will be added when its UI design is provided.'
-          );
+          setActiveScreen('breakdown');
         }}
       />
     );

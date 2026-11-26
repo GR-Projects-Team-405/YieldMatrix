@@ -39,8 +39,11 @@ export interface AlternativeGrowerCandidate {
   id: string;
   growerName: string;
   batchCode: string;
+  crop?: string;
+  grade?: string;
   availableKg: number;
   unitPriceLkr: number;
+  distanceKm?: number | null;
   statusLabel: string;
   reasonText: string;
 }
@@ -48,6 +51,8 @@ export interface AlternativeGrowerCandidate {
 export interface BulkMatchResponseData {
   status: 'complete' | 'partial';
   methodLabel: 'Rule-based method';
+  crop?: string;
+  grade?: string;
   destination: string;
   deliveryWindow: string;
   allowPartial: boolean;
@@ -60,4 +65,5 @@ export interface BulkMatchResponseData {
   growerCount: number;
   allocations: SelectedGrowerAllocation[];
   alternatives: AlternativeGrowerCandidate[];
+  requestId?: string;
 }

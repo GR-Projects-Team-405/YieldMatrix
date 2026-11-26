@@ -213,11 +213,16 @@ export async function runBulkMatch(req, res, next) {
         unselectedCandidates.push({
           id: candidate.listingId,
           growerName: candidate.growerName,
+          farmName: candidate.farmName,
           batchCode: candidate.batchCode,
+          crop: candidate.crop,
+          grade: candidate.grade,
           availableKg: candidate.availableKg,
           unitPriceLkr: candidate.unitPriceLkr,
+          distanceKm: candidate.distanceKm,
           statusLabel: 'Not Selected',
-          reasonText: 'Not selected because higher-ranked growers already cover the requested quantity at a lower unit price.',
+          reasonText:
+            'Not selected because the current selected growers already cover the full quantity at a lower goods total.',
         });
         continue;
       }
@@ -229,9 +234,13 @@ export async function runBulkMatch(req, res, next) {
         unselectedCandidates.push({
           id: candidate.listingId,
           growerName: candidate.growerName,
+          farmName: candidate.farmName,
           batchCode: candidate.batchCode,
+          crop: candidate.crop,
+          grade: candidate.grade,
           availableKg: candidate.availableKg,
           unitPriceLkr: candidate.unitPriceLkr,
+          distanceKm: candidate.distanceKm,
           statusLabel: 'Over Budget',
           reasonText: `Excluded because adding this batch would exceed the LKR ${maxBudgetLkr.toLocaleString()} budget cap.`,
         });
@@ -246,6 +255,7 @@ export async function runBulkMatch(req, res, next) {
         id: candidate.listingId,
         rank,
         growerName: candidate.growerName,
+        farmName: candidate.farmName,
         batchCode: candidate.batchCode,
         distanceKm: candidate.distanceKm,
         allocatedKg: takeKg,
@@ -270,6 +280,8 @@ export async function runBulkMatch(req, res, next) {
     return res.json({
       status,
       methodLabel: 'Rule-based method',
+      crop: cropName,
+      grade: gradeName,
       destination,
       deliveryWindow,
       allowPartial,
