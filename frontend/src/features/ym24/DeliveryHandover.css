@@ -1,0 +1,40 @@
+.ym24-date-note { margin-left: 10px; font-size: 11px; color: var(--muted); }
+.ym24-pill { display: inline-block; padding: 10px 16px; border: 1px solid var(--control-border); border-radius: 10px; background: var(--surface); font-size: 14px; font-weight: 600; white-space: nowrap; }
+
+.ym24-stepper { display: flex; align-items: center; margin: 0; padding: 0; list-style: none; }
+.ym24-step { display: flex; align-items: center; gap: 10px; flex: 1; }
+.ym24-step:last-child { flex: 0 0 auto; }
+.ym24-step:not(:last-child)::after { content: ''; flex: 1; height: 2px; margin: 0 16px; background: var(--border); }
+.ym24-step--done:not(:last-child)::after { background: var(--ym24-primary); }
+.ym24-step-dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0; background: var(--soft); color: var(--muted); }
+.ym24-step--done .ym24-step-dot { background: var(--ym24-primary); color: var(--surface); }
+.ym24-step--current .ym24-step-dot { background: var(--orange); color: #263a31; }
+.ym24-step strong { display: block; font-size: 13px; }
+.ym24-step small { display: block; font-size: 11px; color: var(--muted); }
+
+.ym24-fill--over { background: #b42318; }
+:root[data-theme='dark'] .ym24-fill--over { background: #f39a92; }
+.ym24-gap-top { margin-top: 12px; }
+.ym24-max { display: flex; justify-content: space-between; margin-top: 14px; padding: 10px 14px; border-radius: 8px; background: var(--canvas); font-size: 12px; color: var(--muted); }
+.ym24-max strong { color: var(--text); }
+
+.ym24-stack { display: grid; gap: 12px; align-content: start; }
+.ym24-form { display: grid; gap: 16px; margin-top: 14px; }
+.ym24-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+.ym24-upload { display: grid; gap: 4px; justify-items: center; padding: 20px; border: 1px dashed var(--control-border); border-radius: 12px; background: var(--canvas); text-align: center; cursor: pointer; }
+.ym24-upload:focus-within { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+.ym24-upload strong { font-size: 13px; font-weight: 500; }
+.ym24-upload span { font-size: 11px; color: var(--muted); }
+.ym24-file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ym24-link-btn { justify-self: start; padding: 0; border: 0; background: none; color: var(--accent-text); font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+.ym24-actions { display: flex; justify-content: flex-end; gap: 12px; }
+
+@media (max-width: 700px) {
+  .ym24-stepper { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .ym24-step:not(:last-child)::after { display: none; }
+  .ym24-form-grid { grid-template-columns: 1fr; }
+}
+
+.ym24-form input[readonly] { background: var(--canvas); color: var(--muted); cursor: default; }
