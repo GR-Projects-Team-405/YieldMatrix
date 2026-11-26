@@ -1,5 +1,9 @@
 import defaultPool from '../../config/db.js';
 import {
+  createServiceUnavailableError,
+  isYm09ImageStorageEnabled,
+} from './ym09.constants.js';
+import {
   SQL_FIND_ACTIVE_LISTING_ON_BATCH,
   SQL_FIND_APPROVED_USER,
   SQL_FIND_BATCH_ENCUMBRANCE,
@@ -7,16 +11,25 @@ import {
   SQL_FIND_LISTING_ALLOCATIONS,
   SQL_FIND_LISTING_AUDIT_LOGS,
   SQL_FIND_LISTING_BY_ID,
+  SQL_FIND_LISTING_BY_ID_NO_IMAGE,
   SQL_FIND_LISTING_DETAILS_HEADER,
+  SQL_FIND_LISTING_DETAILS_HEADER_NO_IMAGE,
   SQL_FIND_LISTING_ORDERS,
+  SQL_FIND_LISTING_OWNER_STATUS,
+  SQL_FIND_LISTING_OWNER_STATUS_NO_IMAGE,
   SQL_FIND_LISTINGS_BY_FARMER,
+  SQL_FIND_LISTINGS_BY_FARMER_NO_IMAGE,
   SQL_FIND_OTHER_ACTIVE_LISTING_ON_BATCH,
   SQL_INSERT_AUDIT_LOG,
   SQL_INSERT_LISTING,
   SQL_LOCK_HARVEST_BATCH_FOR_UPDATE,
   SQL_LOCK_LISTING_FOR_UPDATE,
+  SQL_LOCK_LISTING_FOR_UPDATE_NO_IMAGE,
+  SQL_UPDATE_LISTING_IMAGE_KEY,
   SQL_UPDATE_LISTING_IN_PLACE,
+  SQL_UPDATE_LISTING_IN_PLACE_NO_IMAGE,
   SQL_UPDATE_LISTING_STATUS,
+  SQL_UPDATE_LISTING_STATUS_NO_IMAGE,
 } from './ym09.sql.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -32,7 +45,13 @@ function normalizeNullableUuid(value) {
 /**
  * Creates a PostgreSQL repository scoped to a shared pool (injectable for testing).
  */
-export function createYm09Repository(dbPool = defaultPool) {
+export function createYm09Repository(dbPool = defaultPool, options = {}) {
+  function isImageStorageEnabled() {
+    return typeof options.imageStorageEnabled === 'boolean'
+      ? options.imageStorageEnabled
+      : isYm09ImageStorageEnabled();
+  }
+
   async function runInTransaction(work) {
     const client = await dbPool.connect();
     let transactionStarted = false;
@@ -67,17 +86,26 @@ export function createYm09Repository(dbPool = defaultPool) {
   }
 
   async function findListingsByFarmer(farmerId, executor = dbPool) {
-    const { rows } = await executor.query(SQL_FIND_LISTINGS_BY_FARMER, [farmerId]);
+    const sql = isImageStorageEnabled()
+      ? SQL_FIND_LISTINGS_BY_FARMER
+      : SQL_FIND_LISTINGS_BY_FARMER_NO_IMAGE;
+    const { rows } = await executor.query(sql, [farmerId]);
     return rows;
   }
 
   async function findListingById(listingId, farmerId, executor = dbPool) {
-    const { rows } = await executor.query(SQL_FIND_LISTING_BY_ID, [listingId, farmerId]);
+    const sql = isImageStorageEnabled()
+      ? SQL_FIND_LISTING_BY_ID
+      : SQL_FIND_LISTING_BY_ID_NO_IMAGE;
+    const { rows } = await executor.query(sql, [listingId, farmerId]);
     return rows[0] || null;
   }
 
   async function findListingDetailsHeader(listingId, farmerId, executor = dbPool) {
-    const { rows } = await executor.query(SQL_FIND_LISTING_DETAILS_HEADER, [listingId, farmerId]);
+    const sql = isImageStorageEnabled()
+      ? SQL_FIND_LISTING_DETAILS_HEADER
+      : SQL_FIND_LISTING_DETAILS_HEADER_NO_IMAGE;
+    const { rows } = await executor.query(sql, [listingId, farmerId]);
     return rows[0] || null;
   }
 
@@ -107,7 +135,18 @@ export function createYm09Repository(dbPool = defaultPool) {
   }
 
   async function lockListingForUpdate(listingId, client) {
-    const { rows } = await client.query(SQL_LOCK_LISTING_FOR_UPDATE, [listingId]);
+    const sql = isImageStorageEnabled()
+      ? SQL_LOCK_LISTING_FOR_UPDATE
+      : SQL_LOCK_LISTING_FOR_UPDATE_NO_IMAGE;
+    const { rows } = await client.query(sql, [listingId]);
+    return rows[0] || null;
+  }
+
+  async function findListingOwnerStatus(listingId, executor = dbPool) {
+    const sql = isImageStorageEnabled()
+      ? SQL_FIND_LISTING_OWNER_STATUS
+      : SQL_FIND_LISTING_OWNER_STATUS_NO_IMAGE;
+    const { rows } = await executor.query(sql, [listingId]);
     return rows[0] || null;
   }
 
@@ -162,7 +201,10 @@ export function createYm09Repository(dbPool = defaultPool) {
     { batchId, offeredKg, unitPriceCents, validFrom, validUntil, status, listingId },
     client
   ) {
-    const { rows } = await client.query(SQL_UPDATE_LISTING_IN_PLACE, [
+    const sql = isImageStorageEnabled()
+      ? SQL_UPDATE_LISTING_IN_PLACE
+      : SQL_UPDATE_LISTING_IN_PLACE_NO_IMAGE;
+    const { rows } = await client.query(sql, [
       batchId,
       offeredKg,
       unitPriceCents,
@@ -175,7 +217,20 @@ export function createYm09Repository(dbPool = defaultPool) {
   }
 
   async function updateListingStatus({ listingId, status }, client) {
-    const { rows } = await client.query(SQL_UPDATE_LISTING_STATUS, [status, listingId]);
+    const sql = isImageStorageEnabled()
+      ? SQL_UPDATE_LISTING_STATUS
+      : SQL_UPDATE_LISTING_STATUS_NO_IMAGE;
+    const { rows } = await client.query(sql, [status, listingId]);
+    return rows[0];
+  }
+
+  async function updateListingImageKey({ listingId, imageKey }, client) {
+    if (!isImageStorageEnabled()) {
+      throw createServiceUnavailableError(
+        'Produce image uploads are temporarily unavailable until database support (listings.image_key) is enabled.'
+      );
+    }
+    const { rows } = await client.query(SQL_UPDATE_LISTING_IMAGE_KEY, [imageKey, listingId]);
     return rows[0];
   }
 
@@ -194,6 +249,7 @@ export function createYm09Repository(dbPool = defaultPool) {
   }
 
   return {
+    isImageStorageEnabled,
     runInTransaction,
     findApprovedUser,
     findListingsByFarmer,
@@ -203,6 +259,7 @@ export function createYm09Repository(dbPool = defaultPool) {
     findListingOrders,
     findListingAuditLogs,
     lockListingForUpdate,
+    findListingOwnerStatus,
     findBatchEncumbrance,
     findBatchEncumbranceForReassign,
     findFarmById,
@@ -212,6 +269,7 @@ export function createYm09Repository(dbPool = defaultPool) {
     insertListing,
     updateListingInPlace,
     updateListingStatus,
+    updateListingImageKey,
     insertListingAudit,
   };
 }

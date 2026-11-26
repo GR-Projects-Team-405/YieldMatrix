@@ -7,13 +7,22 @@ import { createYm09Controller } from './controller.js';
 import { createYm09Service } from './ym09.service.js';
 import { createYm09Repository } from './ym09.repository.js';
 import {
+  ALLOWED_IMAGE_MIME_TYPES,
+  AUDIT_ACTION_IMAGE_DELETE,
+  AUDIT_ACTION_IMAGE_UPDATE,
   LISTING_STATUS,
   VALID_LISTING_STATUSES,
   VALID_LISTING_TRANSITIONS,
+  createBadGatewayError,
+  createServiceUnavailableError,
 } from './ym09.constants.js';
+import { createYm09CloudinaryStorage } from './ym09.cloudinary.js';
 import {
+  buildListingCloudinaryPublicId,
   validateCreateListingPayload,
   validateDateRange,
+  validateImageConfirmPayload,
+  validateImageUploadRequestPayload,
   validateKgQuantity,
   validateListQueryParams,
   validateListingId,
@@ -24,8 +33,15 @@ import {
   SQL_FIND_BATCH_ENCUMBRANCE,
   SQL_FIND_BATCH_ENCUMBRANCE_FOR_REASSIGN,
   SQL_FIND_LISTING_BY_ID,
+  SQL_FIND_LISTING_BY_ID_NO_IMAGE,
   SQL_FIND_LISTING_DETAILS_HEADER,
+  SQL_FIND_LISTING_DETAILS_HEADER_NO_IMAGE,
+  SQL_FIND_LISTING_OWNER_STATUS_NO_IMAGE,
   SQL_FIND_LISTINGS_BY_FARMER,
+  SQL_FIND_LISTINGS_BY_FARMER_NO_IMAGE,
+  SQL_LOCK_LISTING_FOR_UPDATE_NO_IMAGE,
+  SQL_UPDATE_LISTING_IN_PLACE_NO_IMAGE,
+  SQL_UPDATE_LISTING_STATUS_NO_IMAGE,
   buildEncumberedKgCaseSql,
 } from './ym09.sql.js';
 
@@ -135,6 +151,7 @@ function createStatefulMockDb({
             validFrom: l.valid_from,
             validUntil: l.valid_until,
             status: l.status,
+            imageKey: l.image_key ?? null,
             createdAt: l.created_at,
             cropName: hb.crop_name,
             gradeName: hb.grade_name,
@@ -168,6 +185,7 @@ function createStatefulMockDb({
             validFrom: l.valid_from,
             validUntil: l.valid_until,
             status: l.status,
+            imageKey: l.image_key ?? null,
             createdAt: l.created_at,
             cropName: hb.crop_name,
             gradeName: hb.grade_name,
@@ -203,6 +221,7 @@ function createStatefulMockDb({
             validFrom: l.valid_from,
             validUntil: l.valid_until,
             status: l.status,
+            imageKey: l.image_key ?? null,
             createdAt: l.created_at,
             cropName: hb.crop_name,
             gradeName: hb.grade_name,
@@ -306,6 +325,24 @@ function createStatefulMockDb({
       };
     }
 
+    // 8b. Listing owner & status preflight (used for upload-url preflight)
+    if (sql.includes('hb.farmer_id') && sql.includes('WHERE l.id = $1') && !sql.includes('FOR UPDATE')) {
+      const [listingId] = params;
+      const l = dbState.listings.find((item) => item.id === listingId);
+      if (!l) return { rows: [] };
+      const hb = dbState.batches.find((b) => b.id === l.batch_id);
+      return {
+        rows: [
+          {
+            id: l.id,
+            status: l.status,
+            image_key: l.image_key ?? null,
+            farmer_id: hb.farmer_id,
+          },
+        ],
+      };
+    }
+
     // 9. FOR UPDATE on harvest_batches
     if (sql.includes('FROM harvest_batches') && sql.includes('FOR UPDATE')) {
       const [batchId] = params;
@@ -376,9 +413,26 @@ function createStatefulMockDb({
         valid_from: validFrom,
         valid_until: validUntil,
         status,
+        image_key: null,
         created_at: '2026-11-25T12:00:00Z',
       });
       return { rows: [{ id: newId }] };
+    }
+
+    // 15b. Update listing image_key only
+    if (sql.includes('UPDATE listings') && sql.includes('SET image_key = $1')) {
+      const [imageKey, listingId] = params;
+      trace.push(`UPDATE_IMAGE_KEY:${listingId}`);
+      const target = dbState.listings.find((l) => l.id === listingId);
+      target.image_key = imageKey ?? null;
+      return {
+        rows: [
+          {
+            id: target.id,
+            imageKey: target.image_key,
+          },
+        ],
+      };
     }
 
     // 16. Update listing status only
@@ -406,6 +460,7 @@ function createStatefulMockDb({
             validFrom: target.valid_from,
             validUntil: target.valid_until,
             status: target.status,
+            imageKey: target.image_key ?? null,
             createdAt: target.created_at,
           },
         ],
@@ -433,6 +488,7 @@ function createStatefulMockDb({
             validFrom: target.valid_from,
             validUntil: target.valid_until,
             status: target.status,
+            imageKey: target.image_key ?? null,
             createdAt: target.created_at,
           },
         ],
@@ -613,17 +669,103 @@ function buildBaselineFixture(allocationOverrides = []) {
   };
 }
 
-function wire(pool) {
-  const repository = createYm09Repository(pool);
-  const service = createYm09Service({ repository });
+function wire(
+  pool,
+  cloudinaryStorage = createMockCloudinaryStorage(),
+  imageStorageEnabled = true
+) {
+  const repository = createYm09Repository(pool, { imageStorageEnabled });
+  const service = createYm09Service({
+    repository,
+    cloudinaryStorage,
+    imageStorageEnabled,
+  });
   return createYm09Controller(service);
+}
+
+function createMockCloudinaryStorage(overrides = {}) {
+  const assets = new Map();
+  for (const item of overrides.initialAssets || []) {
+    if (typeof item === 'string') {
+      assets.set(item, { resourceType: 'image', format: 'jpg', bytes: 1024 });
+    } else if (item && item.publicId) {
+      assets.set(item.publicId, {
+        resourceType: item.resourceType ?? 'image',
+        format: item.format ?? 'jpg',
+        bytes: item.bytes ?? 1024,
+      });
+    }
+  }
+  const deletedPublicIds = [];
+  const cloudName = overrides.cloudName ?? 'demo-yieldmatrix';
+  const apiKey = overrides.apiKey ?? 'mock-api-key';
+  const configured = overrides.configured ?? true;
+
+  return {
+    assets,
+    deletedPublicIds,
+    getBaseFolder() {
+      return 'yieldmatrix/produce';
+    },
+    buildPublicImageUrl(publicId) {
+      if (!configured || !publicId || !cloudName) {
+        return null;
+      }
+      return `https://res.cloudinary.com/${cloudName}/image/upload/${String(publicId).replace(/^\/+/, '')}`;
+    },
+    async generateUploadSignature({ folder, publicId }) {
+      if (!configured) {
+        throw createServiceUnavailableError('Cloudinary produce image storage is not configured on the server.');
+      }
+      return {
+        uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+        cloudName,
+        apiKey,
+        timestamp: 1795671000,
+        signature: `mock-sig-${publicId}`,
+        folder,
+        publicId,
+        fullPublicId: `${folder}/${publicId}`,
+      };
+    },
+    async verifyImageAssetExists(fullPublicId) {
+      if (!configured) {
+        throw createServiceUnavailableError('Cloudinary produce image storage is not configured on the server.');
+      }
+      if (overrides.failVerifyError) {
+        throw overrides.failVerifyError;
+      }
+      const meta = assets.get(fullPublicId);
+      if (!meta) {
+        return { exists: false };
+      }
+      return {
+        exists: true,
+        resourceType: meta.resourceType,
+        format: meta.format,
+        bytes: meta.bytes,
+        secureUrl: `https://res.cloudinary.com/${cloudName}/image/upload/${fullPublicId}.${meta.format}`,
+      };
+    },
+    async deleteImageAsset(fullPublicId) {
+      if (!configured) {
+        throw createServiceUnavailableError('Cloudinary produce image storage is not configured on the server.');
+      }
+      if (overrides.failDeleteForIds?.includes(fullPublicId) || overrides.failDelete) {
+        throw createBadGatewayError('Failed to delete produce image from Cloudinary.');
+      }
+      deletedPublicIds.push(fullPublicId);
+      assets.delete(fullPublicId);
+      return { deleted: true };
+    },
+  };
 }
 
 // =========================================================================
 // 1. Structural & Route Preservation Tests
 // =========================================================================
 
-test('routes.js preserves existing five routes and binds POST /produce and PATCH /produce/:id/status', () => {
+test('routes.js binds listing CRUD, status, and Cloudinary image signature/confirm/delete routes', () => {
   assert.equal(typeof defaultController.getStatus, 'function');
   assert.equal(typeof defaultController.getProduceListings, 'function');
   assert.equal(typeof defaultController.getProduceListingById, 'function');
@@ -631,6 +773,9 @@ test('routes.js preserves existing five routes and binds POST /produce and PATCH
   assert.equal(typeof defaultController.createProduceListing, 'function');
   assert.equal(typeof defaultController.updateProduceListing, 'function');
   assert.equal(typeof defaultController.updateProduceListingStatus, 'function');
+  assert.equal(typeof defaultController.requestProduceImageSignature, 'function');
+  assert.equal(typeof defaultController.confirmProduceImageUpload, 'function');
+  assert.equal(typeof defaultController.deleteProduceImage, 'function');
 
   const registeredRoutes = ym09Router.stack
     .filter((layer) => layer.route)
@@ -647,6 +792,9 @@ test('routes.js preserves existing five routes and binds POST /produce and PATCH
     { path: '/produce/:id', methods: ['get'] },
     { path: '/produce/:id', methods: ['put'] },
     { path: '/produce/:id/status', methods: ['patch'] },
+    { path: '/produce/:id/image/signature', methods: ['post'] },
+    { path: '/produce/:id/image/confirm', methods: ['post'] },
+    { path: '/produce/:id/image', methods: ['delete'] },
   ]);
 });
 
@@ -2044,4 +2192,507 @@ test('GET /produce/:id returns batchNumber/actualKg/sellableKg, PUT records upda
     listingId: LISTING_ID,
   });
   assert.ok(details.activityLog.some((item) => item.eventType === 'listing_updated'));
+});
+
+// =========================================================================
+// 7. Cloudinary Produce Image Signature, Confirm, Replacement & Delete Tests
+// =========================================================================
+
+test('Cloudinary validation & adapter enforce MIME allowlist, 5 MB limit, scoped public_id, offline SHA-1 signing, and missing env checks', async () => {
+  assert.deepEqual(ALLOWED_IMAGE_MIME_TYPES, ['image/jpeg', 'image/png', 'image/webp']);
+
+  const validReq = validateImageUploadRequestPayload({
+    contentType: 'IMAGE/WEBP',
+    fileSizeBytes: 1024 * 512,
+  });
+  assert.deepEqual(validReq, { contentType: 'image/webp', fileSizeBytes: 524288 });
+
+  assert.throws(
+    () => validateImageUploadRequestPayload({ contentType: 'image/svg+xml', fileSizeBytes: 1024 }),
+    (err) => err.statusCode === 400 && /allowed types:\s*jpeg,\s*png,\s*webp/i.test(err.message)
+  );
+  assert.throws(
+    () => validateImageUploadRequestPayload({ contentType: 'image/jpeg', fileSizeBytes: 6 * 1024 * 1024 }),
+    (err) => err.statusCode === 400 && /exceeds.*maximum/i.test(err.message)
+  );
+  assert.throws(
+    () => validateImageUploadRequestPayload({ contentType: 'image/jpeg', fileSizeBytes: 1024, extraField: true }),
+    (err) => err.statusCode === 400 && /unsupported request field/i.test(err.message)
+  );
+
+  const generated = buildListingCloudinaryPublicId(LISTING_ID);
+  assert.equal(generated.folder, `yieldmatrix/produce/${LISTING_ID}`);
+  assert.match(generated.publicId, /^[a-f0-9-]+$/i);
+  assert.equal(generated.fullPublicId, `${generated.folder}/${generated.publicId}`);
+
+  assert.deepEqual(validateImageConfirmPayload({ publicId: generated.fullPublicId }, LISTING_ID), {
+    publicId: generated.fullPublicId,
+  });
+  assert.throws(
+    () =>
+      validateImageConfirmPayload(
+        { publicId: `yieldmatrix/produce/${LISTING_B_ID}/11111111-1111-4111-8111-111111111111` },
+        LISTING_ID
+      ),
+    (err) => err.statusCode === 400 && /invalid cloudinary public id/i.test(err.message)
+  );
+  assert.throws(
+    () =>
+      validateImageConfirmPayload(
+        { publicId: `yieldmatrix/produce/${LISTING_ID}/../escape` },
+        LISTING_ID
+      ),
+    (err) => err.statusCode === 400
+  );
+  assert.throws(
+    () =>
+      validateImageConfirmPayload(
+        { publicId: 'https://res.cloudinary.com/demo/image/upload/x' },
+        LISTING_ID
+      ),
+    (err) => err.statusCode === 400
+  );
+
+  const unconfigured = createYm09CloudinaryStorage({
+    cloudName: '',
+    apiKey: '',
+    apiSecret: '',
+  });
+  assert.equal(unconfigured.buildPublicImageUrl('yieldmatrix/produce/x/y'), null);
+  await assert.rejects(
+    () => unconfigured.generateUploadSignature({ folder: generated.folder, publicId: generated.publicId }),
+    (err) => err.statusCode === 503
+  );
+
+  const offlineSigned = createYm09CloudinaryStorage({
+    cloudName: 'yieldmatrix-demo',
+    apiKey: 'test-api-key',
+    apiSecret: 'super-secret-value',
+  });
+  const sigPayload = await offlineSigned.generateUploadSignature({
+    folder: generated.folder,
+    publicId: generated.publicId,
+  });
+  assert.equal(sigPayload.uploadUrl, 'https://api.cloudinary.com/v1_1/yieldmatrix-demo/image/upload');
+  assert.equal(sigPayload.cloudName, 'yieldmatrix-demo');
+  assert.equal(sigPayload.apiKey, 'test-api-key');
+  assert.equal(typeof sigPayload.timestamp, 'number');
+  assert.match(sigPayload.signature, /^[a-f0-9]{40}$/);
+  assert.equal('apiSecret' in sigPayload, false);
+  assert.match(
+    offlineSigned.buildPublicImageUrl(generated.fullPublicId),
+    new RegExp(`^https://res\\.cloudinary\\.com/yieldmatrix-demo/image/upload/.*${generated.fullPublicId}`)
+  );
+});
+
+test('POST /produce/:id/image/signature generates signed upload parameters and blocks unauthorized/unapproved/closed requests', async () => {
+  const farmerA = { id: FARMER_A_ID, role: 'farmer' };
+  const farmerB = { id: FARMER_B_ID, role: 'farmer' };
+  const buyer = { id: BUYER_USER_ID, role: 'buyer' };
+
+  {
+    const fx = buildBaselineFixture();
+    const cld = createMockCloudinaryStorage({ cloudName: 'yieldmatrix-test', apiKey: 'key-123' });
+    const controller = wire(createStatefulMockDb(fx).pool, cld);
+    const res = createMockRes();
+    await controller.requestProduceImageSignature(
+      {
+        params: { id: LISTING_ID },
+        user: farmerA,
+        body: { contentType: 'image/webp', fileSizeBytes: 250000 },
+        requestId: REQUEST_ID,
+      },
+      res,
+      () => {}
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.data.cloudName, 'yieldmatrix-test');
+    assert.equal(res.body.data.apiKey, 'key-123');
+    assert.equal(res.body.data.folder, `yieldmatrix/produce/${LISTING_ID}`);
+    assert.match(res.body.data.fullPublicId, new RegExp(`^yieldmatrix/produce/${LISTING_ID}/[a-f0-9-]+$`));
+    assert.equal(res.body.data.uploadUrl, 'https://api.cloudinary.com/v1_1/yieldmatrix-test/image/upload');
+    assert.ok(res.body.data.signature);
+    assert.equal('apiSecret' in res.body.data, false);
+  }
+
+  {
+    const fx = buildBaselineFixture();
+    const controller = wire(createStatefulMockDb(fx).pool);
+
+    const unauthRes = createMockRes();
+    await controller.requestProduceImageSignature(
+      { params: { id: LISTING_ID }, user: undefined, body: { contentType: 'image/jpeg', fileSizeBytes: 1024 } },
+      unauthRes,
+      () => {}
+    );
+    assert.equal(unauthRes.statusCode, 401);
+
+    const pendingRes = createMockRes();
+    await controller.requestProduceImageSignature(
+      { params: { id: LISTING_ID }, user: { id: FARMER_PENDING_ID, role: 'farmer' }, body: { contentType: 'image/jpeg', fileSizeBytes: 1024 } },
+      pendingRes,
+      () => {}
+    );
+    assert.equal(pendingRes.statusCode, 403);
+
+    const buyerRes = createMockRes();
+    await controller.requestProduceImageSignature(
+      { params: { id: LISTING_ID }, user: buyer, body: { contentType: 'image/jpeg', fileSizeBytes: 1024 } },
+      buyerRes,
+      () => {}
+    );
+    assert.equal(buyerRes.statusCode, 403);
+
+    const crossFarmerRes = createMockRes();
+    await controller.requestProduceImageSignature(
+      { params: { id: LISTING_ID }, user: farmerB, body: { contentType: 'image/jpeg', fileSizeBytes: 1024 } },
+      crossFarmerRes,
+      () => {}
+    );
+    assert.equal(crossFarmerRes.statusCode, 403);
+
+    const closedFx = buildBaselineFixture();
+    closedFx.listings[0].status = 'closed';
+    const closedController = wire(createStatefulMockDb(closedFx).pool);
+    const closedRes = createMockRes();
+    await closedController.requestProduceImageSignature(
+      { params: { id: LISTING_ID }, user: farmerA, body: { contentType: 'image/jpeg', fileSizeBytes: 1024 } },
+      closedRes,
+      () => {}
+    );
+    assert.equal(closedRes.statusCode, 409);
+  }
+
+  {
+    const fx = buildBaselineFixture();
+    const cld = createMockCloudinaryStorage({ configured: false });
+    const controller = wire(createStatefulMockDb(fx).pool, cld);
+    const res = createMockRes();
+    await controller.requestProduceImageSignature(
+      { params: { id: LISTING_ID }, user: farmerA, body: { contentType: 'image/png', fileSizeBytes: 1024 } },
+      res,
+      () => {}
+    );
+    assert.equal(res.statusCode, 503);
+    assert.match(res.body.error, /not configured/i);
+  }
+});
+
+test('POST /produce/:id/image/confirm validates asset existence/format/size, replaces image, and maps imageUrl across GET endpoints', async () => {
+  const farmerA = { id: FARMER_A_ID, role: 'farmer' };
+  const initialPublicId = `yieldmatrix/produce/${LISTING_ID}/11111111-1111-4111-8111-111111111111`;
+  const replacementPublicId = `yieldmatrix/produce/${LISTING_ID}/22222222-2222-4222-8222-222222222222`;
+  const badFormatPublicId = `yieldmatrix/produce/${LISTING_ID}/44444444-4444-4444-8444-444444444444`;
+  const oversizedPublicId = `yieldmatrix/produce/${LISTING_ID}/55555555-5555-4555-8555-555555555555`;
+
+  const fx = buildBaselineFixture();
+  fx.listings[0].image_key = initialPublicId;
+  const cld = createMockCloudinaryStorage({
+    cloudName: 'yieldmatrix-cdn',
+    initialAssets: [
+      { publicId: initialPublicId, resourceType: 'image', format: 'jpg', bytes: 2048 },
+      { publicId: badFormatPublicId, resourceType: 'image', format: 'gif', bytes: 2048 },
+      { publicId: oversizedPublicId, resourceType: 'image', format: 'png', bytes: 7 * 1024 * 1024 },
+    ],
+  });
+  const mockDb = createStatefulMockDb(fx);
+  const controller = wire(mockDb.pool, cld);
+
+  // Missing Cloudinary asset fails confirm with 400 and preserves initialPublicId
+  const missingPublicId = `yieldmatrix/produce/${LISTING_ID}/99999999-9999-4999-8999-999999999999`;
+  const missingRes = createMockRes();
+  await controller.confirmProduceImageUpload(
+    { params: { id: LISTING_ID }, user: farmerA, body: { publicId: missingPublicId }, requestId: REQUEST_ID },
+    missingRes,
+    () => {}
+  );
+  assert.equal(missingRes.statusCode, 400);
+  assert.equal(mockDb.state.listings[0].image_key, initialPublicId);
+
+  // Disallowed format in Cloudinary fails confirm and preserves initialPublicId
+  const badFormatRes = createMockRes();
+  await controller.confirmProduceImageUpload(
+    { params: { id: LISTING_ID }, user: farmerA, body: { publicId: badFormatPublicId }, requestId: REQUEST_ID },
+    badFormatRes,
+    () => {}
+  );
+  assert.equal(badFormatRes.statusCode, 400);
+  assert.match(badFormatRes.body.error, /unsupported uploaded image format/i);
+  assert.equal(mockDb.state.listings[0].image_key, initialPublicId);
+
+  // Oversized asset in Cloudinary fails confirm and preserves initialPublicId
+  const oversizedRes = createMockRes();
+  await controller.confirmProduceImageUpload(
+    { params: { id: LISTING_ID }, user: farmerA, body: { publicId: oversizedPublicId }, requestId: REQUEST_ID },
+    oversizedRes,
+    () => {}
+  );
+  assert.equal(oversizedRes.statusCode, 400);
+  assert.match(oversizedRes.body.error, /exceeds the maximum/i);
+  assert.equal(mockDb.state.listings[0].image_key, initialPublicId);
+
+  // Successful replacement updates image_key and deletes replaced Cloudinary asset
+  cld.assets.set(replacementPublicId, { resourceType: 'image', format: 'webp', bytes: 120000 });
+  const confirmRes = createMockRes();
+  await controller.confirmProduceImageUpload(
+    { params: { id: LISTING_ID }, user: farmerA, body: { publicId: replacementPublicId }, requestId: REQUEST_ID },
+    confirmRes,
+    () => {}
+  );
+  assert.equal(confirmRes.statusCode, 200);
+  assert.equal(confirmRes.body.data.id, LISTING_ID);
+  assert.equal(
+    confirmRes.body.data.imageUrl,
+    `https://res.cloudinary.com/yieldmatrix-cdn/image/upload/${replacementPublicId}`
+  );
+  assert.equal(mockDb.state.listings[0].image_key, replacementPublicId);
+  assert.deepEqual(cld.deletedPublicIds, [initialPublicId]);
+  assert.equal(cld.assets.has(initialPublicId), false);
+
+  const imageAudit = mockDb.state.auditLogs.find((log) => log.action === AUDIT_ACTION_IMAGE_UPDATE);
+  assert.ok(imageAudit);
+  assert.deepEqual(imageAudit.safe_changes.image_key, { old: initialPublicId, new: replacementPublicId });
+
+  const listRes = createMockRes();
+  await controller.getProduceListings({ user: farmerA, query: {} }, listRes, () => {});
+  assert.equal(listRes.statusCode, 200);
+  assert.equal(
+    listRes.body.data[0].imageUrl,
+    `https://res.cloudinary.com/yieldmatrix-cdn/image/upload/${replacementPublicId}`
+  );
+  assert.equal('imageKey' in listRes.body.data[0], false);
+
+  const byIdRes = createMockRes();
+  await controller.getProduceListingById({ params: { id: LISTING_ID }, user: farmerA }, byIdRes, () => {});
+  assert.equal(byIdRes.statusCode, 200);
+  assert.equal(
+    byIdRes.body.data.imageUrl,
+    `https://res.cloudinary.com/yieldmatrix-cdn/image/upload/${replacementPublicId}`
+  );
+  assert.equal('imageKey' in byIdRes.body.data, false);
+
+  const detailsRes = createMockRes();
+  await controller.getProduceListingDetails({ params: { id: LISTING_ID }, user: farmerA }, detailsRes, () => {});
+  assert.equal(detailsRes.statusCode, 200);
+  assert.equal(
+    detailsRes.body.data.imageUrl,
+    `https://res.cloudinary.com/yieldmatrix-cdn/image/upload/${replacementPublicId}`
+  );
+  assert.ok(
+    detailsRes.body.data.activityLog.some(
+      (item) => item.eventType === 'listing_updated' && item.title === 'Produce image updated'
+    )
+  );
+});
+
+test('DELETE /produce/:id/image handles atomic delete, repeated deletion idempotency, and Cloudinary failure rollback', async () => {
+  const farmerA = { id: FARMER_A_ID, role: 'farmer' };
+  const existingPublicId = `yieldmatrix/produce/${LISTING_ID}/33333333-3333-4333-8333-333333333333`;
+
+  // 1. Cloudinary failure rolls back DB update so image_key is preserved
+  {
+    const fx = buildBaselineFixture();
+    fx.listings[0].image_key = existingPublicId;
+    const cld = createMockCloudinaryStorage({ initialAssets: [existingPublicId], failDelete: true });
+    const mockDb = createStatefulMockDb(fx);
+    const controller = wire(mockDb.pool, cld);
+    const res = createMockRes();
+    await controller.deleteProduceImage(
+      { params: { id: LISTING_ID }, user: farmerA, requestId: REQUEST_ID },
+      res,
+      () => {}
+    );
+    assert.equal(res.statusCode, 502);
+    assert.equal(mockDb.state.listings[0].image_key, existingPublicId);
+    assert.ok(mockDb.lastTrace.includes('ROLLBACK'));
+  }
+
+  // 2. Successful delete clears image_key, removes Cloudinary asset, and subsequent repeated delete is idempotent
+  {
+    const fx = buildBaselineFixture();
+    fx.listings[0].image_key = existingPublicId;
+    const cld = createMockCloudinaryStorage({ initialAssets: [existingPublicId] });
+    const mockDb = createStatefulMockDb(fx);
+    const controller = wire(mockDb.pool, cld);
+
+    const res = createMockRes();
+    await controller.deleteProduceImage(
+      { params: { id: LISTING_ID }, user: farmerA, requestId: REQUEST_ID },
+      res,
+      () => {}
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.data.id, LISTING_ID);
+    assert.equal(res.body.data.imageUrl, null);
+    assert.equal(res.body.data.removed, true);
+    assert.equal(mockDb.state.listings[0].image_key, null);
+    assert.deepEqual(cld.deletedPublicIds, [existingPublicId]);
+    assert.ok(mockDb.state.auditLogs.some((log) => log.action === AUDIT_ACTION_IMAGE_DELETE));
+
+    // Repeated delete safely returns removed: false without failing
+    const repeatRes = createMockRes();
+    await controller.deleteProduceImage(
+      { params: { id: LISTING_ID }, user: farmerA, requestId: REQUEST_ID },
+      repeatRes,
+      () => {}
+    );
+    assert.equal(repeatRes.statusCode, 200);
+    assert.equal(repeatRes.body.data.imageUrl, null);
+    assert.equal(repeatRes.body.data.removed, false);
+
+    const detailsRes = createMockRes();
+    await controller.getProduceListingDetails({ params: { id: LISTING_ID }, user: farmerA }, detailsRes, () => {});
+    assert.equal(detailsRes.statusCode, 200);
+    assert.equal(detailsRes.body.data.imageUrl, null);
+  }
+});
+
+test('YM09_IMAGE_STORAGE_ENABLED=false avoids listings.image_key in SQL, returns null imageUrl across CRUD/details, and disables image routes safely', async () => {
+  const noImageSqls = [
+    SQL_FIND_LISTINGS_BY_FARMER_NO_IMAGE,
+    SQL_FIND_LISTING_BY_ID_NO_IMAGE,
+    SQL_FIND_LISTING_DETAILS_HEADER_NO_IMAGE,
+    SQL_LOCK_LISTING_FOR_UPDATE_NO_IMAGE,
+    SQL_FIND_LISTING_OWNER_STATUS_NO_IMAGE,
+    SQL_UPDATE_LISTING_IN_PLACE_NO_IMAGE,
+    SQL_UPDATE_LISTING_STATUS_NO_IMAGE,
+  ];
+  for (const sql of noImageSqls) {
+    assert.equal(sql.includes('image_key'), false);
+  }
+
+  const farmerA = { id: FARMER_A_ID, role: 'farmer' };
+  const fx = buildBaselineFixture();
+  const mockDb = createStatefulMockDb(fx);
+
+  // Wrap pool & client so ANY query mentioning image_key throws Neon PG 42703 error
+  const strictSchemaPool = {
+    async query(sql, params) {
+      if (String(sql).includes('image_key')) {
+        const err = new Error('column l.image_key does not exist');
+        err.code = '42703';
+        throw err;
+      }
+      return mockDb.pool.query(sql, params);
+    },
+    async connect() {
+      const client = await mockDb.pool.connect();
+      const origQuery = client.query.bind(client);
+      client.query = async (sql, params) => {
+        if (String(sql).includes('image_key')) {
+          const err = new Error('column l.image_key does not exist');
+          err.code = '42703';
+          throw err;
+        }
+        return origQuery(sql, params);
+      };
+      return client;
+    },
+  };
+
+  const cld = createMockCloudinaryStorage({ cloudName: 'yieldmatrix-cdn' });
+  const controller = wire(strictSchemaPool, cld, false);
+
+  // 1. /status reports capabilities.imageStorageEnabled = false
+  const statusRes = createMockRes();
+  await controller.getStatus({ user: farmerA, requestId: REQUEST_ID }, statusRes, () => {});
+  assert.equal(statusRes.statusCode, 200);
+  assert.equal(statusRes.body.capabilities.imageStorageEnabled, false);
+
+  // 2. GET /produce succeeds without image_key and returns imageUrl: null + exact DR-01 stock
+  const listRes = createMockRes();
+  await controller.getProduceListings({ user: farmerA, query: {} }, listRes, () => {});
+  assert.equal(listRes.statusCode, 200);
+  assert.equal(listRes.body.data.length, 1);
+  assert.equal(listRes.body.data[0].imageUrl, null);
+  assert.equal(listRes.body.data[0].offeredKg, 100);
+  assert.equal(listRes.body.data[0].reservedKg, 0);
+  assert.equal(listRes.body.data[0].availableKg, 100);
+
+  // 3. GET /produce/:id succeeds without image_key
+  const byIdRes = createMockRes();
+  await controller.getProduceListingById({ params: { id: LISTING_ID }, user: farmerA }, byIdRes, () => {});
+  assert.equal(byIdRes.statusCode, 200);
+  assert.equal(byIdRes.body.data.imageUrl, null);
+  assert.equal(byIdRes.body.data.sellableKg, 120);
+
+  // 4. GET /produce/:id/details succeeds without image_key
+  const detailsRes = createMockRes();
+  await controller.getProduceListingDetails({ params: { id: LISTING_ID }, user: farmerA }, detailsRes, () => {});
+  assert.equal(detailsRes.statusCode, 200);
+  assert.equal(detailsRes.body.data.imageUrl, null);
+  assert.ok(Array.isArray(detailsRes.body.data.allocations));
+
+  // 5. PUT /produce/:id & PATCH /produce/:id/status & POST /produce succeed without image_key
+  const putRes = createMockRes();
+  await controller.updateProduceListing(
+    { params: { id: LISTING_ID }, user: farmerA, requestId: REQUEST_ID, body: { unitPriceCents: 34000 } },
+    putRes,
+    () => {}
+  );
+  assert.equal(putRes.statusCode, 200);
+  assert.equal(putRes.body.data.imageUrl, null);
+  assert.equal(putRes.body.data.unitPriceCents, 34000);
+
+  const patchRes = createMockRes();
+  await controller.updateProduceListingStatus(
+    { params: { id: LISTING_ID }, user: farmerA, requestId: REQUEST_ID, body: { status: 'paused' } },
+    patchRes,
+    () => {}
+  );
+  assert.equal(patchRes.statusCode, 200);
+  assert.equal(patchRes.body.data.imageUrl, null);
+  assert.equal(patchRes.body.data.status, 'paused');
+
+  const createRes = createMockRes();
+  await controller.createProduceListing(
+    {
+      user: farmerA,
+      requestId: REQUEST_ID,
+      body: {
+        farmId: FARM_A_ID,
+        batchId: BATCH_B_ID,
+        offeredKg: 25,
+        unitPriceCents: 28000,
+        validFrom: '2026-11-20T00:00:00Z',
+        validUntil: '2026-11-30T23:59:59Z',
+        status: 'active',
+      },
+    },
+    createRes,
+    () => {}
+  );
+  assert.equal(createRes.statusCode, 201);
+  assert.equal(createRes.body.data.imageUrl, null);
+
+  // 6. Image signature, confirm, and delete return controlled 503 when disabled
+  const sigRes = createMockRes();
+  await controller.requestProduceImageSignature(
+    { params: { id: LISTING_ID }, user: farmerA, body: { contentType: 'image/jpeg', fileSizeBytes: 1024 } },
+    sigRes,
+    () => {}
+  );
+  assert.equal(sigRes.statusCode, 503);
+  assert.match(sigRes.body.error, /temporarily unavailable|listings\.image_key/i);
+
+  const confirmRes = createMockRes();
+  await controller.confirmProduceImageUpload(
+    {
+      params: { id: LISTING_ID },
+      user: farmerA,
+      body: { publicId: `yieldmatrix/produce/${LISTING_ID}/11111111-1111-4111-8111-111111111111` },
+    },
+    confirmRes,
+    () => {}
+  );
+  assert.equal(confirmRes.statusCode, 503);
+
+  const delRes = createMockRes();
+  await controller.deleteProduceImage(
+    { params: { id: LISTING_ID }, user: farmerA },
+    delRes,
+    () => {}
+  );
+  assert.equal(delRes.statusCode, 503);
 });

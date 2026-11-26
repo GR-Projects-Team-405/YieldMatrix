@@ -112,6 +112,33 @@ export const AUDIT_ACTION_CREATE = 'create_listing';
 export const AUDIT_ACTION_UPDATE = 'update_listing';
 export const AUDIT_ACTION_PRICE_UPDATE = 'update_listing_price';
 export const AUDIT_ACTION_STATUS_UPDATE = 'update_listing_status';
+export const AUDIT_ACTION_IMAGE_UPDATE = 'update_listing_image';
+export const AUDIT_ACTION_IMAGE_DELETE = 'delete_listing_image';
+
+export const IMAGE_MIME_TO_EXT = Object.freeze({
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+});
+
+export const ALLOWED_IMAGE_MIME_TYPES = Object.freeze(Object.keys(IMAGE_MIME_TO_EXT));
+export const ALLOWED_CLOUDINARY_IMAGE_FORMATS = Object.freeze(['jpg', 'jpeg', 'png', 'webp']);
+export const ALLOWED_IMAGE_UPLOAD_FIELDS = Object.freeze(['contentType', 'fileSizeBytes']);
+export const ALLOWED_IMAGE_CONFIRM_FIELDS = Object.freeze(['publicId']);
+export const DEFAULT_MAX_IMAGE_FILE_BYTES = 5 * 1024 * 1024;
+export const CLOUDINARY_BASE_FOLDER = 'yieldmatrix/produce';
+
+export function isYm09ImageStorageEnabled() {
+  return String(process.env.YM09_IMAGE_STORAGE_ENABLED ?? 'false').trim().toLowerCase() === 'true';
+}
+
+export function getMaxImageFileSizeBytes() {
+  const configured = Number(process.env.YM09_IMAGE_MAX_BYTES);
+  if (Number.isInteger(configured) && configured > 0) {
+    return configured;
+  }
+  return DEFAULT_MAX_IMAGE_FILE_BYTES;
+}
 
 /**
  * Base operational error with HTTP status code and optional field-level errors.
@@ -145,4 +172,12 @@ export function createNotFoundError(message) {
 
 export function createConflictError(message) {
   return new Ym09AppError(409, message);
+}
+
+export function createBadGatewayError(message) {
+  return new Ym09AppError(502, message);
+}
+
+export function createServiceUnavailableError(message) {
+  return new Ym09AppError(503, message);
 }

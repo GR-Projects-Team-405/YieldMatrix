@@ -1,8 +1,12 @@
 import {
+  ALLOWED_CLOUDINARY_IMAGE_FORMATS,
   AUDIT_ACTION_CREATE,
+  AUDIT_ACTION_IMAGE_DELETE,
+  AUDIT_ACTION_IMAGE_UPDATE,
   AUDIT_ACTION_PRICE_UPDATE,
   AUDIT_ACTION_STATUS_UPDATE,
   AUDIT_ACTION_UPDATE,
+  CLOUDINARY_BASE_FOLDER,
   FARM_ACTIVE_STATUS,
   HARVEST_BATCH_ELIGIBLE_STATUS,
   LISTING_STATUS,
@@ -11,8 +15,11 @@ import {
   createConflictError,
   createForbiddenError,
   createNotFoundError,
+  createServiceUnavailableError,
   createUnauthorizedError,
   createValidationError,
+  getMaxImageFileSizeBytes,
+  isYm09ImageStorageEnabled,
 } from './ym09.constants.js';
 import {
   mapListingDetailsResponse,
@@ -20,11 +27,15 @@ import {
   mapProduceListingRow,
   mapUpdatedListingRow,
 } from './ym09.mapper.js';
+import { ym09CloudinaryStorage as defaultCloudinaryStorage } from './ym09.cloudinary.js';
 import { ym09Repository as defaultRepository } from './ym09.repository.js';
 import {
+  buildListingCloudinaryPublicId,
   isValidListingTransition,
   validateCreateListingPayload,
   validateDateRange,
+  validateImageConfirmPayload,
+  validateImageUploadRequestPayload,
   validateListQueryParams,
   validateListingId,
   validateUpdateListingPayload,
@@ -42,9 +53,37 @@ function buildReassignmentBlockMessage(blockingKg, disputedCount) {
 }
 
 /**
- * Creates the YM09 business service layer (repository injectable for unit tests).
+ * Creates the YM09 business service layer (repository and Cloudinary storage injectable for unit tests).
  */
-export function createYm09Service({ repository = defaultRepository } = {}) {
+export function createYm09Service({
+  repository = defaultRepository,
+  cloudinaryStorage = defaultCloudinaryStorage,
+  imageStorageEnabled = undefined,
+} = {}) {
+  function isImageStorageActive() {
+    if (typeof imageStorageEnabled === 'boolean') {
+      return imageStorageEnabled;
+    }
+    if (typeof repository.isImageStorageEnabled === 'function') {
+      return repository.isImageStorageEnabled();
+    }
+    return isYm09ImageStorageEnabled();
+  }
+
+  function resolveListingImageUrl(imageKey) {
+    if (!isImageStorageActive() || !imageKey) {
+      return null;
+    }
+    return cloudinaryStorage.buildPublicImageUrl(imageKey);
+  }
+
+  function assertImageStorageAvailable() {
+    if (!isImageStorageActive()) {
+      throw createServiceUnavailableError(
+        'Produce image uploads are temporarily unavailable until database support (listings.image_key) is enabled.'
+      );
+    }
+  }
   async function assertApprovedFarmer(
     userId,
     userRole = YM09_MODULE_META.farmerRole,
@@ -77,6 +116,9 @@ export function createYm09Service({ repository = defaultRepository } = {}) {
       module: YM09_MODULE_META.module,
       owner: YM09_MODULE_META.owner,
       status: YM09_MODULE_META.status,
+      capabilities: {
+        imageStorageEnabled: isImageStorageActive(),
+      },
       user: {
         id: user.id,
         name: user.name,
@@ -89,7 +131,9 @@ export function createYm09Service({ repository = defaultRepository } = {}) {
     await assertApprovedFarmer(farmerId, userRole, 'Account is not approved');
     validateListQueryParams(query);
     const rows = await repository.findListingsByFarmer(farmerId);
-    const listings = rows.map(mapProduceListingRow);
+    const listings = rows.map((row) =>
+      mapProduceListingRow(row, resolveListingImageUrl)
+    );
 
     return {
       data: listings,
@@ -110,7 +154,7 @@ export function createYm09Service({ repository = defaultRepository } = {}) {
       throw createNotFoundError('Produce listing not found');
     }
 
-    return mapProduceListingByIdRow(row);
+    return mapProduceListingByIdRow(row, resolveListingImageUrl);
   }
 
   async function getFarmerProduceListingDetails({
@@ -147,6 +191,7 @@ export function createYm09Service({ repository = defaultRepository } = {}) {
       allocationRows,
       orderRows,
       auditRows,
+      resolveImageUrl: resolveListingImageUrl,
     });
   }
 
@@ -413,7 +458,7 @@ export function createYm09Service({ repository = defaultRepository } = {}) {
         );
       }
 
-      return mapUpdatedListingRow(updatedRow);
+      return mapUpdatedListingRow(updatedRow, resolveListingImageUrl);
     });
   }
 
@@ -519,7 +564,7 @@ export function createYm09Service({ repository = defaultRepository } = {}) {
 
       // 8. Return enriched camelCase listing DTO consistent with GET /produce/:id
       const createdRow = await repository.findListingById(inserted.id, farmerId, client);
-      return mapProduceListingByIdRow(createdRow);
+      return mapProduceListingByIdRow(createdRow, resolveListingImageUrl);
     });
   }
 
@@ -638,7 +683,223 @@ export function createYm09Service({ repository = defaultRepository } = {}) {
         );
       }
 
-      return mapUpdatedListingRow(updatedRow);
+      return mapUpdatedListingRow(updatedRow, resolveListingImageUrl);
+    });
+  }
+
+  async function requestFarmerProduceImageUploadSignature({
+    listingId,
+    farmerId,
+    userRole = YM09_MODULE_META.farmerRole,
+    payload,
+  }) {
+    const validId = validateListingId(listingId);
+    validateImageUploadRequestPayload(payload);
+
+    await assertApprovedFarmer(
+      farmerId,
+      userRole,
+      'Account is not approved for farmer operations'
+    );
+    assertImageStorageAvailable();
+
+    const listing = await repository.findListingOwnerStatus(validId);
+    if (!listing) {
+      throw createNotFoundError('Produce listing not found');
+    }
+    if (listing.farmer_id !== farmerId) {
+      throw createForbiddenError('You do not own this produce listing');
+    }
+    if (listing.status === LISTING_STATUS.CLOSED) {
+      throw createConflictError('Archived listings cannot update produce images');
+    }
+
+    const baseFolder = cloudinaryStorage.getBaseFolder?.() || CLOUDINARY_BASE_FOLDER;
+    const { folder, publicId } = buildListingCloudinaryPublicId(validId, baseFolder);
+
+    return cloudinaryStorage.generateUploadSignature({
+      folder,
+      publicId,
+    });
+  }
+
+  async function confirmFarmerProduceImageUpload({
+    listingId,
+    farmerId,
+    userRole = YM09_MODULE_META.farmerRole,
+    requestId,
+    payload,
+  }) {
+    const validId = validateListingId(listingId);
+    const baseFolder = cloudinaryStorage.getBaseFolder?.() || CLOUDINARY_BASE_FOLDER;
+    const { publicId } = validateImageConfirmPayload(payload, validId, baseFolder);
+
+    await assertApprovedFarmer(
+      farmerId,
+      userRole,
+      'Account is not approved for farmer operations'
+    );
+    assertImageStorageAvailable();
+
+    const existingMeta = await repository.findListingOwnerStatus(validId);
+    if (!existingMeta) {
+      throw createNotFoundError('Produce listing not found');
+    }
+    if (existingMeta.farmer_id !== farmerId) {
+      throw createForbiddenError('You do not own this produce listing');
+    }
+    if (existingMeta.status === LISTING_STATUS.CLOSED) {
+      throw createConflictError('Archived listings cannot update produce images');
+    }
+
+    const asset = await cloudinaryStorage.verifyImageAssetExists(publicId);
+    if (!asset?.exists) {
+      throw createValidationError(
+        'Uploaded image asset was not found in Cloudinary. Existing image was preserved.'
+      );
+    }
+
+    if (asset.resourceType && asset.resourceType !== 'image') {
+      throw createValidationError('Uploaded Cloudinary asset must be an image.');
+    }
+
+    if (
+      asset.format &&
+      !ALLOWED_CLOUDINARY_IMAGE_FORMATS.includes(String(asset.format).toLowerCase())
+    ) {
+      throw createValidationError(
+        'Unsupported uploaded image format. Allowed formats: JPEG, PNG, WebP.'
+      );
+    }
+
+    const maxBytes = getMaxImageFileSizeBytes();
+    if (typeof asset.bytes === 'number' && asset.bytes > maxBytes) {
+      throw createValidationError('Uploaded image exceeds the maximum allowed size of 5 MB.');
+    }
+
+    const { previousImageKey, updatedImageKey } = await repository.runInTransaction(
+      async (client) => {
+        const currentListing = await repository.lockListingForUpdate(validId, client);
+        if (!currentListing) {
+          throw createNotFoundError('Produce listing not found');
+        }
+        if (currentListing.farmer_id !== farmerId) {
+          throw createForbiddenError('You do not own this produce listing');
+        }
+        if (currentListing.status === LISTING_STATUS.CLOSED) {
+          throw createConflictError('Archived listings cannot update produce images');
+        }
+
+        const prevKey = currentListing.image_key || null;
+        const updatedRow = await repository.updateListingImageKey(
+          { listingId: validId, imageKey: publicId },
+          client
+        );
+
+        await repository.insertListingAudit(
+          {
+            actorId: farmerId,
+            action: AUDIT_ACTION_IMAGE_UPDATE,
+            listingId: validId,
+            requestId,
+            reason: 'Produce listing image updated by farmer',
+            safeChanges: {
+              image_key: {
+                old: prevKey,
+                new: publicId,
+              },
+            },
+          },
+          client
+        );
+
+        return {
+          previousImageKey: prevKey,
+          updatedImageKey: updatedRow?.imageKey || publicId,
+        };
+      }
+    );
+
+    if (previousImageKey && previousImageKey !== updatedImageKey) {
+      try {
+        await cloudinaryStorage.deleteImageAsset(previousImageKey);
+      } catch {
+        // Best-effort cleanup of replaced Cloudinary asset after new key committed.
+      }
+    }
+
+    return {
+      id: validId,
+      imageUrl: cloudinaryStorage.buildPublicImageUrl(updatedImageKey),
+    };
+  }
+
+  async function deleteFarmerProduceImage({
+    listingId,
+    farmerId,
+    userRole = YM09_MODULE_META.farmerRole,
+    requestId,
+  }) {
+    const validId = validateListingId(listingId);
+
+    await assertApprovedFarmer(
+      farmerId,
+      userRole,
+      'Account is not approved for farmer operations'
+    );
+    assertImageStorageAvailable();
+
+    return repository.runInTransaction(async (client) => {
+      const currentListing = await repository.lockListingForUpdate(validId, client);
+      if (!currentListing) {
+        throw createNotFoundError('Produce listing not found');
+      }
+      if (currentListing.farmer_id !== farmerId) {
+        throw createForbiddenError('You do not own this produce listing');
+      }
+      if (currentListing.status === LISTING_STATUS.CLOSED) {
+        throw createConflictError('Archived listings cannot remove produce images');
+      }
+
+      const existingKey = currentListing.image_key || null;
+      if (!existingKey) {
+        return {
+          id: validId,
+          imageUrl: null,
+          removed: false,
+        };
+      }
+
+      await repository.updateListingImageKey(
+        { listingId: validId, imageKey: null },
+        client
+      );
+
+      await repository.insertListingAudit(
+        {
+          actorId: farmerId,
+          action: AUDIT_ACTION_IMAGE_DELETE,
+          listingId: validId,
+          requestId,
+          reason: 'Produce listing image removed by farmer',
+          safeChanges: {
+            image_key: {
+              old: existingKey,
+              new: null,
+            },
+          },
+        },
+        client
+      );
+
+      // Delete Cloudinary asset before commit so storage failure rolls back DB cleanly.
+      await cloudinaryStorage.deleteImageAsset(existingKey);
+
+      return {
+        id: validId,
+        imageUrl: null,
+        removed: true,
+      };
     });
   }
 
@@ -650,6 +911,9 @@ export function createYm09Service({ repository = defaultRepository } = {}) {
     createFarmerProduceListing,
     updateFarmerProduceListing,
     updateFarmerProduceListingStatus,
+    requestFarmerProduceImageUploadSignature,
+    confirmFarmerProduceImageUpload,
+    deleteFarmerProduceImage,
   };
 }
 

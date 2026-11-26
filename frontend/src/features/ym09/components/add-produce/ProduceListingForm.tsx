@@ -47,6 +47,13 @@ export function ProduceListingForm({
     submitError,
     showSuccessModal,
     activeImageUrl,
+    imageStorageEnabled,
+    selectedImageFile,
+    hasExistingImage,
+    imageError,
+    uploadProgress,
+    isUploadingImage,
+    isRemovingImage,
     availableFarms,
     harvestBatches,
     dependenciesLoading,
@@ -64,6 +71,9 @@ export function ProduceListingForm({
     handleFromDateChange,
     handleUntilDateChange,
     handleStatusChange,
+    handleImageFileSelect,
+    handleClearSelectedImage,
+    handleRemoveExistingImage,
     handleSubmit,
     closeSuccessModal,
   } = useProduceListingForm({
@@ -165,7 +175,21 @@ export function ProduceListingForm({
               activeImageUrl={activeImageUrl}
             />
 
-            <ProduceImageSelector imageUrl={activeImageUrl} />
+            <ProduceImageSelector
+              mode={mode}
+              imageUrl={activeImageUrl}
+              imageStorageEnabled={imageStorageEnabled}
+              selectedFile={selectedImageFile}
+              hasExistingImage={hasExistingImage}
+              imageError={imageError}
+              uploadProgress={uploadProgress}
+              isUploading={isUploadingImage}
+              isRemoving={isRemovingImage}
+              disabled={isSubmitting}
+              onSelectFile={handleImageFileSelect}
+              onClearSelectedFile={handleClearSelectedImage}
+              onRemoveExistingImage={handleRemoveExistingImage}
+            />
 
             {/* Action Buttons: Cancel and Submit Button (Publish or Update) */}
             <div className="ym09-action-buttons-row">
@@ -173,6 +197,7 @@ export function ProduceListingForm({
                 type="button"
                 variant="outline"
                 onClick={handleCancelClick}
+                disabled={isSubmitting || isUploadingImage || isRemovingImage}
               >
                 Cancel
               </Button>
@@ -180,10 +205,16 @@ export function ProduceListingForm({
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isRemovingImage}
               >
                 <Check size={18} strokeWidth={2.5} aria-hidden="true" />
-                <span>{isSubmitting ? 'Saving...' : submitButtonLabel}</span>
+                <span>
+                  {isUploadingImage
+                    ? `Uploading Image (${uploadProgress ?? 0}%)...`
+                    : isSubmitting
+                      ? 'Saving...'
+                      : submitButtonLabel}
+                </span>
               </Button>
             </div>
           </div>

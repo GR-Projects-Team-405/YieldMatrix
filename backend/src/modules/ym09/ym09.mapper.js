@@ -2,6 +2,21 @@
  * Pure database-row to API DTO mappers for YieldMatrix Module YM09 – Produce Listings.
  * Ensures consistent camelCase naming and numeric conversions from PostgreSQL strings.
  */
+import { ym09CloudinaryStorage } from './ym09.cloudinary.js';
+
+function resolvePublicImageUrl(
+  imageKey,
+  resolveImageUrl = ym09CloudinaryStorage.buildPublicImageUrl
+) {
+  if (!imageKey) return null;
+  const resolved = typeof resolveImageUrl === 'function' ? resolveImageUrl(imageKey) : null;
+  return resolved || null;
+}
+
+function stripInternalImageKey(row) {
+  const { imageKey: _ignoredImageKey, ...rest } = row;
+  return rest;
+}
 
 function computeStockMetrics(row) {
   const offeredKg = parseFloat(row.offeredKg ?? '0');
@@ -19,16 +34,17 @@ function computeStockMetrics(row) {
   };
 }
 
-export function mapProduceListingRow(row) {
+export function mapProduceListingRow(row, resolveImageUrl) {
   return {
-    ...row,
+    ...stripInternalImageKey(row),
     ...computeStockMetrics(row),
+    imageUrl: resolvePublicImageUrl(row.imageKey, resolveImageUrl),
   };
 }
 
-export function mapProduceListingByIdRow(row) {
+export function mapProduceListingByIdRow(row, resolveImageUrl) {
   return {
-    ...row,
+    ...stripInternalImageKey(row),
     actualKg:
       row.actualKg !== undefined && row.actualKg !== null
         ? parseFloat(row.actualKg)
@@ -38,10 +54,11 @@ export function mapProduceListingByIdRow(row) {
         ? parseFloat(row.sellableKg)
         : undefined,
     ...computeStockMetrics(row),
+    imageUrl: resolvePublicImageUrl(row.imageKey, resolveImageUrl),
   };
 }
 
-export function mapUpdatedListingRow(row) {
+export function mapUpdatedListingRow(row, resolveImageUrl) {
   return {
     id: row.id,
     batchId: row.batchId,
@@ -50,6 +67,7 @@ export function mapUpdatedListingRow(row) {
     validFrom: row.validFrom,
     validUntil: row.validUntil,
     status: row.status,
+    imageUrl: resolvePublicImageUrl(row.imageKey, resolveImageUrl),
     createdAt: row.createdAt,
   };
 }
@@ -163,6 +181,22 @@ export function extractPriceHistoryAndAuditEvents(auditRows) {
         description: `Listing status changed from ${changes.status.old} to ${changes.status.new}.`,
         timestamp: log.timestamp,
       });
+    } else if (log.action === 'update_listing_image') {
+      priceActivity.push({
+        id: `act-${log.id}`,
+        eventType: 'listing_updated',
+        title: 'Produce image updated',
+        description: log.reason || 'Produce listing image was uploaded or replaced.',
+        timestamp: log.timestamp,
+      });
+    } else if (log.action === 'delete_listing_image') {
+      priceActivity.push({
+        id: `act-${log.id}`,
+        eventType: 'listing_updated',
+        title: 'Produce image removed',
+        description: log.reason || 'Produce listing image was removed.',
+        timestamp: log.timestamp,
+      });
     } else if (log.action === 'update_listing') {
       const updatedFields = Object.keys(changes);
       priceActivity.push({
@@ -270,6 +304,7 @@ export function mapListingDetailsResponse({
   allocationRows,
   orderRows,
   auditRows,
+  resolveImageUrl,
 }) {
   const stock = computeStockMetrics(listingRow);
   const allocations = allocationRows.map(mapAllocationRow);
@@ -288,8 +323,9 @@ export function mapListingDetailsResponse({
   });
 
   return {
-    ...listingRow,
+    ...stripInternalImageKey(listingRow),
     ...stock,
+    imageUrl: resolvePublicImageUrl(listingRow.imageKey, resolveImageUrl),
     batchNumber: listingRow.batchNumber,
     allocations,
     orders,

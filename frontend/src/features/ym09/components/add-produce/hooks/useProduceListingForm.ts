@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   createProduceListing,
+  deleteProduceImage,
+  getYm09ModuleStatus,
   updateProduceListing,
+  uploadProduceImageWorkflow,
+  validateProduceImageFile,
 } from '../../../services/produceApi';
 import {
   fetchEligibleHarvestBatches,
@@ -37,6 +41,13 @@ export interface UseProduceListingFormReturn {
   submitError: string | null;
   showSuccessModal: boolean;
   activeImageUrl?: string;
+  imageStorageEnabled: boolean;
+  selectedImageFile: File | null;
+  hasExistingImage: boolean;
+  imageError: string | null;
+  uploadProgress: number | null;
+  isUploadingImage: boolean;
+  isRemovingImage: boolean;
   availableFarms: FarmerFarmOption[];
   harvestBatches: HarvestBatchOption[];
   dependenciesLoading: boolean;
@@ -54,6 +65,9 @@ export interface UseProduceListingFormReturn {
   handleFromDateChange: (availableFrom: string) => void;
   handleUntilDateChange: (availableUntil: string) => void;
   handleStatusChange: (status: 'active' | 'draft') => void;
+  handleImageFileSelect: (file: File | null) => void;
+  handleClearSelectedImage: () => void;
+  handleRemoveExistingImage: () => Promise<void>;
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
   closeSuccessModal: () => void;
 }
@@ -80,9 +94,20 @@ export function useProduceListingForm({
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | undefined>(undefined);
+  const [persistedImageUrl, setPersistedImageUrl] = useState<string | undefined>(
+    existingListing?.imageUrl
+  );
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isRemovingImage, setIsRemovingImage] = useState(false);
+  const [imageStorageEnabled, setImageStorageEnabled] = useState(true);
 
   const isDirtyRef = useRef(false);
   const isSubmittingRef = useRef(false);
+  const pendingCreatedListingIdRef = useRef<string | null>(null);
   const currentEntityId = initialData?.listingId ?? existingListing?.id;
   const syncedContextRef = useRef<{
     mode: 'create' | 'edit';
@@ -167,10 +192,18 @@ export function useProduceListingForm({
         initialData,
       };
       isDirtyRef.current = false;
+      pendingCreatedListingIdRef.current = null;
       setFormState(getInitialProduceFormState(mode, [], initialData));
       setErrors({});
       setSubmitError(null);
       setShowSuccessModal(false);
+      setSelectedImageFile(null);
+      setLocalPreviewUrl(undefined);
+      setPersistedImageUrl(existingListing?.imageUrl);
+      setImageError(null);
+      setUploadProgress(null);
+      setIsUploadingImage(false);
+      setIsRemovingImage(false);
       return;
     }
 
@@ -184,7 +217,47 @@ export function useProduceListingForm({
       setErrors({});
       setSubmitError(null);
     }
-  }, [mode, currentEntityId, initialData]);
+  }, [mode, currentEntityId, initialData, existingListing?.imageUrl]);
+
+  useEffect(() => {
+    setPersistedImageUrl(existingListing?.imageUrl);
+  }, [existingListing?.id, existingListing?.imageUrl]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadModuleCapabilities() {
+      try {
+        const status = await getYm09ModuleStatus({ signal: controller.signal });
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+        const enabled = status.capabilities?.imageStorageEnabled ?? true;
+        setImageStorageEnabled(enabled);
+        if (!enabled) {
+          setSelectedImageFile(null);
+          setLocalPreviewUrl(undefined);
+        }
+      } catch {
+        // Keep form operational even if capability probe fails (server still guards image endpoints).
+      }
+    }
+
+    loadModuleCapabilities();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl && localPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(localPreviewUrl);
+      }
+    };
+  }, [localPreviewUrl]);
 
   const { activeHolds, isSourceLocked, lockReason } = getHarvestSourceLockState(
     mode,
@@ -200,7 +273,8 @@ export function useProduceListingForm({
     activeHolds,
   });
 
-  const activeImageUrl = existingListing?.imageUrl;
+  const activeImageUrl = localPreviewUrl || persistedImageUrl;
+  const hasExistingImage = Boolean(persistedImageUrl);
 
   const estimatedValue =
     typeof formState.totalQuantity === 'number' && typeof formState.unitPrice === 'number'
@@ -294,6 +368,62 @@ export function useProduceListingForm({
     setFormState((prev) => ({ ...prev, status }));
   };
 
+  const handleImageFileSelect = (file: File | null) => {
+    if (!file) return;
+    if (!imageStorageEnabled) {
+      setSelectedImageFile(null);
+      setLocalPreviewUrl(undefined);
+      setImageError(
+        'Produce image uploads are temporarily unavailable until database support (listings.image_key) is enabled.'
+      );
+      return;
+    }
+    const validationErr = validateProduceImageFile(file);
+    if (validationErr) {
+      setSelectedImageFile(null);
+      setLocalPreviewUrl(undefined);
+      setImageError(validationErr);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setSelectedImageFile(file);
+    setLocalPreviewUrl(previewUrl);
+    setImageError(null);
+    setUploadProgress(null);
+    setSubmitError(null);
+  };
+
+  const handleClearSelectedImage = () => {
+    setSelectedImageFile(null);
+    setLocalPreviewUrl(undefined);
+    setImageError(null);
+    setUploadProgress(null);
+  };
+
+  const handleRemoveExistingImage = async () => {
+    const targetListingId =
+      mode === 'edit' ? existingListing?.id : pendingCreatedListingIdRef.current;
+    if (!targetListingId || !imageStorageEnabled || isRemovingImage || isSubmittingRef.current) {
+      return;
+    }
+
+    setIsRemovingImage(true);
+    setImageError(null);
+    setSubmitError(null);
+    try {
+      await deleteProduceImage(targetListingId);
+      setPersistedImageUrl(undefined);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error && err.message ? err.message : 'Failed to remove produce image.';
+      setImageError(msg);
+      setSubmitError(msg);
+    } finally {
+      setIsRemovingImage(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSubmittingRef.current) {
@@ -313,6 +443,7 @@ export function useProduceListingForm({
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setSubmitError(null);
+    setImageError(null);
 
     try {
       let savedListing: ProduceListingView;
@@ -321,9 +452,32 @@ export function useProduceListingForm({
           throw new Error('Existing listing context is required to update this produce listing.');
         }
         savedListing = await updateProduceListing(existingListing.id, formState);
+      } else if (pendingCreatedListingIdRef.current) {
+        savedListing = await updateProduceListing(pendingCreatedListingIdRef.current, formState);
       } else {
         savedListing = await createProduceListing(formState);
+        pendingCreatedListingIdRef.current = savedListing.id;
       }
+
+      if (selectedImageFile && imageStorageEnabled) {
+        setIsUploadingImage(true);
+        setUploadProgress(0);
+        try {
+          const uploaded = await uploadProduceImageWorkflow(
+            savedListing.id,
+            selectedImageFile,
+            (pct) => setUploadProgress(pct)
+          );
+          setPersistedImageUrl(uploaded.imageUrl ?? undefined);
+          setSelectedImageFile(null);
+          setLocalPreviewUrl(undefined);
+          setUploadProgress(100);
+        } finally {
+          setIsUploadingImage(false);
+        }
+      }
+
+      pendingCreatedListingIdRef.current = null;
       setFormState((prev) => ({
         ...prev,
         listingId: savedListing.id,
@@ -332,7 +486,16 @@ export function useProduceListingForm({
       setShowSuccessModal(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save produce listing';
-      setSubmitError(msg);
+      if (selectedImageFile && pendingCreatedListingIdRef.current && mode === 'create') {
+        const retryMsg = `Your listing was saved, but image upload failed: ${msg}. You can retry uploading without creating a duplicate listing.`;
+        setSubmitError(retryMsg);
+        setImageError(msg);
+      } else {
+        setSubmitError(msg);
+        if (selectedImageFile) {
+          setImageError(msg);
+        }
+      }
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
@@ -350,6 +513,13 @@ export function useProduceListingForm({
     submitError,
     showSuccessModal,
     activeImageUrl,
+    imageStorageEnabled,
+    selectedImageFile,
+    hasExistingImage,
+    imageError,
+    uploadProgress,
+    isUploadingImage,
+    isRemovingImage,
     availableFarms,
     harvestBatches,
     dependenciesLoading,
@@ -367,6 +537,9 @@ export function useProduceListingForm({
     handleFromDateChange,
     handleUntilDateChange,
     handleStatusChange,
+    handleImageFileSelect,
+    handleClearSelectedImage,
+    handleRemoveExistingImage,
     handleSubmit,
     closeSuccessModal,
   };

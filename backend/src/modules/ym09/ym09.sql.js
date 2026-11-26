@@ -58,14 +58,16 @@ export const SQL_FIND_APPROVED_USER = `
   WHERE id = $1 AND role = $2 AND approval_status = $3
 `;
 
-export const SQL_FIND_LISTINGS_BY_FARMER = `
+export function buildFindListingsByFarmerSql(includeImageKey = true) {
+  const imageSelect = includeImageKey ? `\n         l.image_key AS "imageKey",` : '';
+  return `
   SELECT l.id,
          l.batch_id AS "batchId",
          l.offered_kg AS "offeredKg",
          l.unit_price_cents AS "unitPriceCents",
          l.valid_from AS "validFrom",
          l.valid_until AS "validUntil",
-         l.status,
+         l.status,${imageSelect}
          l.created_at AS "createdAt",
          c.name AS "cropName",
          g.name AS "gradeName",
@@ -82,15 +84,21 @@ export const SQL_FIND_LISTINGS_BY_FARMER = `
   WHERE hb.farmer_id = $1
   ORDER BY l.created_at DESC
 `;
+}
 
-export const SQL_FIND_LISTING_BY_ID = `
+export const SQL_FIND_LISTINGS_BY_FARMER = buildFindListingsByFarmerSql(true);
+export const SQL_FIND_LISTINGS_BY_FARMER_NO_IMAGE = buildFindListingsByFarmerSql(false);
+
+export function buildFindListingByIdSql(includeImageKey = true) {
+  const imageSelect = includeImageKey ? `\n         l.image_key AS "imageKey",` : '';
+  return `
   SELECT l.id,
          l.batch_id AS "batchId",
          l.offered_kg AS "offeredKg",
          l.unit_price_cents AS "unitPriceCents",
          l.valid_from AS "validFrom",
          l.valid_until AS "validUntil",
-         l.status,
+         l.status,${imageSelect}
          l.created_at AS "createdAt",
          c.name AS "cropName",
          g.name AS "gradeName",
@@ -110,15 +118,21 @@ export const SQL_FIND_LISTING_BY_ID = `
   JOIN farms f ON hb.farm_id = f.id
   WHERE l.id = $1 AND hb.farmer_id = $2
 `;
+}
 
-export const SQL_FIND_LISTING_DETAILS_HEADER = `
+export const SQL_FIND_LISTING_BY_ID = buildFindListingByIdSql(true);
+export const SQL_FIND_LISTING_BY_ID_NO_IMAGE = buildFindListingByIdSql(false);
+
+export function buildFindListingDetailsHeaderSql(includeImageKey = true) {
+  const imageSelect = includeImageKey ? `\n         l.image_key AS "imageKey",` : '';
+  return `
   SELECT l.id,
          l.batch_id AS "batchId",
          l.offered_kg AS "offeredKg",
          l.unit_price_cents AS "unitPriceCents",
          l.valid_from AS "validFrom",
          l.valid_until AS "validUntil",
-         l.status,
+         l.status,${imageSelect}
          l.created_at AS "createdAt",
          c.name AS "cropName",
          g.name AS "gradeName",
@@ -138,6 +152,10 @@ export const SQL_FIND_LISTING_DETAILS_HEADER = `
   JOIN farms f ON hb.farm_id = f.id
   WHERE l.id = $1 AND hb.farmer_id = $2
 `;
+}
+
+export const SQL_FIND_LISTING_DETAILS_HEADER = buildFindListingDetailsHeaderSql(true);
+export const SQL_FIND_LISTING_DETAILS_HEADER_NO_IMAGE = buildFindListingDetailsHeaderSql(false);
 
 export const SQL_FIND_LISTING_ALLOCATIONS = `
   SELECT a.id,
@@ -188,14 +206,16 @@ export const SQL_FIND_LISTING_AUDIT_LOGS = `
   ORDER BY al.occurred_at DESC
 `;
 
-export const SQL_LOCK_LISTING_FOR_UPDATE = `
+export function buildLockListingForUpdateSql(includeImageKey = true) {
+  const imageSelect = includeImageKey ? `\n         l.image_key,` : '';
+  return `
   SELECT l.id,
          l.batch_id,
          l.offered_kg,
          l.unit_price_cents,
          l.valid_from,
          l.valid_until,
-         l.status,
+         l.status,${imageSelect}
          hb.farmer_id,
          hb.farm_id
   FROM listings l
@@ -203,6 +223,25 @@ export const SQL_LOCK_LISTING_FOR_UPDATE = `
   WHERE l.id = $1
   FOR UPDATE OF l
 `;
+}
+
+export const SQL_LOCK_LISTING_FOR_UPDATE = buildLockListingForUpdateSql(true);
+export const SQL_LOCK_LISTING_FOR_UPDATE_NO_IMAGE = buildLockListingForUpdateSql(false);
+
+export function buildFindListingOwnerStatusSql(includeImageKey = true) {
+  const imageSelect = includeImageKey ? `\n         l.image_key,` : '';
+  return `
+  SELECT l.id,
+         l.status,${imageSelect}
+         hb.farmer_id
+  FROM listings l
+  JOIN harvest_batches hb ON l.batch_id = hb.id
+  WHERE l.id = $1
+`;
+}
+
+export const SQL_FIND_LISTING_OWNER_STATUS = buildFindListingOwnerStatusSql(true);
+export const SQL_FIND_LISTING_OWNER_STATUS_NO_IMAGE = buildFindListingOwnerStatusSql(false);
 
 export const SQL_FIND_BATCH_ENCUMBRANCE = `
   SELECT
@@ -244,7 +283,9 @@ export const SQL_FIND_OTHER_ACTIVE_LISTING_ON_BATCH = `
     AND id <> $2
 `;
 
-export const SQL_UPDATE_LISTING_IN_PLACE = `
+export function buildUpdateListingInPlaceSql(includeImageKey = true) {
+  const imageReturn = includeImageKey ? `\n            image_key AS "imageKey",` : '';
+  return `
   UPDATE listings
   SET batch_id = $1,
       offered_kg = $2,
@@ -259,9 +300,13 @@ export const SQL_UPDATE_LISTING_IN_PLACE = `
             unit_price_cents AS "unitPriceCents",
             valid_from AS "validFrom",
             valid_until AS "validUntil",
-            status,
+            status,${imageReturn}
             created_at AS "createdAt"
 `;
+}
+
+export const SQL_UPDATE_LISTING_IN_PLACE = buildUpdateListingInPlaceSql(true);
+export const SQL_UPDATE_LISTING_IN_PLACE_NO_IMAGE = buildUpdateListingInPlaceSql(false);
 
 export const SQL_INSERT_LISTING = `
   INSERT INTO listings (
@@ -276,7 +321,9 @@ export const SQL_INSERT_LISTING = `
   RETURNING id
 `;
 
-export const SQL_UPDATE_LISTING_STATUS = `
+export function buildUpdateListingStatusSql(includeImageKey = true) {
+  const imageReturn = includeImageKey ? `\n            image_key AS "imageKey",` : '';
+  return `
   UPDATE listings
   SET status = $1
   WHERE id = $2
@@ -286,8 +333,20 @@ export const SQL_UPDATE_LISTING_STATUS = `
             unit_price_cents AS "unitPriceCents",
             valid_from AS "validFrom",
             valid_until AS "validUntil",
-            status,
+            status,${imageReturn}
             created_at AS "createdAt"
+`;
+}
+
+export const SQL_UPDATE_LISTING_STATUS = buildUpdateListingStatusSql(true);
+export const SQL_UPDATE_LISTING_STATUS_NO_IMAGE = buildUpdateListingStatusSql(false);
+
+export const SQL_UPDATE_LISTING_IMAGE_KEY = `
+  UPDATE listings
+  SET image_key = $1
+  WHERE id = $2
+  RETURNING id,
+            image_key AS "imageKey"
 `;
 
 export const SQL_INSERT_AUDIT_LOG = `

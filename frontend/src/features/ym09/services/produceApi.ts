@@ -14,6 +14,12 @@ import type {
   PriceChangeRecord,
   PriceTrendPoint,
   ActivityEventRecord,
+  ProduceImageConfirmResponse,
+  ProduceImageDeleteResponse,
+  ProduceImageMimeType,
+  ProduceImageSignatureRequest,
+  ProduceImageSignatureResponse,
+  Ym09ModuleStatusResponse,
 } from '../types/produce';
 
 export interface FetchMyProduceOptions {
@@ -605,5 +611,213 @@ export async function getProduceListingDetails(id: string): Promise<ProduceListi
       return null;
     }
     throw new Error(extractApiErrorMessage(err, 'Failed to load produce listing details.'));
+  }
+}
+
+export const ALLOWED_PRODUCE_IMAGE_MIME_TYPES: readonly ProduceImageMimeType[] = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+
+export const MAX_PRODUCE_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Fetches YM09 module status and capability flags (including temporary image storage availability)
+ * from `GET /api/ym09/status`.
+ */
+export async function getYm09ModuleStatus(
+  options: FetchMyProduceOptions = {}
+): Promise<Ym09ModuleStatusResponse> {
+  if (options.signal?.aborted) {
+    throw createAbortError();
+  }
+
+  try {
+    const response = await api.get<Ym09ModuleStatusResponse>('/ym09/status', {
+      signal: options.signal,
+    });
+    const data = response?.data;
+    return {
+      module: typeof data?.module === 'string' ? data.module : 'ym09',
+      owner: typeof data?.owner === 'string' ? data.owner : '',
+      status: typeof data?.status === 'string' ? data.status : 'ok',
+      capabilities: {
+        imageStorageEnabled: Boolean(data?.capabilities?.imageStorageEnabled),
+      },
+    };
+  } catch (err: unknown) {
+    throw new Error(extractApiErrorMessage(err, 'Failed to check produce module capabilities.'));
+  }
+}
+
+/**
+ * Validates selected image MIME type and byte size on the client before requesting a Cloudinary signature.
+ */
+export function validateProduceImageFile(
+  file: Pick<File, 'type' | 'size'>
+): string | null {
+  const normalizedType = typeof file.type === 'string' ? file.type.trim().toLowerCase() : '';
+  if (!ALLOWED_PRODUCE_IMAGE_MIME_TYPES.includes(normalizedType as ProduceImageMimeType)) {
+    return 'Unsupported image format. Please choose a JPEG, PNG, or WebP image.';
+  }
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    return 'Selected image file is empty. Please choose a valid image.';
+  }
+  if (file.size > MAX_PRODUCE_IMAGE_SIZE_BYTES) {
+    return 'Image file exceeds the maximum allowed size of 5 MB.';
+  }
+  return null;
+}
+
+/**
+ * Requests a signed Cloudinary upload payload from YM09 backend for a farmer's produce listing.
+ */
+export async function requestProduceImageSignature(
+  listingId: string,
+  payload: ProduceImageSignatureRequest
+): Promise<ProduceImageSignatureResponse> {
+  try {
+    const response = await api.post<{
+      success?: boolean;
+      data?: ProduceImageSignatureResponse;
+    }>(`/ym09/produce/${listingId}/image/signature`, payload);
+
+    const data = response?.data?.data;
+    if (
+      !data ||
+      typeof data.uploadUrl !== 'string' ||
+      typeof data.apiKey !== 'string' ||
+      typeof data.signature !== 'string' ||
+      typeof data.folder !== 'string' ||
+      typeof data.publicId !== 'string' ||
+      typeof data.fullPublicId !== 'string'
+    ) {
+      throw new Error('Invalid response received when requesting Cloudinary upload signature.');
+    }
+    return data;
+  } catch (err: unknown) {
+    throw new Error(extractApiErrorMessage(err, 'Failed to prepare produce image upload.'));
+  }
+}
+
+/**
+ * Uploads an image directly to Cloudinary via multipart FormData POST without sending app auth headers.
+ */
+export async function uploadFileToCloudinary(
+  file: Blob | File,
+  signatureData: ProduceImageSignatureResponse,
+  onProgress?: (percent: number) => void
+): Promise<{ publicId: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('api_key', signatureData.apiKey);
+  formData.append('timestamp', String(signatureData.timestamp));
+  formData.append('signature', signatureData.signature);
+  formData.append('folder', signatureData.folder);
+  formData.append('public_id', signatureData.publicId);
+
+  try {
+    const response = await axios.post<{ public_id?: string }>(signatureData.uploadUrl, formData, {
+      onUploadProgress: (progressEvent) => {
+        if (!onProgress) return;
+        const total = progressEvent.total || (file instanceof Blob ? file.size : 0);
+        if (total > 0) {
+          const pct = Math.min(100, Math.max(0, Math.round((progressEvent.loaded / total) * 100)));
+          onProgress(pct);
+        }
+      },
+    });
+    onProgress?.(100);
+    const uploadedPublicId =
+      typeof response?.data?.public_id === 'string' && response.data.public_id.trim()
+        ? response.data.public_id.trim()
+        : signatureData.fullPublicId;
+    return { publicId: uploadedPublicId };
+  } catch (err: unknown) {
+    throw new Error(
+      extractApiErrorMessage(err, 'Failed to upload image file to Cloudinary.')
+    );
+  }
+}
+
+/**
+ * Confirms an uploaded Cloudinary public ID on the backend so it is verified and stored in listings.image_key.
+ */
+export async function confirmProduceImageUpload(
+  listingId: string,
+  publicId: string
+): Promise<ProduceImageConfirmResponse> {
+  try {
+    const response = await api.post<{
+      success?: boolean;
+      data?: ProduceImageConfirmResponse;
+    }>(`/ym09/produce/${listingId}/image/confirm`, { publicId });
+
+    const data = response?.data?.data;
+    if (!data || typeof data.id !== 'string') {
+      throw new Error('Invalid response received when confirming uploaded produce image.');
+    }
+    return {
+      id: data.id,
+      imageUrl: typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null,
+    };
+  } catch (err: unknown) {
+    throw new Error(extractApiErrorMessage(err, 'Failed to confirm uploaded produce image.'));
+  }
+}
+
+/**
+ * Full 3-step Cloudinary upload workflow for a listing image:
+ * 1) Request signed upload params -> 2) Multipart POST directly to Cloudinary -> 3) Confirm on backend.
+ */
+export async function uploadProduceImageWorkflow(
+  listingId: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ imageUrl: string | null; publicId: string }> {
+  const validationError = validateProduceImageFile(file);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  const contentType = file.type.trim().toLowerCase() as ProduceImageMimeType;
+  const signatureData = await requestProduceImageSignature(listingId, {
+    contentType,
+    fileSizeBytes: file.size,
+  });
+
+  const uploaded = await uploadFileToCloudinary(file, signatureData, onProgress);
+  const confirmed = await confirmProduceImageUpload(listingId, uploaded.publicId);
+
+  return {
+    imageUrl: confirmed.imageUrl,
+    publicId: uploaded.publicId,
+  };
+}
+
+/**
+ * Deletes an existing produce image from Cloudinary and clears listings.image_key.
+ */
+export async function deleteProduceImage(
+  listingId: string
+): Promise<ProduceImageDeleteResponse> {
+  try {
+    const response = await api.delete<{
+      success?: boolean;
+      data?: ProduceImageDeleteResponse;
+    }>(`/ym09/produce/${listingId}/image`);
+
+    const data = response?.data?.data;
+    if (!data || typeof data.id !== 'string') {
+      throw new Error('Invalid response received when removing produce image.');
+    }
+    return {
+      id: data.id,
+      imageUrl: null,
+      removed: Boolean(data.removed),
+    };
+  } catch (err: unknown) {
+    throw new Error(extractApiErrorMessage(err, 'Failed to remove produce image.'));
   }
 }

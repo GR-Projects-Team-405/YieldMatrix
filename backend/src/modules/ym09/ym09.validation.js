@@ -1,9 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import {
   ALLOWED_CREATE_FIELDS,
+  ALLOWED_IMAGE_CONFIRM_FIELDS,
+  ALLOWED_IMAGE_MIME_TYPES,
+  ALLOWED_IMAGE_UPLOAD_FIELDS,
   ALLOWED_UPDATE_FIELDS,
+  CLOUDINARY_BASE_FOLDER,
   CREATE_ALLOWED_INITIAL_STATUSES,
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
+  IMAGE_MIME_TO_EXT,
   LISTING_STATUS,
   MAX_KG_DECIMALS,
   MAX_KG_EXCLUSIVE,
@@ -11,6 +17,7 @@ import {
   VALID_LISTING_STATUSES,
   VALID_LISTING_TRANSITIONS,
   createValidationError,
+  getMaxImageFileSizeBytes,
 } from './ym09.constants.js';
 
 /**
@@ -431,5 +438,110 @@ export function validateUpdateStatusPayload(body) {
 
   return {
     status: validateListingStatus(body.status),
+  };
+}
+
+/**
+ * Generates an unpredictable listing-scoped Cloudinary folder and public ID.
+ * Never trusts client-supplied filenames, folders, or paths.
+ */
+export function buildListingCloudinaryPublicId(listingId, baseFolder = CLOUDINARY_BASE_FOLDER) {
+  const normalizedBase =
+    typeof baseFolder === 'string' && baseFolder.trim()
+      ? baseFolder.trim().replace(/^\/+|\/+$/g, '')
+      : CLOUDINARY_BASE_FOLDER;
+  const folder = `${normalizedBase}/${listingId}`;
+  const publicId = randomUUID();
+  return {
+    folder,
+    publicId,
+    fullPublicId: `${folder}/${publicId}`,
+  };
+}
+
+/**
+ * Validates POST /api/ym09/produce/:id/image/signature request payload.
+ */
+export function validateImageUploadRequestPayload(
+  body,
+  maxBytes = getMaxImageFileSizeBytes()
+) {
+  if (!isPlainObject(body)) {
+    throw createValidationError('Request body must be a JSON object.');
+  }
+
+  assertAllowedFields(body, ALLOWED_IMAGE_UPLOAD_FIELDS);
+
+  const normalizedType =
+    typeof body.contentType === 'string' ? body.contentType.trim().toLowerCase() : '';
+  if (!ALLOWED_IMAGE_MIME_TYPES.includes(normalizedType) || !IMAGE_MIME_TO_EXT[normalizedType]) {
+    throw createValidationError('Unsupported image type. Allowed types: JPEG, PNG, WebP.', {
+      contentType: 'Allowed image formats are image/jpeg, image/png, and image/webp.',
+    });
+  }
+
+  const size =
+    typeof body.fileSizeBytes === 'number'
+      ? body.fileSizeBytes
+      : Number(body.fileSizeBytes);
+  if (!Number.isInteger(size) || size <= 0) {
+    throw createValidationError('fileSizeBytes must be a positive integer.', {
+      fileSizeBytes: 'Image size must be greater than 0 bytes.',
+    });
+  }
+
+  if (size > maxBytes) {
+    const maxMb = (maxBytes / (1024 * 1024)).toFixed(maxBytes % (1024 * 1024) === 0 ? 0 : 1);
+    throw createValidationError(`Image file exceeds the maximum allowed size of ${maxMb} MB.`, {
+      fileSizeBytes: `Maximum allowed file size is ${maxMb} MB.`,
+    });
+  }
+
+  return {
+    contentType: normalizedType,
+    fileSizeBytes: size,
+  };
+}
+
+/**
+ * Validates POST /api/ym09/produce/:id/image/confirm request payload.
+ * Enforces strict listing-scoped Cloudinary publicId and forbids path traversal or external URLs.
+ */
+export function validateImageConfirmPayload(
+  body,
+  listingId,
+  baseFolder = CLOUDINARY_BASE_FOLDER
+) {
+  if (!isPlainObject(body)) {
+    throw createValidationError('Request body must be a JSON object.');
+  }
+
+  assertAllowedFields(body, ALLOWED_IMAGE_CONFIRM_FIELDS);
+
+  const rawPublicId = typeof body.publicId === 'string' ? body.publicId.trim() : '';
+  const normalizedBase =
+    typeof baseFolder === 'string' && baseFolder.trim()
+      ? baseFolder.trim().replace(/^\/+|\/+$/g, '')
+      : CLOUDINARY_BASE_FOLDER;
+  const escapedFolder = `${normalizedBase}/${listingId}`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const strictPublicIdRegex = new RegExp(
+    `^${escapedFolder}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
+    'i'
+  );
+
+  if (
+    !rawPublicId ||
+    rawPublicId.includes('..') ||
+    rawPublicId.includes('\\') ||
+    rawPublicId.includes('://') ||
+    !strictPublicIdRegex.test(rawPublicId)
+  ) {
+    throw createValidationError('Invalid Cloudinary public ID for this listing.', {
+      publicId: 'Public ID does not match the expected listing image path.',
+    });
+  }
+
+  return {
+    publicId: rawPublicId,
   };
 }

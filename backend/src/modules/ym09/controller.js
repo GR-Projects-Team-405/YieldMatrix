@@ -148,6 +148,64 @@ export function createYm09Controller(service = defaultService) {
     }
   }
 
+  async function requestProduceImageSignature(req, res, next) {
+    try {
+      const data = await service.requestFarmerProduceImageUploadSignature({
+        listingId: req.params.id,
+        farmerId: req.user?.id,
+        userRole: req.user?.role,
+        payload: req.body,
+      });
+
+      return res.json({
+        success: true,
+        data,
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      return handleControllerError(error, req, res, next);
+    }
+  }
+
+  async function confirmProduceImageUpload(req, res, next) {
+    try {
+      const data = await service.confirmFarmerProduceImageUpload({
+        listingId: req.params.id,
+        farmerId: req.user?.id,
+        userRole: req.user?.role,
+        requestId: req.requestId,
+        payload: req.body,
+      });
+
+      return res.json({
+        success: true,
+        data,
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      return handleControllerError(error, req, res, next);
+    }
+  }
+
+  async function deleteProduceImage(req, res, next) {
+    try {
+      const data = await service.deleteFarmerProduceImage({
+        listingId: req.params.id,
+        farmerId: req.user?.id,
+        userRole: req.user?.role,
+        requestId: req.requestId,
+      });
+
+      return res.json({
+        success: true,
+        data,
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      return handleControllerError(error, req, res, next);
+    }
+  }
+
   return {
     getStatus,
     getProduceListings,
@@ -156,6 +214,9 @@ export function createYm09Controller(service = defaultService) {
     createProduceListing,
     updateProduceListing,
     updateProduceListingStatus,
+    requestProduceImageSignature,
+    confirmProduceImageUpload,
+    deleteProduceImage,
   };
 }
 
@@ -169,4 +230,7 @@ export const {
   createProduceListing,
   updateProduceListing,
   updateProduceListingStatus,
+  requestProduceImageSignature,
+  confirmProduceImageUpload,
+  deleteProduceImage,
 } = defaultController;

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ImageOff } from 'lucide-react';
 import { Button } from '../../../components/Button';
@@ -38,6 +39,11 @@ export function ProduceTable({
   onSelectStatusAction,
 }: ProduceTableProps) {
   const navigate = useNavigate();
+  const [brokenImageKeys, setBrokenImageKeys] = useState<Record<string, true>>({});
+
+  useEffect(() => {
+    setBrokenImageKeys({});
+  }, [listings]);
 
   const handleRowClick = (e: React.MouseEvent, listingId: string) => {
     const target = e.target as HTMLElement;
@@ -96,11 +102,17 @@ export function ProduceTable({
             {/* 1. Produce (Thumbnail + Name Link + Grade) */}
             <td>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {listing.imageUrl ? (
+                {listing.imageUrl && !brokenImageKeys[`${listing.id}:${listing.imageUrl}`] ? (
                   <img
                     src={listing.imageUrl}
                     alt={listing.cropName}
                     className="ym09-table-thumb"
+                    onError={() =>
+                      setBrokenImageKeys((prev) => ({
+                        ...prev,
+                        [`${listing.id}:${listing.imageUrl}`]: true,
+                      }))
+                    }
                   />
                 ) : (
                   <div

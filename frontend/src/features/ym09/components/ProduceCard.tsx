@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ImageOff, MapPin, Package, Sprout } from 'lucide-react';
 import {
@@ -29,6 +29,10 @@ interface ProduceCardProps {
 export function ProduceCard({ listing, onSelectStatusAction }: ProduceCardProps) {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [listing.id, listing.imageUrl]);
 
   const priceRupees = Math.round(listing.unitPriceCents / 100).toLocaleString('en-US');
   const statusLabel = formatListingStatusLabel(listing.status);

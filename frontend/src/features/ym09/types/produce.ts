@@ -291,3 +291,43 @@ export interface ProduceListingDetailView extends ProduceListingView {
   priceTrend: PriceTrendPoint[];
   activityLog: ActivityEventRecord[];
 }
+
+export type ProduceImageMimeType = 'image/jpeg' | 'image/png' | 'image/webp';
+
+export interface ProduceImageSignatureRequest {
+  contentType: ProduceImageMimeType;
+  fileSizeBytes: number;
+}
+
+export interface ProduceImageSignatureResponse {
+  uploadUrl: string;
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+  publicId: string;
+  fullPublicId: string;
+}
+
+export interface ProduceImageConfirmResponse {
+  id: string;
+  imageUrl: string | null;
+}
+
+export interface ProduceImageDeleteResponse {
+  id: string;
+  imageUrl: null;
+  removed: boolean;
+}
+
+export interface Ym09ModuleCapabilities {
+  imageStorageEnabled: boolean;
+}
+
+export interface Ym09ModuleStatusResponse {
+  module: string;
+  owner: string;
+  status: string;
+  capabilities?: Ym09ModuleCapabilities;
+}

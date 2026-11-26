@@ -21,6 +21,9 @@ const entrySource = `
   export { OverviewTab } from ${JSON.stringify(path.join(__dirname, 'components/details/OverviewTab.tsx'))};
   export { ProduceSummaryCard } from ${JSON.stringify(path.join(__dirname, 'components/details/ProduceSummaryCard.tsx'))};
   export { ProduceInformationForm } from ${JSON.stringify(path.join(__dirname, 'components/add-produce/ProduceInformationForm.tsx'))};
+  export { ProduceImageSelector } from ${JSON.stringify(path.join(__dirname, 'components/add-produce/ProduceImageSelector.tsx'))};
+  export { ProduceCard } from ${JSON.stringify(path.join(__dirname, 'components/ProduceCard.tsx'))};
+  export { default as axios } from 'axios';
   export { default as apiClient } from ${JSON.stringify(path.resolve(__dirname, '../../services/api.ts'))};
 `;
 
@@ -674,4 +677,333 @@ test('YM09 API client calls real backend endpoints, unwraps DTOs, handles status
   } finally {
     ym09.apiClient.defaults.adapter = originalAdapter;
   }
+});
+
+test('Cloudinary validation, signed FormData upload workflow, retry/replacement, deleteProduceImage, and image fallback UI', async () => {
+  assert.equal(
+    ym09.produceApi.validateProduceImageFile({ type: 'image/jpeg', size: 1024 }),
+    null
+  );
+  assert.equal(
+    ym09.produceApi.validateProduceImageFile({ type: 'image/png', size: 2048 }),
+    null
+  );
+  assert.equal(
+    ym09.produceApi.validateProduceImageFile({ type: 'image/webp', size: 4096 }),
+    null
+  );
+  assert.match(
+    ym09.produceApi.validateProduceImageFile({ type: 'image/gif', size: 1024 }),
+    /JPEG, PNG, or WebP/i
+  );
+  assert.match(
+    ym09.produceApi.validateProduceImageFile({ type: 'image/jpeg', size: 0 }),
+    /empty/i
+  );
+  assert.match(
+    ym09.produceApi.validateProduceImageFile({ type: 'image/webp', size: 6 * 1024 * 1024 }),
+    /5 MB/i
+  );
+
+  const originalApiAdapter = ym09.apiClient.defaults.adapter;
+  const originalAxiosAdapter = ym09.axios.defaults.adapter;
+  const apiCalls = [];
+  const cloudinaryCalls = [];
+  const listingId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const folder = `yieldmatrix/produce/${listingId}`;
+  const leafPublicId = '11111111-1111-4111-8111-111111111111';
+  const fullPublicId = `${folder}/${leafPublicId}`;
+  const replacementLeafId = '22222222-2222-4222-8222-222222222222';
+  const replacementFullId = `${folder}/${replacementLeafId}`;
+  const cloudinaryUploadUrl = 'https://api.cloudinary.com/v1_1/demo-cloud/image/upload';
+  const publicUrl = `https://res.cloudinary.com/demo-cloud/image/upload/${fullPublicId}`;
+  const replacementUrl = `https://res.cloudinary.com/demo-cloud/image/upload/${replacementFullId}`;
+
+  let sigCallCount = 0;
+  let failNextCloudinaryPost = false;
+
+  try {
+    ym09.apiClient.defaults.adapter = async (config) => {
+      apiCalls.push({
+        method: config.method,
+        url: config.url,
+        data: config.data ? JSON.parse(config.data) : undefined,
+      });
+
+      if (config.url === `/ym09/produce/${listingId}/image/signature` && config.method === 'post') {
+        sigCallCount += 1;
+        const activeLeaf = sigCallCount === 1 ? leafPublicId : replacementLeafId;
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+          data: {
+            success: true,
+            data: {
+              uploadUrl: cloudinaryUploadUrl,
+              cloudName: 'demo-cloud',
+              apiKey: 'demo-api-key',
+              timestamp: 1795671200,
+              signature: `sig-${activeLeaf}`,
+              folder,
+              publicId: activeLeaf,
+              fullPublicId: `${folder}/${activeLeaf}`,
+            },
+          },
+        };
+      }
+
+      if (config.url === `/ym09/produce/${listingId}/image/confirm` && config.method === 'post') {
+        const body = JSON.parse(config.data);
+        const resolvedUrl = body.publicId === replacementFullId ? replacementUrl : publicUrl;
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+          data: {
+            success: true,
+            data: {
+              id: listingId,
+              imageUrl: resolvedUrl,
+            },
+          },
+        };
+      }
+
+      if (config.url === `/ym09/produce/${listingId}/image` && config.method === 'delete') {
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+          data: {
+            success: true,
+            data: {
+              id: listingId,
+              imageUrl: null,
+              removed: true,
+            },
+          },
+        };
+      }
+
+      throw new Error(`Unexpected API request: ${config.method} ${config.url}`);
+    };
+
+    ym09.axios.defaults.adapter = async (config) => {
+      const headersObj = config.headers?.toJSON ? config.headers.toJSON() : { ...config.headers };
+      const isFormData = config.data instanceof FormData;
+      const formFields = isFormData ? Object.fromEntries(config.data.entries()) : {};
+      cloudinaryCalls.push({
+        method: config.method,
+        url: config.url,
+        headers: headersObj,
+        isFormData,
+        formKeys: Object.keys(formFields).sort(),
+        apiKey: formFields.api_key,
+        folder: formFields.folder,
+        publicId: formFields.public_id,
+        signature: formFields.signature,
+        timestamp: formFields.timestamp,
+      });
+
+      if (config.onUploadProgress) {
+        config.onUploadProgress({ loaded: 512, total: 1024 });
+      }
+      if (failNextCloudinaryPost) {
+        failNextCloudinaryPost = false;
+        const err = new Error('Cloudinary upload rejected');
+        err.isAxiosError = true;
+        err.response = { status: 400, data: { error: { message: 'Upload timeout' } } };
+        throw err;
+      }
+      return {
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+        data: {
+          public_id: `${formFields.folder}/${formFields.public_id}`,
+        },
+      };
+    };
+
+    const progressUpdates = [];
+    const mockFile = new File([new Uint8Array(1024)], 'tomato.webp', { type: 'image/webp' });
+    const uploaded = await ym09.produceApi.uploadProduceImageWorkflow(listingId, mockFile, (pct) => {
+      progressUpdates.push(pct);
+    });
+
+    assert.equal(uploaded.publicId, fullPublicId);
+    assert.equal(uploaded.imageUrl, publicUrl);
+    assert.deepEqual(progressUpdates, [50, 100]);
+    assert.equal(apiCalls.length, 2);
+    assert.equal(apiCalls[0].url, `/ym09/produce/${listingId}/image/signature`);
+    assert.equal(apiCalls[1].url, `/ym09/produce/${listingId}/image/confirm`);
+    assert.deepEqual(apiCalls[1].data, { publicId: fullPublicId });
+
+    assert.equal(cloudinaryCalls.length, 1);
+    assert.equal(cloudinaryCalls[0].method, 'post');
+    assert.equal(cloudinaryCalls[0].url, cloudinaryUploadUrl);
+    assert.equal(cloudinaryCalls[0].isFormData, true);
+    assert.deepEqual(cloudinaryCalls[0].formKeys, [
+      'api_key',
+      'file',
+      'folder',
+      'public_id',
+      'signature',
+      'timestamp',
+    ]);
+    assert.equal(cloudinaryCalls[0].apiKey, 'demo-api-key');
+    assert.equal(cloudinaryCalls[0].folder, folder);
+    assert.equal(cloudinaryCalls[0].publicId, leafPublicId);
+    assert.equal(cloudinaryCalls[0].signature, `sig-${leafPublicId}`);
+    assert.equal(cloudinaryCalls[0].headers.Authorization, undefined);
+
+    // Simulate upload failure followed by retry + replacement
+    failNextCloudinaryPost = true;
+    await assert.rejects(
+      () => ym09.produceApi.uploadProduceImageWorkflow(listingId, mockFile),
+      /Cloudinary upload rejected/i
+    );
+
+    const retried = await ym09.produceApi.uploadProduceImageWorkflow(listingId, mockFile);
+    assert.equal(retried.publicId, replacementFullId);
+    assert.equal(retried.imageUrl, replacementUrl);
+
+    const deleted = await ym09.produceApi.deleteProduceImage(listingId);
+    assert.deepEqual(deleted, { id: listingId, imageUrl: null, removed: true });
+  } finally {
+    ym09.apiClient.defaults.adapter = originalApiAdapter;
+    ym09.axios.defaults.adapter = originalAxiosAdapter;
+  }
+
+  // Verify ProduceCard & ProduceImageSelector fallback & active image rendering
+  const cardWithoutImageHtml = renderDetailsElement(ym09.ProduceCard, {
+    listing: {
+      id: listingId,
+      batchId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      cropName: 'Tomato',
+      category: 'Vegetables',
+      gradeName: 'Grade A',
+      farmId: 'f1111111-1111-1111-1111-111111111111',
+      farmName: 'GreenField Farm',
+      district: 'Nuwara Eliya',
+      unitPriceCents: 32000,
+      offeredKg: 100,
+      availableKg: 80,
+      reservedKg: 20,
+      committedKg: 10,
+      status: 'active',
+      validFrom: '2026-11-15T00:00:00Z',
+      validUntil: '2026-11-30T23:59:59Z',
+      createdAt: '2026-11-15T08:00:00Z',
+    },
+  });
+  assert.match(cardWithoutImageHtml, /Image cannot be shown/);
+
+  const cardWithImageHtml = renderDetailsElement(ym09.ProduceCard, {
+    listing: {
+      id: listingId,
+      batchId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      cropName: 'Tomato',
+      category: 'Vegetables',
+      gradeName: 'Grade A',
+      farmId: 'f1111111-1111-1111-1111-111111111111',
+      farmName: 'GreenField Farm',
+      district: 'Nuwara Eliya',
+      unitPriceCents: 32000,
+      offeredKg: 100,
+      availableKg: 80,
+      reservedKg: 20,
+      committedKg: 10,
+      status: 'active',
+      imageUrl: publicUrl,
+      validFrom: '2026-11-15T00:00:00Z',
+      validUntil: '2026-11-30T23:59:59Z',
+      createdAt: '2026-11-15T08:00:00Z',
+    },
+  });
+  assert.match(cardWithImageHtml, new RegExp(publicUrl));
+
+  const selectorEmptyHtml = renderDetailsElement(ym09.ProduceImageSelector, {
+    mode: 'create',
+    selectedFile: null,
+    hasExistingImage: false,
+    imageError: null,
+    uploadProgress: null,
+    isUploading: false,
+    isRemoving: false,
+    onSelectFile: () => {},
+    onClearSelectedFile: () => {},
+    onRemoveExistingImage: async () => {},
+  });
+  assert.match(selectorEmptyHtml, /Image cannot be shown/);
+  assert.match(selectorEmptyHtml, /Choose Image/);
+  assert.match(selectorEmptyHtml, /Stored securely via Cloudinary\./);
+
+  const selectorEditHtml = renderDetailsElement(ym09.ProduceImageSelector, {
+    mode: 'edit',
+    imageUrl: publicUrl,
+    selectedFile: null,
+    hasExistingImage: true,
+    imageError: null,
+    uploadProgress: null,
+    isUploading: false,
+    isRemoving: false,
+    onSelectFile: () => {},
+    onClearSelectedFile: () => {},
+    onRemoveExistingImage: async () => {},
+  });
+  assert.match(selectorEditHtml, /Replace Image/);
+  assert.match(selectorEditHtml, /Remove/);
+});
+
+test('Temporary disabled image-storage mode: getYm09ModuleStatus & ProduceImageSelector disabled state', async () => {
+  const originalAdapter = ym09.apiClient.defaults.adapter;
+  try {
+    ym09.apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/ym09/status' && config.method === 'get') {
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+          data: {
+            module: 'ym09',
+            owner: 'Imalka Randev',
+            status: 'active',
+            capabilities: { imageStorageEnabled: false },
+          },
+        };
+      }
+      throw new Error(`Unexpected request: ${config.method} ${config.url}`);
+    };
+
+    const status = await ym09.produceApi.getYm09ModuleStatus();
+    assert.equal(status.capabilities.imageStorageEnabled, false);
+  } finally {
+    ym09.apiClient.defaults.adapter = originalAdapter;
+  }
+
+  const selectorDisabledHtml = renderDetailsElement(ym09.ProduceImageSelector, {
+    mode: 'create',
+    imageStorageEnabled: false,
+    selectedFile: null,
+    hasExistingImage: false,
+    imageError: null,
+    uploadProgress: null,
+    isUploading: false,
+    isRemoving: false,
+    onSelectFile: () => {},
+    onClearSelectedFile: () => {},
+    onRemoveExistingImage: async () => {},
+  });
+  assert.match(selectorDisabledHtml, /Temporarily unavailable/);
+  assert.match(selectorDisabledHtml, /Image cannot be shown/);
+  assert.match(selectorDisabledHtml, /Image upload is temporarily unavailable/);
+  assert.match(selectorDisabledHtml, /listings\.image_key/);
+  assert.match(selectorDisabledHtml, /Upload Unavailable/);
 });
