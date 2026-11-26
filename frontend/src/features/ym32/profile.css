@@ -1,0 +1,317 @@
+/* YieldMatrix YM32 · Profile Management Styles */
+
+.ym32-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1100px;
+}
+
+/* Header Banner Card */
+.ym32-header-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.ym32-header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.ym32-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--green), #427558);
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(49, 90, 66, 0.22);
+  flex-shrink: 0;
+  border: 3px solid var(--surface);
+}
+
+.ym32-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ym32-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ym32-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.ym32-user-meta {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ym32-user-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ym32-id-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+/* Grid layout for information cards */
+.ym32-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .ym32-sections-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .ym32-header-card,
+  .ym32-edit-header-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ym32-header-card .ym-button {
+    width: 100%;
+  }
+  .ym32-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 22px;
+  }
+}
+
+/* Field list styling inside cards */
+.ym32-fields-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.ym32-field-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+}
+
+.ym32-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ym32-field-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.ym32-unavailable {
+  font-size: 13px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ym32-mono,
+.ym32-field-value.ym32-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--muted);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .ym32-profile {
+    gap: 16px;
+  }
+  .ym32-fields-list,
+  .ym32-form-fields {
+    grid-template-columns: 1fr;
+  }
+  .ym32-field-item {
+    padding: 12px 14px;
+  }
+  .ym32-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 20px;
+  }
+  .ym32-name {
+    font-size: 20px;
+  }
+  .ym32-header-card {
+    gap: 16px;
+  }
+}
+
+.ym32-sync-hint {
+  margin-top: 16px;
+}
+
+/* Edit Profile Styles */
+.ym32-edit-header-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ym32-edit-title-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ym32-back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ym32-back-button:hover {
+  background: var(--soft);
+  color: var(--accent-text);
+  border-color: var(--control-border);
+}
+
+.ym32-edit-headings h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ym32-edit-headings p {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.ym32-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ym32-form-fields {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .ym32-form-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ym32-field-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ym32-input-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ym32-readonly-banner {
+  margin-bottom: 20px;
+}
+
+.ym32-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .ym32-form-actions {
+    flex-direction: column-reverse;
+  }
+  .ym32-form-actions .ym-button {
+    width: 100%;
+  }
+}
+
+/* Error and retry layout */
+.ym32-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+@media (max-width: 640px) {
+  .ym32-error-actions {
+    flex-direction: column;
+  }
+  .ym32-error-actions .ym-button {
+    width: 100%;
+  }
+}
+
+
