@@ -195,6 +195,7 @@ export function PartialMatchShortagePage({
 
   const cropLabel = data.allocations[0]?.crop ?? data.crop ?? 'Produce';
   const gradeLabel = data.allocations[0]?.grade ?? data.grade ?? '';
+  const isPartialDisallowed = Boolean(data.partialBlocked) && shortageKg > 0;
 
   const requestBadgeText = data.requestId
     ? `REQUEST ID: ${data.requestId.slice(0, 12).toUpperCase()}`
@@ -251,9 +252,9 @@ export function PartialMatchShortagePage({
         </div>
       </div>
 
-      {data.partialBlocked && shortageKg > 0 && (
+      {isPartialDisallowed && (
         <Alert type="warning">
-          Partial fulfilment was set to <strong>No</strong> on your request, so {shortageKg.toLocaleString()} kg remains unmatched. You can go back to adjust your request or accept this partial allocation plan below.
+          Partial fulfilment was set to <strong>No</strong> on this request, so this partial plan cannot be accepted while {shortageKg.toLocaleString()} kg remains unmatched. Go back to update your request or allow partial fulfilment.
         </Alert>
       )}
 
@@ -517,7 +518,7 @@ export function PartialMatchShortagePage({
           variant="primary"
           className="ym15-submit-btn"
           onClick={onAcceptPartialPlan}
-          disabled={data.allocations.length === 0}
+          disabled={data.allocations.length === 0 || isPartialDisallowed}
         >
           Accept partial plan →
         </Button>

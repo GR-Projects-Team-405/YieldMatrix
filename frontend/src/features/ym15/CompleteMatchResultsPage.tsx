@@ -72,7 +72,7 @@ export function CompleteMatchResultsPage({
   onViewAllocationBreakdown,
 }: CompleteMatchResultsPageProps) {
   const fulfillmentPercent =
-    data.requestedKg > 0 ? Math.round((data.matchedKg / data.requestedKg) * 100) : 0;
+    data.requestedKg > 0 ? Math.min(100, Math.round((data.matchedKg / data.requestedKg) * 100)) : 0;
 
   const budgetSubtext =
     data.maxBudgetLkr !== null
@@ -81,18 +81,22 @@ export function CompleteMatchResultsPage({
         : `Exceeds LKR ${data.maxBudgetLkr.toLocaleString()} budget`
       : 'No budget cap set';
 
+  const isCompleteMatch = data.status === 'complete' && data.matchedKg > 0;
+
   return (
     <div className="ym15-page">
       <div className="ym15-results-topbar">
         <div>
-          <h2 className="ym15-results-title">Complete match results</h2>
+          <h2 className="ym15-results-title">
+            {isCompleteMatch ? 'Complete match results' : 'No matching supply found'}
+          </h2>
           <p className="ym15-lead-copy">
             {data.growerCount > 0
               ? `Your ${data.requestedKg.toLocaleString()} kg request matched across ${data.growerCount} eligible grower listing(s).`
               : `No eligible grower listings matched your ${data.requestedKg.toLocaleString()} kg request.`}
           </p>
         </div>
-        <StatusBadge status={data.status === 'complete' ? 'ACTIVE' : 'PENDING'} />
+        <StatusBadge status={isCompleteMatch ? 'ACTIVE' : 'PENDING'} />
       </div>
 
       <div className="ym15-kpi-grid">
@@ -119,13 +123,16 @@ export function CompleteMatchResultsPage({
         </div>
 
         <div className="ym15-kpi-card-wrap">
-          <span className="ym15-kpi-icon-badge ym15-kpi-icon-badge--success" aria-hidden="true">
+          <span
+            className={`ym15-kpi-icon-badge ${data.shortageKg === 0 ? 'ym15-kpi-icon-badge--success' : 'ym15-kpi-icon-badge--shortage'}`}
+            aria-hidden="true"
+          >
             <CheckCircleIcon />
           </span>
           <StatCard
             label="SHORTAGE"
             value={`${data.shortageKg.toLocaleString()} kg`}
-            subtext={data.shortageKg === 0 ? 'No shortage' : 'Unmatched quantity'}
+            subtext={data.shortageKg === 0 && data.matchedKg > 0 ? 'No shortage' : 'Unmatched quantity'}
           />
         </div>
 
@@ -276,7 +283,13 @@ export function CompleteMatchResultsPage({
         <Button type="button" variant="outline" onClick={onBackToRequest}>
           ← Back to request
         </Button>
-        <Button type="button" variant="primary" className="ym15-submit-btn" onClick={onViewAllocationBreakdown}>
+        <Button
+          type="button"
+          variant="primary"
+          className="ym15-submit-btn"
+          onClick={onViewAllocationBreakdown}
+          disabled={data.allocations.length === 0}
+        >
           View allocation breakdown →
         </Button>
       </div>

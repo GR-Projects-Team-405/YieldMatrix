@@ -9,6 +9,21 @@ const DISTRICT_COORDS = {
   'Nuwara Eliya': { lat: 6.9497, lon: 80.7891 },
 };
 
+const MONTH_MAP = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
 function haversineKm(lat1, lon1, lat2, lon2) {
   if (
     lat1 === null ||
@@ -53,6 +68,56 @@ function isValidThreeDecimalNumber(value) {
     return parts.length === 1 || parts[1].length <= 3;
   }
   return false;
+}
+
+function parseDeliveryDateMs(deliveryWindow) {
+  if (!deliveryWindow) return null;
+
+  const isoMatch = deliveryWindow.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (isoMatch) {
+    const year = Number(isoMatch[1]);
+    const month = Number(isoMatch[2]) - 1;
+    const day = Number(isoMatch[3]);
+    const dt = new Date(Date.UTC(year, month, day, 12, 0, 0));
+    return Number.isNaN(dt.getTime()) ? null : dt.getTime();
+  }
+
+  const namedMatch = deliveryWindow.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})\b/);
+  if (namedMatch) {
+    const day = Number(namedMatch[1]);
+    const monthIdx = MONTH_MAP[namedMatch[2].slice(0, 3).toLowerCase()];
+    const year = Number(namedMatch[3]);
+    if (monthIdx !== undefined) {
+      const dt = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0));
+      return Number.isNaN(dt.getTime()) ? null : dt.getTime();
+    }
+  }
+
+  return null;
+}
+
+function isCompatibleWithDeliveryWindow(row, deliveryDateMs) {
+  if (deliveryDateMs === null) return true;
+
+  const validFromMs = row.valid_from ? new Date(row.valid_from).getTime() : null;
+  const validUntilMs = row.valid_until ? new Date(row.valid_until).getTime() : null;
+
+  if (validFromMs !== null && !Number.isNaN(validFromMs) && deliveryDateMs < validFromMs - 86400000) {
+    return false;
+  }
+  if (validUntilMs !== null && !Number.isNaN(validUntilMs) && deliveryDateMs > validUntilMs + 86400000) {
+    return false;
+  }
+
+  const harvestDateRaw = row.actual_harvest_date || row.planned_harvest_date;
+  if (harvestDateRaw) {
+    const harvestMs = new Date(harvestDateRaw).getTime();
+    if (!Number.isNaN(harvestMs) && deliveryDateMs < harvestMs - 86400000) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export async function getStatus(req, res, next) {
@@ -110,6 +175,7 @@ export async function runBulkMatch(req, res, next) {
     const requestedKg = Number(Number(body.requiredKg).toFixed(3));
 
     let maxBudgetLkr = null;
+    let maxBudgetCents = null;
     if (body.maxBudgetLkr !== null && body.maxBudgetLkr !== undefined && String(body.maxBudgetLkr).trim() !== '') {
       const budgetNum = Number(body.maxBudgetLkr);
       if (!Number.isFinite(budgetNum) || budgetNum <= 0) {
@@ -119,6 +185,7 @@ export async function runBulkMatch(req, res, next) {
         });
       }
       maxBudgetLkr = Number(budgetNum.toFixed(2));
+      maxBudgetCents = Math.round(maxBudgetLkr * 100);
     }
 
     const { rows: candidateRows } = await pool.query(
@@ -164,13 +231,16 @@ export async function runBulkMatch(req, res, next) {
     );
 
     const destCoords = DISTRICT_COORDS[destination] ?? null;
+    const deliveryDateMs = parseDeliveryDateMs(deliveryWindow);
 
     const rankedCandidates = candidateRows
+      .filter((row) => isCompatibleWithDeliveryWindow(row, deliveryDateMs))
       .map((row) => {
         const availableByBatch = Math.max(0, Number(row.available_kg ?? 0));
         const offeredCap = Math.max(0, Number(row.offered_kg ?? 0));
         const effectiveAvailableKg = Number(Math.min(availableByBatch, offeredCap).toFixed(3));
-        const unitPriceLkr = Number((Number(row.unit_price_cents) / 100).toFixed(2));
+        const unitPriceCents = Number(row.unit_price_cents);
+        const unitPriceLkr = Number((unitPriceCents / 100).toFixed(2));
         const distanceKm = destCoords
           ? haversineKm(row.farm_latitude, row.farm_longitude, destCoords.lat, destCoords.lon)
           : null;
@@ -186,7 +256,7 @@ export async function runBulkMatch(req, res, next) {
           grade: row.grade_name,
           availableKg: effectiveAvailableKg,
           unitPriceLkr,
-          unitPriceCents: Number(row.unit_price_cents),
+          unitPriceCents,
           distanceKm,
         };
       })
@@ -204,7 +274,7 @@ export async function runBulkMatch(req, res, next) {
       });
 
     let remainingNeededKg = requestedKg;
-    let runningGoodsTotalLkr = 0;
+    let runningGoodsTotalCents = 0;
     const selectedAllocations = [];
     const unselectedCandidates = [];
 
@@ -222,15 +292,16 @@ export async function runBulkMatch(req, res, next) {
           distanceKm: candidate.distanceKm,
           statusLabel: 'Not Selected',
           reasonText:
-            'Not selected because the current selected growers already cover the full quantity at a lower goods total.',
+            'Not selected because higher-ranked eligible listings already fulfilled the requested quantity.',
         });
         continue;
       }
 
       const takeKg = Number(Math.min(remainingNeededKg, candidate.availableKg).toFixed(3));
-      const allocationTotalLkr = Number((takeKg * candidate.unitPriceLkr).toFixed(2));
+      const allocationTotalCents = Math.round(takeKg * candidate.unitPriceCents);
+      const allocationTotalLkr = Number((allocationTotalCents / 100).toFixed(2));
 
-      if (maxBudgetLkr !== null && runningGoodsTotalLkr + allocationTotalLkr > maxBudgetLkr) {
+      if (maxBudgetCents !== null && runningGoodsTotalCents + allocationTotalCents > maxBudgetCents) {
         unselectedCandidates.push({
           id: candidate.listingId,
           growerName: candidate.growerName,
@@ -249,7 +320,7 @@ export async function runBulkMatch(req, res, next) {
 
       const rank = selectedAllocations.length + 1;
       remainingNeededKg = Number((remainingNeededKg - takeKg).toFixed(3));
-      runningGoodsTotalLkr = Number((runningGoodsTotalLkr + allocationTotalLkr).toFixed(2));
+      runningGoodsTotalCents += allocationTotalCents;
 
       selectedAllocations.push({
         id: candidate.listingId,
@@ -275,6 +346,7 @@ export async function runBulkMatch(req, res, next) {
 
     const matchedKg = Number((requestedKg - remainingNeededKg).toFixed(3));
     const shortageKg = remainingNeededKg;
+    const goodsTotalLkr = Number((runningGoodsTotalCents / 100).toFixed(2));
     const status = shortageKg === 0 ? 'complete' : 'partial';
     const partialBlocked = status === 'partial' && !allowPartial;
     const matchedPercent = requestedKg > 0 ? Math.min(100, Math.round((matchedKg / requestedKg) * 100)) : 0;
@@ -294,9 +366,9 @@ export async function runBulkMatch(req, res, next) {
       shortageKg,
       matchedPercent,
       shortagePercent,
-      goodsTotalLkr: runningGoodsTotalLkr,
+      goodsTotalLkr,
       maxBudgetLkr,
-      withinBudget: maxBudgetLkr === null ? true : runningGoodsTotalLkr <= maxBudgetLkr,
+      withinBudget: maxBudgetCents === null ? true : runningGoodsTotalCents <= maxBudgetCents,
       growerCount: selectedAllocations.length,
       allocations: selectedAllocations,
       alternatives: unselectedCandidates,
