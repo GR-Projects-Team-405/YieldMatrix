@@ -68,6 +68,7 @@ export default function WorkspaceLayout() {
   const items = navigation[user.role];
   const path = pathname.split('/')[2] || 'overview';
   const page = items.find((item) => item.path === path)?.label || path.replaceAll('-', ' ');
+  const isTraceDetailPage = pathname.includes('/trace/qr/') || pathname.includes('/trace/verify/');
   return <div className="workspace">
     <a className="skip-link" href="#workspace-content">Skip to content</a>
     {menuOpen && <button className="sidebar-scrim" aria-label="Close menu" onClick={() => setMenuOpen(false)} />}
@@ -79,7 +80,7 @@ export default function WorkspaceLayout() {
       <footer className="sidebar-footer"><div className="growing-card"><Sprout size={20} aria-hidden="true" /><strong>Growing better, together.</strong><p>One shared network, from harvest to handover.</p></div><NavLink className="sidebar-link" to={`/${user.role}/help`} onClick={() => setMenuOpen(false)}><CircleHelp size={16} aria-hidden="true" />Help &amp; support</NavLink><button className="sidebar-link logout-button" onClick={logout}><LogOut size={16} aria-hidden="true" />Switch Role / Logout</button></footer>
     </aside>
     <div className="workspace-body"><header className="workspace-topbar"><button className="mobile-menu icon-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button><div className="workspace-breadcrumb"><span>WORKSPACE</span><span aria-hidden="true">/</span><strong>{page}</strong></div><div className="topbar-actions"><label className="workspace-search"><Search size={16} aria-hidden="true" /><input type="search" placeholder="Search your workspace" aria-label="Search your workspace (module implementation pending)" disabled /></label><NavLink className="icon-button" to={`/${user.role}/notifications`} aria-label="Notifications"><Bell size={18} /></NavLink><button type="button" className="icon-button theme-toggle" aria-label="Dark mode" aria-pressed={darkMode} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setDarkMode((current) => !current)}>{darkMode ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}</button><NavLink className="user-pill" to={`/${user.role}/profile`} aria-label={`My profile: ${user.name}`}><UserRound size={18} aria-hidden="true" /><span>{user.name}</span></NavLink></div></header>
-      <main id="workspace-content" className="workspace-content" tabIndex={-1}><div className="page-heading"><p>{workspaceLabels[user.role]} workspace</p><h1>{page}</h1></div><Outlet /></main>
+      <main id="workspace-content" className="workspace-content" tabIndex={-1}>{!isTraceDetailPage && <div className="page-heading"><p>{workspaceLabels[user.role]} workspace</p><h1>{page}</h1></div>}<Outlet /></main>
     </div>
   </div>;
 }
