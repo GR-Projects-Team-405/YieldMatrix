@@ -284,3 +284,152 @@ export async function createIncident(req, res, next) {
     });
   } catch (error) { next(error); }
 }
+
+// ---------- Handover ----------
+
+const ALLOWED_EVIDENCE = ['image/jpeg', 'image/png', 'application/pdf'];
+
+// Trips this driver can hand over now (picked up, still in transit).
+export async function listPendingHandovers(req, res, next) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.id, t.capacity_kg, o.destination, u.name AS buyer, v.registration AS vehicle,
+              COALESCE(SUM(a.picked_up_kg), 0) AS picked_up_kg
+         FROM trips t
+         JOIN orders o ON o.id = t.order_id
+         JOIN users u ON u.id = o.buyer_id
+         LEFT JOIN vehicles v ON v.id = t.vehicle_id
+         LEFT JOIN trip_stops ts ON ts.trip_id = t.id
+         LEFT JOIN allocations a ON a.id = ts.allocation_id
+        WHERE t.driver_id = $1 AND t.status = 'in_progress'
+        GROUP BY t.id, t.capacity_kg, o.destination, u.name, v.registration
+        ORDER BY t.id`,
+      [req.user.id]
+    );
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        code: shortCode('YM ', r.id),
+        destination: r.destination,
+        buyer: r.buyer,
+        vehicle: r.vehicle,
+        capacityKg: Number(r.capacity_kg),
+        pickedUpKg: Number(r.picked_up_kg),
+      }))
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Runs inside the caller's transaction. Returns { status, body }.
+export async function recordHandover(client, { userId, tripId, handedOverKg, recipient, evidence, operationKey }) {
+  const baseKey = `ym24-handover:${userId}:${operationKey}`;
+
+  const trip = await client.query(
+    `SELECT id, order_id, status FROM trips WHERE id = $1 AND driver_id = $2 FOR UPDATE`,
+    [tripId, userId]
+  );
+  if (trip.rowCount === 0) return { status: 404, body: { message: 'Trip not found.' } };
+
+  // Same key again (double click or retry): nothing new is saved.
+  const dup = await client.query(
+    `SELECT 1 FROM custody_events WHERE starts_with(operation_key, $1) LIMIT 1`,
+    [baseKey + ':']
+  );
+  if (dup.rowCount > 0) return { status: 200, body: { duplicate: true } };
+
+  if (trip.rows[0].status !== 'in_progress') {
+    return { status: 409, body: { message: 'This trip is not waiting for a handover.' } };
+  }
+
+  const allocs = await client.query(
+    `SELECT a.id, a.picked_up_kg
+       FROM trip_stops ts
+       JOIN allocations a ON a.id = ts.allocation_id
+      WHERE ts.trip_id = $1
+      ORDER BY ts.sequence
+      FOR UPDATE OF a`,
+    [tripId]
+  );
+
+  const grams = (v) => Math.round(Number(v) * 1000);
+  const totalPicked = allocs.rows.reduce((sum, a) => sum + grams(a.picked_up_kg), 0);
+  let remaining = grams(handedOverKg);
+  if (totalPicked === 0) return { status: 409, body: { message: 'Nothing has been picked up on this trip.' } };
+  if (remaining > totalPicked) {
+    return { status: 400, body: { message: 'Handover kg cannot exceed the picked-up kg.' } };
+  }
+
+  for (const a of allocs.rows) {
+    const take = Math.min(grams(a.picked_up_kg), remaining);
+    remaining -= take;
+    if (take === 0) continue;
+    const kg = (take / 1000).toFixed(3);
+    await client.query(
+      `INSERT INTO custody_events
+         (allocation_id, trip_id, order_id, event_type, quantity_kg, actor_id, acknowledgement, evidence, operation_key)
+       VALUES ($1, $2, $3, 'handover', $4, $5, $6, $7::jsonb, $8)`,
+      [a.id, tripId, trip.rows[0].order_id, kg, userId, recipient, JSON.stringify(evidence), `${baseKey}:${a.id}`]
+    );
+    await client.query(
+      `UPDATE allocations
+          SET handed_over_kg = $2,
+              status = CASE WHEN status = 'picked_up' THEN 'handed_over' ELSE status END
+        WHERE id = $1`,
+      [a.id, kg]
+    );
+  }
+
+  await client.query(`UPDATE trips SET status = 'handed_over' WHERE id = $1`, [tripId]);
+  return { status: 201, body: { duplicate: false, handedOverKg: grams(handedOverKg) / 1000 } };
+}
+
+export async function createHandover(req, res, next) {
+  const { tripId } = req.params;
+  if (!UUID_RE.test(tripId)) return res.status(400).json({ message: 'Invalid trip.' });
+
+  const body = req.body || {};
+  const kgText = String(body.handedOverKg ?? '').trim();
+  if (!/^\d+(\.\d{1,3})?$/.test(kgText) || Number(kgText) <= 0) {
+    return res.status(400).json({ message: 'Handed-over kg must be a number above 0 with up to 3 decimals.' });
+  }
+  const recipient = typeof body.recipientName === 'string' ? body.recipientName.trim() : '';
+  if (recipient.length < 2 || recipient.length > 100) {
+    return res.status(400).json({ message: 'Recipient name must be 2 to 100 characters.' });
+  }
+  const operationKey = typeof body.operationKey === 'string' ? body.operationKey.trim() : '';
+  if (operationKey.length < 8 || operationKey.length > 100) {
+    return res.status(400).json({ message: 'A valid operation key is required.' });
+  }
+  const rawEvidence = Array.isArray(body.evidence) ? body.evidence : [];
+  if (rawEvidence.length > 5) return res.status(400).json({ message: 'Attach at most 5 files.' });
+  const evidence = [];
+  for (const e of rawEvidence) {
+    if (!e || typeof e.name !== 'string' || !ALLOWED_EVIDENCE.includes(e.type) || !(e.size > 0) || e.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ message: 'Each file must be a JPEG, PNG or PDF up to 5 MB.' });
+    }
+    evidence.push({ name: e.name.slice(0, 200), type: e.type, size: e.size });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await recordHandover(client, {
+      userId: req.user.id,
+      tripId,
+      handedOverKg: Number(kgText),
+      recipient,
+      evidence,
+      operationKey,
+    });
+    if (result.status === 201 || result.status === 200) await client.query('COMMIT');
+    else await client.query('ROLLBACK');
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+}
