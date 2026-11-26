@@ -89,12 +89,41 @@ export async function createIncident(body: NewIncident): Promise<{ id: string; c
   return data.incident;
 }
 
+export interface PendingHandover {
+  id: string;
+  code: string;
+  destination: string;
+  buyer: string;
+  vehicle: string | null;
+  capacityKg: number;
+  pickedUpKg: number;
+}
+
+export interface NewHandover {
+  handedOverKg: number;
+  recipientName: string;
+  evidence?: { name: string; type: string; size: number }[];
+  operationKey: string; // one per confirm, so a double click never records two handovers
+}
+
+export async function getPendingHandovers(): Promise<PendingHandover[]> {
+  const { data } = await api.get<PendingHandover[]>('/ym24/handover');
+  return data;
+}
+
+export async function createHandover(tripId: string, body: NewHandover): Promise<{ duplicate: boolean }> {
+  const { data } = await api.post<{ duplicate: boolean }>(`/ym24/deliveries/${tripId}/handover`, body);
+  return data;
+}
+
 // A short, friendly message for the Alert component.
 export function errorMessage(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
   if (axios.isAxiosError(error)) {
     if (!error.response) return 'Cannot reach the server. Check that the backend is running.';
     const details = error.response.data?.details;
     if (Array.isArray(details) && details.length) return details.join('. ');
+    const message = error.response.data?.message;
+    if ((error.response.status === 400 || error.response.status === 409) && typeof message === 'string') return message;
     if (error.response.status === 404) return 'This item was not found.';
     if (error.response.status === 403) return 'You do not have access to this.';
   }
