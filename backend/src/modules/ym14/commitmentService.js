@@ -121,6 +121,7 @@ export async function fetchCommitmentsList({
       .filter((r) => ['accepted', 'change_pending', 'ready_to_fulfil'].includes(r.status))
       .reduce((sum, r) => sum + Math.round(parseFloat(r.quantity_kg) * parseInt(r.agreed_unit_price_cents, 10)), 0);
     const actionRequiredCount = rows.filter((r) => r.status === 'change_pending').length;
+    const uniqueCropsCount = new Set(rows.map((r) => r.crop_name)).size;
     const tabCounts = {
       all: rows.length,
       accepted: rows.filter((r) => r.status === 'accepted').length,
@@ -136,6 +137,7 @@ export async function fetchCommitmentsList({
         committedKg,
         heldInEscrowCents,
         actionRequiredCount,
+        uniqueCropsCount,
       },
       tabCounts,
       commitments: paginatedItems,
@@ -405,6 +407,8 @@ export async function fetchChangeProposalByCommitmentId(commitmentId, buyerId) {
       commitmentId: r.id,
       reference: `COM-${r.id.substring(0, 4).toUpperCase()}`,
       cropBatch: `Batch #BT-${r.batch_id.substring(0, 4).toUpperCase()} • ${r.farmer_district || 'Sri Lanka'} ${r.crop_name} ${r.grade_name}`,
+      supplierName: `${r.farmer_name} (${r.farmer_district || 'Sri Lanka'})`,
+      proposedQuantityKg: proposedKg,
       proposalExpiresAt: pendingRev.expires_at,
       diff: [
         {
@@ -471,6 +475,7 @@ export async function approveChangeProposal({ commitmentId, buyerId, operationKe
 
   const escrowRefundCents = proposal.financialImpact.escrowAutoRefundCents;
   const revisedHoldCents = proposal.financialImpact.revisedEscrowHoldCents;
+  const revisedKg = proposal.proposedQuantityKg || 480;
 
   // Update PostgreSQL
   let client;
@@ -478,18 +483,20 @@ export async function approveChangeProposal({ commitmentId, buyerId, operationKe
     client = await pool.connect();
     await client.query('BEGIN');
 
-    // Update commitment terms and transition status to accepted
+    // Update commitment terms, quantity_kg, and transition status to accepted
     await client.query(
       `UPDATE future_commitments
        SET status = 'accepted',
+           quantity_kg = $4,
            decisions = decisions || jsonb_build_array(jsonb_build_object(
              'action', 'approved_change',
              'decided_at', now(),
              'actor_id', $2::uuid,
+             'revised_quantity_kg', $4,
              'escrow_refund_cents', $3
            ))
        WHERE id::text = $1`,
-      [proposal.commitmentId || commitmentId, buyerId, escrowRefundCents]
+      [proposal.commitmentId || commitmentId, buyerId, escrowRefundCents, revisedKg]
     );
 
     await client.query('COMMIT');
