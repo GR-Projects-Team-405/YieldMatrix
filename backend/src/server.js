@@ -43,6 +43,7 @@ app.use((req, res, next) => { req.requestId = randomUUID(); res.setHeader('X-Req
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '64kb' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'yieldmatrix-api', requestId: req.requestId }));
+app.get('/health', (req, res) => res.json({ status: 'ok', message: 'YieldMatrix API is running', requestId: req.requestId }));
 app.use('/api/auth', authRoutes);
 
 // YM01 - Aathil Hakam: Public pages. Add routes inside modules/ym01/routes.js.
