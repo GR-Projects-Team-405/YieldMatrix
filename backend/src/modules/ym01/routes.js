@@ -1,8 +1,24 @@
 import { Router } from 'express';
 import { verifyToken, authorizeRoles } from '../../middleware/authMiddleware.js';
-import { getStatus } from './controller.js';
-// YM01 · Aathil Hakam · Public pages
+import {
+  categories,
+  districts,
+  getStatus,
+  harvestDetails,
+  harvestTraceability,
+  harvests,
+  landing,
+  roles,
+} from './controller.js';
+
 const router = Router();
+router.get('/landing', landing);
+router.get('/harvests', harvests);
+router.get('/harvests/:id/traceability', harvestTraceability);
+router.get('/harvests/:id', harvestDetails);
+router.get('/categories', categories);
+router.get('/districts', districts);
+router.get('/roles', roles);
 router.get('/status', verifyToken, authorizeRoles('farmer', 'buyer', 'driver', 'admin'), getStatus);
-// Add module endpoints here. Enforce ownership, assignment and state before private reads/writes.
+
 export default router;

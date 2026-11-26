@@ -37,7 +37,12 @@ BEGIN
   END IF;
 END $$;
 
-INSERT INTO crops (name) VALUES ('Tomato'),('Carrot'),('Cabbage'),('Potato'),('Beans') ON CONFLICT (name) DO NOTHING;
+INSERT INTO crops (name) VALUES
+  ('Tomato'),('Carrot'),('Cabbage'),('Potato'),('Beans'),
+  ('Brinjal'),('Bell Pepper'),('Green Chilli'),('Pumpkin'),('Bitter Gourd'),
+  ('Okra'),('Snake Gourd'),('Cucumber'),('Spinach'),('Lettuce'),
+  ('Radish'),('Beetroot'),('Onion'),('Cauliflower'),('Sweet Potato'),('Corn')
+ON CONFLICT (name) DO NOTHING;
 INSERT INTO grades (name, description) VALUES ('Grade A','Grade A produce'),('Grade B','Grade B produce'),('Grade C','Grade C produce') ON CONFLICT (name) DO NOTHING;
 INSERT INTO farms (id, farmer_id, name, district, pickup_address, latitude, longitude)
 VALUES ('f1111111-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','Green Valley Farm','Nuwara Eliya','Demo pickup location, Nuwara Eliya',6.949700,80.789100)
