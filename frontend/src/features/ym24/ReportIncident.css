@@ -1,0 +1,19 @@
+.ym24-textarea { width: 100%; min-height: 96px; padding: 12px 16px; border: 1px solid var(--control-border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
+.ym24-counter { font-size: 11px; color: var(--muted); text-align: right; }
+
+.ym24-trip-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 32px; margin-top: 4px; }
+.ym24-trip-facts div { display: flex; align-items: baseline; gap: 12px; font-size: 13px; }
+.ym24-trip-facts span { color: var(--muted); }
+.ym24-trip-facts strong { font-weight: 600; }
+
+.ym24-checks { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.ym24-checks li { display: flex; align-items: center; gap: 10px; }
+.ym24-tick { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-size: 11px; background: var(--soft); color: var(--muted); }
+.ym24-tick--done { background: var(--ym24-primary); color: var(--surface); }
+
+.ym24-recent { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; font-size: 13px; }
+.ym24-recent p { margin: 0; }
+
+.ym24-upload--drag { border-color: var(--accent-text); background: var(--soft); }
+.ym24-file-chip { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--canvas); font-size: 13px; }
+.ym24-file-chip span { color: var(--muted); font-size: 12px; }
