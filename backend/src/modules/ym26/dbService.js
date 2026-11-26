@@ -18,16 +18,32 @@ let memoryActiveTrips = JSON.parse(JSON.stringify(initialActiveTrips));
 let memoryIncidents = JSON.parse(JSON.stringify(initialIncidents));
 let memoryDisputes = JSON.parse(JSON.stringify(initialDisputes));
 
+let isDbReachable = null;
+let lastDbCheck = 0;
+const DB_CHECK_INTERVAL = 60000;
+
 /**
  * Check if the PostgreSQL / Neon database is reachable and has the required schema.
  */
 export async function testDbConnection() {
-  if (!process.env.DATABASE_URL) return false;
+  if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('@host/') || process.env.DATABASE_URL.includes('@host:')) {
+    return false;
+  }
+  const now = Date.now();
+  if (isDbReachable === false && (now - lastDbCheck) < DB_CHECK_INTERVAL) {
+    return false;
+  }
   try {
+    lastDbCheck = now;
     const res = await pool.query('SELECT 1 as connected');
-    return res.rows?.length > 0;
+    isDbReachable = (res.rows?.length || 0) > 0;
+    return isDbReachable;
   } catch (error) {
-    console.warn('[YM26] Neon DB check failed, using fallback repository:', error.message);
+    if (isDbReachable !== false) {
+      console.warn('[YM26] Neon DB check failed, using fallback repository:', error.message);
+    }
+    isDbReachable = false;
+    lastDbCheck = now;
     return false;
   }
 }
