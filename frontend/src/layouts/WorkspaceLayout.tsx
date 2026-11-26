@@ -4,9 +4,12 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Bell, Boxes, CalendarDays, ChartNoAxesCombined, CircleHelp, ClipboardCheck, ClipboardList, LandPlot, LayoutDashboard, ListOrdered, LogOut, MapPin, Menu, Moon, Sun, Package, PackageCheck, Route, ScanLine, Search, Settings, ShieldCheck, Sprout, Store, TriangleAlert, Truck, UserRound, Users, Wallet, X, type LucideIcon } from 'lucide-react';
 import { useAuth, type Role } from '../context/AuthContext';
 export const workspaceLabels: Record<Role, string> = { farmer: 'Farmer', buyer: 'Buyer / Shop', driver: 'Driver', admin: 'Admin' };
-const navigation: Record<Role, { label: string; path: string; icon: LucideIcon }[]> = {
+const navigation: Record<Role, { label: string; path: string; icon: LucideIcon; end?: boolean }[]> = {
   farmer: [
-    { label: "Overview", path: 'overview', icon: LayoutDashboard },
+    { label: "Dashboard", path: 'overview', icon: LayoutDashboard, end: true },
+    { label: "Sales performance", path: 'overview/sales', icon: ChartNoAxesCombined },
+    { label: "Upcoming harvests", path: 'overview/harvests', icon: CalendarDays },
+    { label: "Completed orders", path: 'overview/completed-orders', icon: ClipboardCheck },
     { label: "My farms", path: 'farms', icon: LandPlot },
     { label: "My produce", path: 'produce', icon: Sprout },
     { label: "Harvest calendar", path: 'harvest-calendar', icon: CalendarDays },
@@ -66,6 +69,8 @@ export default function WorkspaceLayout() {
   }, []);
   if (!user) return null;
   const items = navigation[user.role];
+  const path = pathname.split('/').slice(2).join('/') || 'overview';
+  const page = items.find((item) => item.path === path)?.label || items.find((item) => item.path === path.split('/')[0])?.label || path.replaceAll('-', ' ');
   const path = pathname.split('/')[2] || 'overview';
   const page = items.find((item) => item.path === path)?.label || path.replaceAll('-', ' ');
   const isTraceDetailPage = pathname.includes('/trace/qr/') || pathname.includes('/trace/verify/');
@@ -76,10 +81,11 @@ export default function WorkspaceLayout() {
       <NavLink className="brand" to={`/${user.role}/overview`} onClick={() => setMenuOpen(false)}><img className="brand-mark" src={yieldMatrixLogo} alt="" width={40} height={40} /><span><strong>Yield<span className="brand-accent">Matrix</span></strong><small>GROW. CONNECT. THRIVE.</small></span></NavLink>
       <div className="workspace-role"><span>WORKSPACE</span><strong>{workspaceLabels[user.role]}</strong></div>
       <p className="sidebar-caption">YOUR WORKSPACE</p>
-      <nav className="workspace-navigation">{items.map(({ label, path: itemPath, icon: Icon }) => <NavLink key={itemPath} to={`/${user.role}/${itemPath}`} onClick={() => setMenuOpen(false)} className={({ isActive }) => { const selectedView=new URLSearchParams(search).get('view'); const onTrips=pathname==='/driver/trips'; const active=itemPath==='trips?view=sequence'?onTrips&&selectedView==='sequence':itemPath==='trips'?onTrips&&selectedView!=='sequence':isActive; return `sidebar-link ${active?'active':''}`; }}><Icon size={18} strokeWidth={1.5} aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>
+      <nav className="workspace-navigation">{items.map(({ label, path: itemPath, icon: Icon, end }) => <NavLink key={`${itemPath}-${label}`} to={`/${user.role}/${itemPath}`} end={end} onClick={() => setMenuOpen(false)} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}><Icon size={18} strokeWidth={1.5} aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>
       <footer className="sidebar-footer"><div className="growing-card"><Sprout size={20} aria-hidden="true" /><strong>Growing better, together.</strong><p>One shared network, from harvest to handover.</p></div><NavLink className="sidebar-link" to={`/${user.role}/help`} onClick={() => setMenuOpen(false)}><CircleHelp size={16} aria-hidden="true" />Help &amp; support</NavLink><button className="sidebar-link logout-button" onClick={logout}><LogOut size={16} aria-hidden="true" />Switch Role / Logout</button></footer>
     </aside>
     <div className="workspace-body"><header className="workspace-topbar"><button className="mobile-menu icon-button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button><div className="workspace-breadcrumb"><span>WORKSPACE</span><span aria-hidden="true">/</span><strong>{page}</strong></div><div className="topbar-actions"><label className="workspace-search"><Search size={16} aria-hidden="true" /><input type="search" placeholder="Search your workspace" aria-label="Search your workspace (module implementation pending)" disabled /></label><NavLink className="icon-button" to={`/${user.role}/notifications`} aria-label="Notifications"><Bell size={18} /></NavLink><button type="button" className="icon-button theme-toggle" aria-label="Dark mode" aria-pressed={darkMode} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setDarkMode((current) => !current)}>{darkMode ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}</button><NavLink className="user-pill" to={`/${user.role}/profile`} aria-label={`My profile: ${user.name}`}><UserRound size={18} aria-hidden="true" /><span>{user.name}</span></NavLink></div></header>
+      <main id="workspace-content" className={`workspace-content ${user.role === 'farmer' && pathname.startsWith('/farmer/overview') ? 'workspace-content--ym06' : ''}`} tabIndex={-1}><div className="page-heading"><p>{workspaceLabels[user.role]} workspace</p><h1>{page}</h1></div><Outlet /></main>
       <main id="workspace-content" className="workspace-content" tabIndex={-1}>{!isTraceDetailPage && <div className="page-heading"><p>{workspaceLabels[user.role]} workspace</p><h1>{page}</h1></div>}<Outlet /></main>
     </div>
   </div>;
