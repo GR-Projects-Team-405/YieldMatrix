@@ -6,8 +6,25 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
-api.interceptors.response.use((response) => response, (error) => {
-  if (error.response?.status === 401) window.dispatchEvent(new Event('yieldmatrix:unauthorized'));
-  return Promise.reject(error);
-});
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const requestUrl = error.config?.url ?? '';
+
+    const isPublicAuthenticationRequest =
+      /\/ym03\/(?:login|approval-status)(?:\?|$)/.test(requestUrl) ||
+      /\/auth\/demo-login(?:\?|$)/.test(requestUrl);
+
+    if (
+      error.response?.status === 401 &&
+      !isPublicAuthenticationRequest
+    ) {
+      window.dispatchEvent(
+        new Event('yieldmatrix:unauthorized')
+      );
+    }
+
+    return Promise.reject(error);
+  }
+);
 export default api;

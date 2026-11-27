@@ -1,8 +1,41 @@
+
 import { Router } from 'express';
-import { verifyToken, authorizeRoles } from '../../middleware/authMiddleware.js';
+
+import {
+  verifyToken,
+  authorizeRoles,
+} from '../../middleware/authMiddleware.js';
+
 import { getStatus } from './controller.js';
-// YM03 · Chamalsha Induwara · Sign up & Login
+import { registerAccount } from './registerController.js';
+import { loginAccount } from './loginController.js';
+import {
+  checkApprovalStatus,
+} from './approvalStatusController.js';
+
 const router = Router();
-router.get('/status', verifyToken, authorizeRoles('farmer', 'buyer', 'driver', 'admin'), getStatus);
-// Add module endpoints here. Enforce ownership, assignment and state before private reads/writes.
+
+/**
+ * YM-03 Public endpoints
+ */
+
+// Farmer, Buyer and Driver registration
+router.post('/register', registerAccount);
+
+// Farmer, Buyer and Driver login
+router.post('/login', loginAccount);
+
+router.post('/approval-status', checkApprovalStatus);
+
+/**
+ * YM-03 Protected endpoints
+ */
+
+router.get(
+  '/status',
+  verifyToken,
+  authorizeRoles('farmer', 'buyer', 'driver', 'admin'),
+  getStatus
+);
+
 export default router;
