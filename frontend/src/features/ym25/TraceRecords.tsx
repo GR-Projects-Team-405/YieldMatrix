@@ -167,7 +167,7 @@ const getStatusToneClass = (status: TraceRecord['status']) => {
 export default function TraceRecords() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [dateRange, setDateRange] = useState<TraceDateRange>('30');
+  const [dateRange, setDateRange] = useState<TraceDateRange>('all');
   const [statusFilter, setStatusFilter] = useState<TraceStatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [records, setRecords] = useState<TraceRecordDto[]>([]);
