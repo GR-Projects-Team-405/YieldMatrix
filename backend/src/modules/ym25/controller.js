@@ -33,6 +33,9 @@ const ALLOCATION_SCOPE_BY_ROLE = {
   admin: (userParam) => `${userParam}::uuid IS NOT NULL`,
 };
 
+const TRACE_DATE_RANGES = new Set(['7', '30', '90', 'all']);
+const TRACE_STATUSES = new Set(['all', 'Processing', 'In Transit', 'Verified', 'Delivered']);
+
 function parsePositiveInteger(value, fallback, maximum) {
   if (value === undefined) return fallback;
   if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null;
@@ -95,6 +98,16 @@ export async function getRecords(req, res, next) {
     const search = req.query.q;
     if (search !== undefined && (typeof search !== 'string' || search.trim().length > 100)) {
       return badRequest(res, 'q must be a string of at most 100 characters', req.requestId);
+    }
+
+    const dateRange = req.query.dateRange ?? '30';
+    if (typeof dateRange !== 'string' || !TRACE_DATE_RANGES.has(dateRange)) {
+      return badRequest(res, 'dateRange must be 7, 30, 90, or all', req.requestId);
+    }
+
+    const status = req.query.status ?? 'all';
+    if (typeof status !== 'string' || !TRACE_STATUSES.has(status)) {
+      return badRequest(res, 'status must be a valid trace status or all', req.requestId);
     }
 
     const getScope = RECORD_SCOPE_BY_ROLE[req.user.role];
@@ -175,18 +188,27 @@ export async function getRecords(req, res, next) {
             OR f.name ILIKE '%' || $2 || '%'
           )
       ),
+      filtered_batches AS (
+        SELECT *
+        FROM scoped_batches
+        WHERE ($4::text = 'all' OR status = $4)
+          AND CASE
+            WHEN $3::text = 'all' THEN TRUE
+            ELSE "harvestDate"::date >= CURRENT_DATE - (($3::integer - 1) * INTERVAL '1 day')
+          END
+      ),
       total AS (
         SELECT
           COUNT(*)::integer AS count,
           COUNT(*) FILTER (WHERE status = 'Delivered')::integer AS delivered,
           COUNT(*) FILTER (WHERE status = 'Verified')::integer AS verified
-        FROM scoped_batches
+        FROM filtered_batches
       ),
       page_records AS (
         SELECT *
-        FROM scoped_batches
+        FROM filtered_batches
         ORDER BY "harvestDate" DESC, id
-        LIMIT $3 OFFSET $4
+        LIMIT $5 OFFSET $6
       )
       SELECT
         total.count,
@@ -210,7 +232,7 @@ export async function getRecords(req, res, next) {
       FROM total
       LEFT JOIN page_records ON TRUE
       GROUP BY total.count, total.delivered, total.verified`,
-      [req.user.id, search?.trim() || null, limit, offset],
+      [req.user.id, search?.trim() || null, dateRange, status, limit, offset],
     );
 
     const total = rows[0].count;

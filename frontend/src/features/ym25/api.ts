@@ -28,6 +28,9 @@ export interface TraceRecordsResponse {
   requestId: string;
 }
 
+export type TraceDateRange = '7' | '30' | '90' | 'all';
+export type TraceStatusFilter = 'all' | TraceStatus;
+
 export interface TraceBatchDto {
   id: string;
   displayId: string;
@@ -84,9 +87,15 @@ export interface VerificationResponse {
   requestId: string;
 }
 
-export function getTraceRecords(page: number, query: string, signal?: AbortSignal) {
+export function getTraceRecords(
+  page: number,
+  query: string,
+  dateRange: TraceDateRange,
+  status: TraceStatusFilter,
+  signal?: AbortSignal,
+) {
   return api.get<TraceRecordsResponse>('/ym25/records', {
-    params: { page, limit: 5, q: query || undefined },
+    params: { page, limit: 5, q: query || undefined, dateRange, status },
     signal,
   });
 }
