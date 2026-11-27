@@ -25,6 +25,19 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  token_hash TEXT NOT NULL UNIQUE CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (expires_at > created_at),
+  CHECK (used_at IS NULL OR used_at >= created_at)
+);
+CREATE INDEX IF NOT EXISTS password_reset_user_idx
+  ON password_reset_tokens(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS farms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   farmer_id UUID NOT NULL REFERENCES users(id),
@@ -68,6 +81,34 @@ CREATE TABLE IF NOT EXISTS harvest_batches (
   FOREIGN KEY (farm_id, farmer_id) REFERENCES farms(id, farmer_id),
   CHECK (sellable_kg <= COALESCE(actual_kg, 0))
 );
+CREATE SEQUENCE IF NOT EXISTS harvest_batch_display_id_seq;
+ALTER TABLE harvest_batches ADD COLUMN IF NOT EXISTS display_id TEXT;
+ALTER TABLE harvest_batches
+  ALTER COLUMN display_id SET DEFAULT (
+    'BM-' || lpad(nextval('harvest_batch_display_id_seq')::text, 2, '0')
+  );
+CREATE UNIQUE INDEX IF NOT EXISTS harvest_batches_display_id_idx ON harvest_batches(display_id);
+UPDATE harvest_batches
+SET display_id = 'BM-' || lpad(substring(display_id FROM '^BM-25-([0-9]+)$')::BIGINT::text, 2, '0')
+WHERE display_id ~ '^BM-25-[0-9]+$';
+WITH numbered_batches AS (
+  SELECT
+    id,
+    COALESCE((SELECT MAX(substring(display_id FROM '^BM-([0-9]+)$')::BIGINT) FROM harvest_batches), 0)
+      + row_number() OVER (ORDER BY created_at, id) AS sequence_number
+  FROM harvest_batches
+  WHERE display_id IS NULL
+)
+UPDATE harvest_batches AS batch
+SET display_id = 'BM-' || lpad(numbered_batches.sequence_number::text, 2, '0')
+FROM numbered_batches
+WHERE batch.id = numbered_batches.id;
+SELECT setval(
+  'harvest_batch_display_id_seq',
+  GREATEST(COALESCE(MAX(substring(display_id FROM '^BM-([0-9]+)$')::BIGINT), 1), 1),
+  COALESCE(MAX(substring(display_id FROM '^BM-([0-9]+)$')::BIGINT) IS NOT NULL, false)
+)
+FROM harvest_batches;
 CREATE TABLE IF NOT EXISTS listings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   batch_id UUID NOT NULL REFERENCES harvest_batches(id),
@@ -107,6 +148,9 @@ CREATE TABLE IF NOT EXISTS offers (
   unit_price_cents BIGINT NOT NULL CHECK (unit_price_cents > 0),
   expires_at TIMESTAMPTZ NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected','withdrawn','expired')),
+  notes TEXT,
+  quality_specs JSONB NOT NULL DEFAULT '{}',
+  decline_reason TEXT,
   operation_key TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   FOREIGN KEY (batch_id, farmer_id) REFERENCES harvest_batches(id, farmer_id),
@@ -432,6 +476,23 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS farmer_market_price_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id UUID NOT NULL REFERENCES users(id),
+  crop_id UUID NOT NULL REFERENCES crops(id),
+  grade_id UUID NOT NULL REFERENCES grades(id),
+  district TEXT NOT NULL,
+  lower_price_cents BIGINT NOT NULL CHECK (lower_price_cents >= 0),
+  upper_price_cents BIGINT NOT NULL CHECK (upper_price_cents > lower_price_cents),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','replaced')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_farmer_market_price_alert
+  ON farmer_market_price_alerts(farmer_id, crop_id, grade_id, district)
+  WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS farmer_market_price_alert_history_idx
+  ON farmer_market_price_alerts(farmer_id, crop_id, grade_id, district, created_at DESC);
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_id UUID REFERENCES users(id),
@@ -612,6 +673,9 @@ CREATE INDEX IF NOT EXISTS farms_farmer_idx ON farms(farmer_id);
 CREATE INDEX IF NOT EXISTS batches_farm_idx ON harvest_batches(farm_id);
 CREATE INDEX IF NOT EXISTS demands_buyer_idx ON demands(buyer_id);
 CREATE INDEX IF NOT EXISTS offers_demand_idx ON offers(demand_id);
+CREATE INDEX IF NOT EXISTS offers_status_idx ON offers(status);
+CREATE INDEX IF NOT EXISTS future_commitments_buyer_status_idx ON future_commitments(buyer_id, status);
+CREATE INDEX IF NOT EXISTS future_commitments_farmer_status_idx ON future_commitments(farmer_id, status);
 CREATE INDEX IF NOT EXISTS orders_buyer_idx ON orders(buyer_id);
 CREATE INDEX IF NOT EXISTS allocations_order_idx ON allocations(order_id);
 CREATE INDEX IF NOT EXISTS allocations_batch_idx ON allocations(batch_id);

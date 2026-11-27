@@ -1,0 +1,427 @@
+/* YM27 · Farmer Wallet · Scoped styles
+   All class names prefixed ym27- to avoid collisions with other modules.
+   Uses shared CSS variables from index.css for theme compatibility. */
+
+/* ── Demo banner ─────────────────────────────────────────────────────────────── */
+
+.ym27-demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ym27-demo-banner .ym-alert {
+  flex: 1;
+}
+
+.ym27-demo-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+/* ── Tab navigation ──────────────────────────────────────────────────────────── */
+
+.ym27-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.ym27-tab {
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ym27-tab:hover {
+  color: var(--text);
+}
+
+.ym27-tab--active {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent-text);
+  font-weight: 600;
+}
+
+/* ── Page header row ─────────────────────────────────────────────────────────── */
+
+.ym27-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.ym27-page-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ym27-page-header p {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ── Balance summary grid ────────────────────────────────────────────────────── */
+
+.ym27-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.ym27-balance-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ym27-balance-card--primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #ffffff;
+}
+
+.ym27-balance-card--primary .ym27-balance-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.ym27-balance-card--primary .ym27-balance-value {
+  color: #ffffff;
+}
+
+.ym27-balance-card--primary .ym27-balance-sub {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ym27-balance-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.ym27-balance-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ym27-balance-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 12px;
+  line-height: 1.2;
+}
+
+.ym27-balance-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* ── Wallet filters ──────────────────────────────────────────────────────────── */
+
+.ym27-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) repeat(4, minmax(125px, 1fr));
+  align-items: end;
+  gap: 18px;
+  min-width: 0;
+  margin-bottom: 24px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.ym27-filters--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ym27-filter {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ym27-filter > span {
+  display: block;
+  line-height: 1.35;
+}
+
+.ym27-filter input,
+.ym27-filter select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+}
+
+.ym27-filter input:focus-visible,
+.ym27-filter select:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* ── Recent transactions section ─────────────────────────────────────────────── */
+
+.ym27-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.ym27-section-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ym27-section-header p {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.ym27-view-all {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-text);
+  text-decoration: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ym27-view-all:hover {
+  text-decoration: underline;
+}
+
+/* ── Transaction amount coloring ─────────────────────────────────────────────── */
+
+.ym27-amount--credit {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.ym27-amount--debit {
+  color: #b42318;
+  font-weight: 600;
+}
+
+/* ── Info row (bottom cards) ─────────────────────────────────────────────────── */
+
+.ym27-info-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.ym27-info-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.ym27-info-card h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ym27-settlement-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.ym27-settlement-detail strong {
+  font-weight: 600;
+}
+
+.ym27-settlement-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ym27-settlement-produce {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ym27-settlement-meta {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ym27-settlement-amount {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.ym27-info-note {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-top: 12px;
+}
+
+.ym27-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--accent-text);
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+/* ── Footer note ─────────────────────────────────────────────────────────────── */
+
+.ym27-footer-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 16px;
+  line-height: 1.6;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Clickable table row ─────────────────────────────────────────────────────── */
+
+.ym27-clickable-row {
+  cursor: pointer;
+}
+
+.ym27-clickable-row:hover {
+  background: var(--canvas);
+}
+
+/* ── Responsive breakpoints ──────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .ym27-balance-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .ym27-filters,
+  .ym27-filters--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ym27-filter--search,
+  .ym27-filters--3 .ym27-filter:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767px) {
+  .ym27-balance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ym27-filters,
+  .ym27-filters--3 {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .ym27-filter--search,
+  .ym27-filters--3 .ym27-filter:last-child {
+    grid-column: auto;
+  }
+
+  .ym27-info-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ym27-page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ym27-balance-value {
+    font-size: 22px;
+  }
+
+  .ym27-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ym27-settlement-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
