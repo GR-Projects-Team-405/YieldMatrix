@@ -18,7 +18,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, [logout]);
   useEffect(() => {
-    const sync = (event: StorageEvent) => { if (event.key === TOKEN_KEY) logout(); };
+    const sync = (event: StorageEvent) => {
+      if (event.key === TOKEN_KEY && !event.newValue) {
+        logout();
+      } else if (event.key === TOKEN_KEY && event.newValue) {
+        api.get<{ user: User }>('/auth/me').then(({ data }) => setUser(data.user)).catch(logout);
+      }
+    };
     window.addEventListener('yieldmatrix:unauthorized', logout);
     window.addEventListener('storage', sync);
     return () => { window.removeEventListener('yieldmatrix:unauthorized', logout); window.removeEventListener('storage', sync); };

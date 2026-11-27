@@ -1,11 +1,19 @@
-import { ContentCard } from '../../components/ContentCard';
+import { Route, Routes } from 'react-router-dom';
+import TransactionDetails from './TransactionDetails';
+import TransactionHistory from './TransactionHistory';
+import AllocationSettlement from './AllocationSettlement';
+import OrderSummary from './OrderSummary';
+
 // YM20 · Praveena Buddini · Order & transaction records
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["Transaction history", "Transaction details", "Order summary", "Allocation settlement details"];
+// Mounted at /buyer/records/* and /farmer/records/* in App.tsx
 export default function YM20() {
-  return <ContentCard title="YM20 · Order &amp; transaction records" subtitle="Owner: Praveena Buddini">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  return (
+    <Routes>
+      <Route index element={<TransactionHistory />} />
+      <Route path="transactions/:txId" element={<TransactionDetails />} />
+      <Route path="orders/:orderId" element={<OrderSummary />} />
+      <Route path="settlement/:orderId" element={<AllocationSettlement />} />
+      <Route path="*" element={<TransactionHistory />} />
+    </Routes>
+  );
 }

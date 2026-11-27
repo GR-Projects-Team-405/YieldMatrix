@@ -1,11 +1,37 @@
-import { ContentCard } from '../../components/ContentCard';
-// YM29 · Yasindu Janapriya · Market information
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["Market insights", "Demand forecast details (7-day forecast)", "Price and weather advice", "Admin market data", "Data upload review"];
+// YM29 · Yasindu Janapriya · Market information module router (all 5 assigned screens).
+// Mounted at /farmer/market-insights/*, /buyer/market-insights/*, and /admin/market-data/* by App.tsx.
+
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import MarketInsightsPage from './pages/MarketInsightsPage';
+import DemandForecastPage from './pages/DemandForecastPage';
+import PriceWeatherAdvicePage from './pages/PriceWeatherAdvicePage';
+import AdminMarketDataPage from './pages/AdminMarketDataPage';
+import DataUploadReviewPage from './pages/DataUploadReviewPage';
+import './ym29.css';
+
 export default function YM29() {
-  return <ContentCard title="YM29 · Market information" subtitle="Owner: Yasindu Janapriya">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  const isAdminWorkspace = user?.role === 'admin' || pathname.startsWith('/admin');
+
+  if (isAdminWorkspace) {
+    return (
+      <Routes>
+        <Route index element={<AdminMarketDataPage />} />
+        <Route path="uploads/new" element={<DataUploadReviewPage />} />
+        <Route path="uploads/:id" element={<DataUploadReviewPage />} />
+        <Route path="*" element={<Navigate to="." replace />} />
+      </Routes>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route index element={<MarketInsightsPage />} />
+      <Route path="forecast" element={<DemandForecastPage />} />
+      <Route path="advice" element={<PriceWeatherAdvicePage />} />
+      <Route path="*" element={<Navigate to="." replace />} />
+    </Routes>
+  );
 }

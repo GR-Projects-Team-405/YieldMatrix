@@ -1,11 +1,23 @@
-import { ContentCard } from '../../components/ContentCard';
-// YM08 · Imalka Deshan · Harvest management
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["Harvest calendar", "Harvest batch list", "Add harvest batch", "Harvest batch details", "Update harvest batch"];
+import { Route, Routes } from 'react-router-dom';
+import HarvestViewSwitch from './HarvestViewSwitch';
+import HarvestBatchList from './HarvestBatchList';
+import HarvestCalendar from './HarvestCalendar';
+import AddHarvestBatch from './AddHarvestBatch';
+import UpdateHarvestBatch from './UpdateHarvestBatch';
+import HarvestBatchDetails from './HarvestBatchDetails';
+import './ym08.css';
+
 export default function YM08() {
-  return <ContentCard title="YM08 · Harvest management" subtitle="Owner: Imalka Deshan">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  return (
+    <Routes>
+      <Route element={<HarvestViewSwitch />}>
+        <Route index element={<HarvestCalendar />} />
+        <Route path="list" element={<HarvestBatchList />} />
+      </Route>
+      <Route path="new" element={<AddHarvestBatch />} />
+      <Route path=":batchId" element={<HarvestBatchDetails />} />
+      <Route path=":batchId/edit" element={<UpdateHarvestBatch />} />
+      <Route path="*" element={<p>Page not found.</p>} />
+    </Routes>
+  );
 }

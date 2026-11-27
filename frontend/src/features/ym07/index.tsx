@@ -1,11 +1,18 @@
-import { ContentCard } from '../../components/ContentCard';
-// YM07 · Hathiff Haleem · Farm management
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["My farms", "Farm details", "Add farm", "Edit farm"];
+import { Link, Route, Routes } from 'react-router-dom';
+import { EmptyState } from '../../components/EmptyState';
+import AddFarm from './AddFarm';
+import EditFarm from './EditFarm';
+import FarmDetails from './FarmDetails';
+import FarmList from './FarmList';
+
 export default function YM07() {
-  return <ContentCard title="YM07 · Farm management" subtitle="Owner: Hathiff Haleem">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  return (
+    <Routes>
+      <Route index element={<FarmList />} />
+      <Route path="new" element={<AddFarm />} />
+      <Route path=":farmId" element={<FarmDetails />} />
+      <Route path=":farmId/edit" element={<EditFarm />} />
+      <Route path="*" element={<EmptyState title="Farm page not found" description="Choose a farm from My farms." action={<Link to="/farmer/farms">Back to My farms</Link>} />} />
+    </Routes>
+  );
 }

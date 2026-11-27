@@ -1,8 +1,18 @@
 import { Router } from 'express';
 import { verifyToken, authorizeRoles } from '../../middleware/authMiddleware.js';
-import { getStatus } from './controller.js';
-// YM07 · Hathiff Haleem · Farm management
+import {
+  archiveFarm, createFarm, getFarm, getStatus, listFarms,
+  requireApprovedFarmer, updateFarm, validateFarmId
+} from './controller.js';
+
 const router = Router();
-router.get('/status', verifyToken, authorizeRoles('farmer'), getStatus);
-// Add module endpoints here. Enforce ownership, assignment and state before private reads/writes.
+const farmerAccess = [verifyToken, authorizeRoles('farmer'), requireApprovedFarmer];
+
+router.get('/status', farmerAccess, getStatus);
+router.get('/farms', farmerAccess, listFarms);
+router.post('/farms', farmerAccess, createFarm);
+router.get('/farms/:farmId', farmerAccess, validateFarmId, getFarm);
+router.patch('/farms/:farmId', farmerAccess, validateFarmId, updateFarm);
+router.patch('/farms/:farmId/archive', farmerAccess, validateFarmId, archiveFarm);
+
 export default router;
