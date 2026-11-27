@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import api, { TOKEN_KEY } from '../services/api';
 export type Role = 'farmer' | 'buyer' | 'driver' | 'admin';
-export interface User { id: string; name: string; role: Role }
+export interface User { id: string; name: string; role: Role; email?: string; approvalStatus?: 'pending' | 'approved' | 'rejected' | 'suspended' }
 interface AuthState {
   user: User | null;
   loading: boolean;
   demoLogin: (role: Role) => Promise<void>;
+  loginWithPassword: (email: string, password: string, role?: Role) => Promise<User>;
   completePasswordLogin: (
     token: string,
     authenticatedUser: User,
@@ -80,12 +81,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_KEY, data.token);
     setUser(data.user);
   }
+  async function loginWithPassword(email: string, password: string, role?: Role) {
+    const { data } = await api.post<{ token: string; user: User }>('/auth/login', { email, password, ...(role ? { role } : {}) });
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setUser(data.user);
+    return data.user;
+  }
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
         demoLogin,
+        loginWithPassword,
         completePasswordLogin,
         logout,
       }}
