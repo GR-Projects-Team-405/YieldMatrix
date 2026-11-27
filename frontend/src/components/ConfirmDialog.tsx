@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
-import { Button } from './Button';
+import { Button, type ButtonProps } from './Button';
 
 export interface ConfirmDialogProps {
   /** Controls whether the modal dialog is open. */
@@ -12,6 +12,8 @@ export interface ConfirmDialogProps {
   simulationNote?: string;
   /** Confirm button label. Defaults to Confirm. */
   confirmLabel?: string;
+  /** Visual style for the confirmation action. */
+  confirmVariant?: ButtonProps['variant'];
   /** Disables both buttons and Escape cancellation while work is pending. */
   busy?: boolean;
   /** Called by Cancel or Escape; the parent should set open to false. */
@@ -21,7 +23,7 @@ export interface ConfirmDialogProps {
 }
 
 /** A native modal confirmation dialog with focus restoration and simulation messaging. */
-export function ConfirmDialog({ open, title, description, simulationNote, confirmLabel = 'Confirm', busy = false, onCancel, onConfirm }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, description, simulationNote, confirmLabel = 'Confirm', confirmVariant = 'primary', busy = false, onCancel, onConfirm }: ConfirmDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null); const titleId = useId(); const descriptionId = useId();
   useEffect(() => {
     const element = dialog.current;
@@ -33,6 +35,6 @@ export function ConfirmDialog({ open, title, description, simulationNote, confir
   }, [open]);
   return <dialog ref={dialog} className="ym-confirm-dialog" aria-labelledby={titleId} aria-describedby={descriptionId} onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }}>
     <h2 id={titleId}>{title}</h2><p id={descriptionId}>{description}</p>{simulationNote && <p className="ym-simulation-note">{simulationNote}</p>}
-    <div className="ym-dialog-actions"><Button variant="outline" disabled={busy} onClick={onCancel} autoFocus>Cancel</Button><Button disabled={busy} onClick={onConfirm}>{busy ? 'Please wait…' : confirmLabel}</Button></div>
+    <div className="ym-dialog-actions"><Button variant="outline" disabled={busy} onClick={onCancel} autoFocus>Cancel</Button><Button variant={confirmVariant} disabled={busy} onClick={onConfirm}>{busy ? 'Please wait…' : confirmLabel}</Button></div>
   </dialog>;
 }

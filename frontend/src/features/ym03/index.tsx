@@ -1,11 +1,54 @@
-import { ContentCard } from '../../components/ContentCard';
-// YM03 · Chamalsha Induwara · Sign up & Login
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["Choose account role", "Farmer sign up and login", "Buyer / Shop sign up and login", "Driver sign up and login", "Approval status"];
+
+import { Route, Routes } from 'react-router-dom';
+
+import PublicLayout from './components/PublicLayout';
+
+import RoleSelectionPage from './pages/RoleSelectionPage';
+import FarmerAuthPage from './pages/FarmerAuthPage';
+import BuyerAuthPage from './pages/BuyerAuthPage';
+import DriverAuthPage from './pages/DriverAuthPage';
+import ApprovalStatusPage from './pages/ApprovalStatusPage';
+
+import './styles/ym03.css';
+
 export default function YM03() {
-  return <ContentCard title="YM03 · Sign up &amp; Login" subtitle="Owner: Chamalsha Induwara">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  return (
+    <PublicLayout>
+      <Routes>
+        <Route index element={<RoleSelectionPage />} />
+
+        <Route
+          path="farmer"
+          element={<FarmerAuthPage />}
+        />
+
+        <Route
+          path="buyer"
+          element={<BuyerAuthPage />}
+        />
+
+        <Route
+          path="driver"
+          element={<DriverAuthPage />}
+        />
+
+        <Route
+          path="status"
+          element={<ApprovalStatusPage />}
+        />
+
+        <Route
+          path="*"
+          element={
+            <div className="ym03-checkpoint">
+              <h1>Page under development</h1>
+              <p>
+                The remaining YM-03 page will be added next.
+              </p>
+            </div>
+          }
+        />
+      </Routes>
+    </PublicLayout>
+  );
 }
