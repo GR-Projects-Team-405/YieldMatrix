@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   ChevronDown,
+  Check,
   Search,
   Filter,
   Eye,
@@ -20,9 +21,134 @@ import { Button } from '../../components/Button';
 import { StatCard } from '../../components/StatCard';
 import { EmptyState } from '../../components/EmptyState';
 import { Alert } from '../../components/Alert';
-import { getApiErrorMessage, getTraceRecords, formatTraceDate, formatTraceQuantity, type TraceRecordDto } from './api';
+import {
+  getApiErrorMessage,
+  getTraceRecords,
+  formatTraceDate,
+  formatTraceQuantity,
+  type TraceDateRange,
+  type TraceRecordDto,
+  type TraceStatusFilter,
+} from './api';
 
 import type { TraceRecord } from './types';
+
+interface FilterOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+interface FilterSelectProps<T extends string> {
+  label: string;
+  value: T;
+  options: FilterOption<T>[];
+  onChange: (value: T) => void;
+  icon: typeof Calendar;
+}
+
+function FilterSelect<T extends string>({ label, value, options, onChange, icon: Icon }: FilterSelectProps<T>) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedOptionRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selectedOption = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (open) selectedOptionRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick);
+  }, [open]);
+
+  const moveFocus = (direction: 1 | -1) => {
+    const buttons = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+    const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = currentIndex < 0
+      ? (direction === 1 ? 0 : buttons.length - 1)
+      : (currentIndex + direction + buttons.length) % buttons.length;
+    buttons[nextIndex]?.focus();
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
+        className="inline-flex h-12 min-w-[164px] items-center gap-2 rounded-xl border border-[var(--control-border)] bg-[var(--surface)] px-3.5 text-sm font-medium text-[var(--text)] shadow-sm transition hover:border-[var(--accent-text)] hover:bg-[var(--canvas)] focus-visible:ring-2 focus-visible:ring-[var(--accent-text)] focus-visible:ring-offset-2"
+      >
+        <Icon size={16} className="shrink-0 text-[var(--accent-text)]" aria-hidden="true" />
+        <span className="flex-1 text-left">{selectedOption?.label}</span>
+        <ChevronDown size={16} className={`shrink-0 text-[var(--muted)] transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+      {open && (
+        <div
+          id={id}
+          role="listbox"
+          aria-label={label}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              moveFocus(event.key === 'ArrowDown' ? 1 : -1);
+            } else if (event.key === 'Home' || event.key === 'End') {
+              event.preventDefault();
+              const buttons = containerRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]');
+              (event.key === 'Home' ? buttons?.[0] : buttons?.[buttons.length - 1])?.focus();
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              setOpen(false);
+              triggerRef.current?.focus();
+            }
+          }}
+          className="absolute right-0 z-30 mt-2 w-full min-w-[200px] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-xl"
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                ref={isSelected ? selectedOptionRef : undefined}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-text)] ${
+                  isSelected
+                    ? 'bg-[var(--soft)] font-semibold text-[var(--accent-text)]'
+                    : 'text-[var(--text)] hover:bg-[var(--canvas)]'
+                }`}
+              >
+                <span>{option.label}</span>
+                {isSelected && <Check size={16} aria-hidden="true" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const getStatusToneClass = (status: TraceRecord['status']) => {
   switch (status) {
@@ -41,7 +167,8 @@ const getStatusToneClass = (status: TraceRecord['status']) => {
 export default function TraceRecords() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [dateRange] = useState('Last 30 days');
+  const [dateRange, setDateRange] = useState<TraceDateRange>('30');
+  const [statusFilter, setStatusFilter] = useState<TraceStatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [records, setRecords] = useState<TraceRecordDto[]>([]);
   const [summary, setSummary] = useState({ total: 0, delivered: 0, verified: 0 });
@@ -51,13 +178,13 @@ export default function TraceRecords() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, dateRange, statusFilter]);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    getTraceRecords(currentPage, searchQuery.trim(), controller.signal)
+    getTraceRecords(currentPage, searchQuery.trim(), dateRange, statusFilter, controller.signal)
       .then(({ data }) => {
         setRecords(data.records);
         setSummary(data.summary);
@@ -71,7 +198,7 @@ export default function TraceRecords() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [currentPage, searchQuery]);
+  }, [currentPage, searchQuery, dateRange, statusFilter]);
 
   const totalRecords = summary.total;
   const startIndex = totalRecords === 0 ? 0 : (currentPage - 1) * 5 + 1;
@@ -96,14 +223,20 @@ export default function TraceRecords() {
         <p className="text-[14px] text-[var(--muted)]">
           View and track the journey of harvested produce from farm to delivery.
         </p>
-        <Button
-          variant="outline"
-          className="!h-10 !px-4 text-[13px] self-start sm:self-auto"
-        >
-          <Calendar size={15} className="text-[var(--muted)]" />
-          <span>{dateRange}</span>
-          <ChevronDown size={15} className="text-[var(--muted)] ml-1" />
-        </Button>
+        <div className="self-start sm:self-auto">
+          <FilterSelect
+            label="Filter by harvest date"
+            value={dateRange}
+            onChange={setDateRange}
+            icon={Calendar}
+            options={[
+              { value: '7', label: 'Last 7 days' },
+              { value: '30', label: 'Last 30 days' },
+              { value: '90', label: 'Last 90 days' },
+              { value: 'all', label: 'All time' },
+            ]}
+          />
+        </div>
       </div>
 
       {/* Metrics reflect the active search scope. Scan counts are not stored yet. */}
@@ -169,10 +302,19 @@ export default function TraceRecords() {
             className="w-full h-[48px] pl-11 pr-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[14px] text-[var(--text)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[#315A42] focus:border-transparent transition"
           />
         </div>
-        <Button variant="outline" className="gap-2">
-          <span>Filter</span>
-          <Filter size={16} />
-        </Button>
+        <FilterSelect
+          label="Filter trace records by status"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          icon={Filter}
+          options={[
+            { value: 'all', label: 'All statuses' },
+            { value: 'Processing', label: 'Processing' },
+            { value: 'In Transit', label: 'In Transit' },
+            { value: 'Verified', label: 'Verified' },
+            { value: 'Delivered', label: 'Delivered' },
+          ]}
+        />
       </div>
 
       {/* Reusing Table and TableRow components */}
