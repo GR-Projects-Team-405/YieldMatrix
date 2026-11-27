@@ -1,11 +1,16 @@
-import { ContentCard } from '../../components/ContentCard';
-// YM06 · Eshan Harshana · Farmer overview
-// Keep module pages and local routes here; WorkspaceLayout owns the sidebar and topbar.
-const assignedPages = ["Farmer dashboard", "Sales performance", "Upcoming harvest overview", "Completed orders overview"];
+import { Route, Routes } from 'react-router-dom';
+import FarmerDashboard from './pages/FarmerDashboard';
+import SalesPerformance from './pages/SalesPerformance';
+import UpcomingHarvestOverview from './pages/UpcomingHarvestOverview';
+import CompletedOrdersOverview from './pages/CompletedOrdersOverview';
+import './ym06.css';
+
 export default function YM06() {
-  return <ContentCard title="YM06 · Farmer overview" subtitle="Owner: Eshan Harshana">
-    <p className="module-note">Build middle content here without sidebars or topbars. Use the shared YM components.</p>
-    <h3 className="module-heading">Assigned pages</h3>
-    <ul className="assigned-pages">{assignedPages.map((page) => <li key={page}>{page}</li>)}</ul>
-  </ContentCard>;
+  return <div className="ym06-module"><Routes>
+    <Route index element={<FarmerDashboard />} />
+    <Route path="sales" element={<SalesPerformance />} />
+    <Route path="harvests" element={<UpcomingHarvestOverview />} />
+    <Route path="completed-orders" element={<CompletedOrdersOverview />} />
+    <Route path="*" element={<FarmerDashboard />} />
+  </Routes></div>;
 }
