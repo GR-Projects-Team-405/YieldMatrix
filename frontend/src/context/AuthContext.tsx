@@ -7,6 +7,11 @@ interface AuthState {
   loading: boolean;
   demoLogin: (role: Role) => Promise<void>;
   loginWithPassword: (email: string, password: string, role?: Role) => Promise<User>;
+  completePasswordLogin: (
+    token: string,
+    authenticatedUser: User,
+    expectedRole: Role
+  ) => void;
   logout: () => void;
 }
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -14,6 +19,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const logout = useCallback(() => { localStorage.removeItem(TOKEN_KEY); setUser(null); }, []);
+  const completePasswordLogin = useCallback(
+    (
+      token: string,
+      authenticatedUser: User,
+      expectedRole: Role
+    ) => {
+      if (
+        typeof token !== 'string' ||
+        token.trim().length === 0 ||
+        !authenticatedUser ||
+        typeof authenticatedUser.id !== 'string' ||
+        !authenticatedUser.id.trim() ||
+        typeof authenticatedUser.name !== 'string' ||
+        !authenticatedUser.name.trim() ||
+        authenticatedUser.role !== expectedRole
+      ) {
+        throw new Error(
+          'The authenticated account does not match the selected role.'
+        );
+      }
+
+      localStorage.setItem(TOKEN_KEY, token);
+      setUser(authenticatedUser);
+      setLoading(false);
+    },
+    []
+  );
   useEffect(() => {
     let active = true;
     const token = localStorage.getItem(TOKEN_KEY);
@@ -24,7 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, [logout]);
   useEffect(() => {
-    const sync = (event: StorageEvent) => { if (event.key === TOKEN_KEY) logout(); };
+    const sync = (event: StorageEvent) => {
+      if (event.key === TOKEN_KEY && !event.newValue) {
+        logout();
+      } else if (event.key === TOKEN_KEY && event.newValue) {
+        api.get<{ user: User }>('/auth/me').then(({ data }) => setUser(data.user)).catch(logout);
+      }
+    };
     window.addEventListener('yieldmatrix:unauthorized', logout);
     window.addEventListener('storage', sync);
     return () => { window.removeEventListener('yieldmatrix:unauthorized', logout); window.removeEventListener('storage', sync); };
@@ -49,7 +87,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     return data.user;
   }
-  return <AuthContext.Provider value={{ user, loading, demoLogin, loginWithPassword, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        demoLogin,
+        loginWithPassword,
+        completePasswordLogin,
+        logout,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 export function useAuth() {
   const context = useContext(AuthContext);

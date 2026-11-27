@@ -1,0 +1,20 @@
+.ym24-attention { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ym24-attention:last-child { border-bottom: 0; }
+.ym24-attention p { margin: 0; }
+
+.ym24-panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.ym24-panel-head h3 { margin: 0; }
+.ym24-panel-head span { font-size: 12px; color: var(--muted); }
+
+.ym24-how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.ym24-how-item { display: flex; gap: 12px; font-size: 12px; }
+.ym24-how-item strong { display: block; margin-bottom: 4px; font-size: 13px; }
+.ym24-how-item span { color: var(--muted); line-height: 1.5; }
+.ym24-num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-size: 12px; font-weight: 700; }
+.ym24-num--green { background: var(--ym24-primary); color: var(--surface); }
+.ym24-num--orange { background: var(--orange); color: #263a31; }
+.ym24-num--grey { background: var(--soft); color: var(--muted); }
+
+@media (max-width: 1000px) {
+  .ym24-how { grid-template-columns: 1fr; }
+}

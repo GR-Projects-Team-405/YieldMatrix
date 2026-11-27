@@ -1,0 +1,26 @@
+import { ArrowLeft, ArrowUpRight, Clock3, MapPin, Navigation, Route, Timer, TriangleAlert } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import type { RouteLeg, Trip } from '../components/tripTypes';
+import MetricCard from '../components/MetricCard';
+import SchematicRouteMap from '../components/SchematicRouteMap';
+
+const time=(value:string)=>new Intl.DateTimeFormat('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Colombo'}).format(new Date(value));
+const duration=(minutes:number|null|undefined)=>minutes==null?'Not estimated':`${Math.floor(minutes/60)?`${Math.floor(minutes/60)} h `:''}${minutes%60?`${minutes%60} min`:''}`;
+const arrival=(value:string|null)=>value?(value.includes('T')?time(value):value):'—';
+export default function RouteOverview({trip}:{trip:Trip}) {
+  const approximateCount=trip.stops.filter((stop)=>stop.latitude==null||stop.longitude==null).length;
+  const firstStop=trip.stops[0];
+  const routeLegs=trip.routeLegs||[];
+  const finish=trip.plannedArrivalAt||trip.scheduledEnd;
+  const receiving=trip.deliveryWindowStart&&trip.deliveryWindowEnd?`Receiving window ${trip.deliveryWindowStart}–${trip.deliveryWindowEnd}`:'Scheduled delivery target';
+  const legTitle=(leg:RouteLeg)=>leg.sequence===1&&trip.startLatitude!=null?`Base → ${leg.to}`:`${leg.from} → ${leg.to}`;
+  return <div className="ym22-route-page">
+    <div className="ym22-route-heading"><div><Link to={`/driver/trips?trip=${encodeURIComponent(trip.id)}&view=sequence`} className="ym22-detail-back"><ArrowLeft size={13}/> Back to pickup sequence</Link><h1>Route overview</h1><p>Planned route for {trip.reference} · {trip.startLocation||firstStop?.district||'Assigned pickup'} to {trip.destinationDistrict} · {new Intl.DateTimeFormat('en-GB',{weekday:'short',day:'2-digit',month:'short',timeZone:'Asia/Colombo'}).format(new Date(trip.scheduledStart))}</p><div className="ym22-route-tags"><span>PLANNED ROUTE · NOT LIVE GPS</span><span>SAVED LOCATIONS · {trip.sampleWeather?'DEMO DATA':'DATA VIEW'}</span></div></div><div className="ym22-route-actions"><Link to={`/driver/trips?trip=${encodeURIComponent(trip.id)}&view=details`}>Trip details</Link><Link className="ym22-primary" to={`/driver/trips?trip=${encodeURIComponent(trip.id)}&view=sequence`}>Open first stop <ArrowUpRight size={14}/></Link></div></div>
+    <div className="ym22-route-metrics"><MetricCard label="Planned distance" value={trip.plannedDistanceKm==null?'Unavailable':`${trip.plannedDistanceKm.toFixed(1)} km`} detail={trip.plannedDistanceKm==null?'Saved coordinates are incomplete':`${routeLegs.length} legs · from saved locations`} icon={<Route/>}/><MetricCard label="Est. drive time" value={duration(trip.estimatedDriveMinutes)} detail="Driving only · excludes loading" icon={<Timer/>}/><MetricCard label="Stops" value={`${trip.stops.length} + 1 drop`} detail={`${approximateCount} location${approximateCount===1?'':'s'} approximate`} icon={<MapPin/>}/><MetricCard label="Planned finish" value={time(finish)} detail={receiving} icon={<Clock3/>}/></div>
+    <div className="ym22-route-layout"><section className="ym22-detail-panel ym22-map-panel"><header><div><h2>Planned route</h2><p>{trip.routingMethod==='nearest_next_stop'?'Nearest next stop sequence':'Assigned pickup sequence'} · {firstStop?.district||trip.destinationDistrict} to {trip.destinationDistrict}</p></div><span>Schematic · not to scale</span></header><SchematicRouteMap trip={trip}/></section>
+      <aside className="ym22-route-sidebar"><section className="ym22-detail-panel ym22-route-legs"><header><h2>Route legs</h2><span>Arrive</span></header>{routeLegs.length?routeLegs.map((leg)=><div className="ym22-route-leg" key={`${leg.sequence}-${leg.from}`}><span className={`ym22-route-leg-number ${leg.to===trip.destination?'is-destination':''}`}>{leg.to===trip.destination?'F':leg.sequence}</span><div><b>{legTitle(leg)}</b><small>{leg.approximate?'~ ':''}{leg.distanceKm==null?'Distance unavailable':`${leg.distanceKm.toFixed(1)} km`} · {duration(leg.durationMinutes)}{leg.approximate?' · approximate':''}</small></div><strong>{arrival(leg.arriveAt)}</strong></div>):<p className="ym22-route-empty">Route legs are not available until saved stop locations are provided.</p>}<div className="ym22-route-total"><b>Total</b><strong>{trip.plannedDistanceKm==null?'—':`${trip.plannedDistanceKm.toFixed(1)} km`}{trip.estimatedDriveMinutes!=null&&` · ${duration(trip.estimatedDriveMinutes)}`}</strong></div></section>
+        <section className="ym22-detail-panel ym22-before-panel"><header><h2>Before you go</h2></header><ul>{(trip.beforeYouGo?.length?trip.beforeYouGo:['Check the vehicle load before departure.','Record actual kg at each pickup stop.']).map((note,index)=><li key={index}><span>{index===0?'✓':'!'}</span>{note}</li>)}</ul>{trip.sampleWeather&&<div className="ym22-weather-note"><small>SAMPLE WEATHER</small><b>{trip.startLocation?.replace('Base · ','')||firstStop?.district} · forecast</b><p>{trip.sampleWeather} Context only; it does not change the route.</p></div>}</section>
+        <div className="ym22-route-disclaimer"><span/>Distances and times are planned from saved locations. Live traffic is not included.</div>
+      </aside></div>
+  </div>;
+}

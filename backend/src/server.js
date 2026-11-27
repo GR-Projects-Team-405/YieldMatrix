@@ -40,9 +40,10 @@ import ym32Routes from './modules/ym32/routes.js';
 export const app = express();
 app.disable('x-powered-by');
 app.use((req, res, next) => { req.requestId = randomUUID(); res.setHeader('X-Request-ID', req.requestId); next(); });
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
 app.use(express.json({ limit: '64kb' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'yieldmatrix-api', requestId: req.requestId }));
+app.get('/health', (req, res) => res.json({ status: 'ok', message: 'YieldMatrix API is running', requestId: req.requestId }));
 app.use('/api/auth', authRoutes);
 
 // YM01 - Aathil Hakam: Public pages. Add routes inside modules/ym01/routes.js.
@@ -150,5 +151,5 @@ app.use((error, req, res, next) => {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (!process.env.JWT_SECRET) throw new Error('Set JWT_SECRET in backend/.env before starting');
   const port = process.env.PORT || 5000;
-  app.listen(port, '127.0.0.1', () => console.log(`YieldMatrix API: http://localhost:${port}`));
+  app.listen(port, () => console.log(`YieldMatrix API: http://localhost:${port}`));
 }
