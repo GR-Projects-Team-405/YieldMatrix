@@ -18,9 +18,15 @@ export async function hashPassword(password) {
 }
 
 export async function verifyPassword(password, stored) {
+  if (typeof password !== 'string') return false;
   const parts = typeof stored === 'string' ? stored.split('$') : [];
   if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
   const [, n, r, p, saltB64, keyB64] = parts;
+  if (
+    n !== String(PARAMS.N) || r !== String(PARAMS.r) || p !== String(PARAMS.p) ||
+    !/^[A-Za-z0-9+/]{22}==$/.test(saltB64) ||
+    !/^[A-Za-z0-9+/]{86}==$/.test(keyB64)
+  ) return false;
   const expected = Buffer.from(keyB64, 'base64');
   const key = await scrypt(normalize(password), Buffer.from(saltB64, 'base64'), expected.length, {
     N: Number(n), r: Number(r), p: Number(p), maxmem: PARAMS.maxmem,

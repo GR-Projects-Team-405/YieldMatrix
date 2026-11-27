@@ -65,7 +65,8 @@ export async function authenticateUser({
         email,
         role,
         approval_status,
-        password_hash
+        password_hash,
+        session_version
       FROM users
       WHERE email = $1
     `,
@@ -102,6 +103,7 @@ export async function authenticateUser({
     {
       role: user.role,
       name: user.name,
+      session_version: user.session_version,
     },
     jwtSecret,
     {

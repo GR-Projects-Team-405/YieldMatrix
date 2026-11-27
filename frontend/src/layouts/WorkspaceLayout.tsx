@@ -73,8 +73,6 @@ export default function WorkspaceLayout() {
   const items = navigation[user.role];
   const path = pathname.split('/').slice(2).join('/') || 'overview';
   const page = items.find((item) => item.path === path)?.label || items.find((item) => item.path === path.split('/')[0])?.label || path.replaceAll('-', ' ');
-  const path = pathname.split('/')[2] || 'overview';
-  const page = items.find((item) => item.path === path)?.label || path.replaceAll('-', ' ');
   const isTraceDetailPage = pathname.includes('/trace/qr/') || pathname.includes('/trace/verify/');
   return <div className="workspace">
     <a className="skip-link" href="#workspace-content">Skip to content</a>

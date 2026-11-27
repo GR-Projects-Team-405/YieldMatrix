@@ -61,7 +61,7 @@ export async function login(req, res, next) {
     const key = `${req.ip}|${email}`;
     if (isLimited(key)) return res.status(429).json({ error: 'Too many attempts. Try again later.', requestId: req.requestId });
 
-    const { rows } = await pool.query('SELECT id, name, role, approval_status, password_hash FROM users WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT id, name, role, approval_status, password_hash, session_version FROM users WHERE email = $1', [email]);
     const user = rows[0];
     const canLogin = user?.role === 'admin' && Boolean(user.password_hash);
     const matches = await verifyPassword(password, canLogin ? user.password_hash : DUMMY_HASH);
@@ -76,7 +76,7 @@ export async function login(req, res, next) {
     }
 
     attempts.delete(key);
-    const token = jwt.sign({ role: user.role, name: user.name }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ role: user.role, name: user.name, session_version: user.session_version }, process.env.JWT_SECRET, {
       subject: user.id, expiresIn: '30m', algorithm: 'HS256', issuer: 'yieldmatrix', audience: 'yieldmatrix-web',
     });
     return res.json({ token, user: { id: user.id, name: user.name, role: user.role }, requestId: req.requestId });

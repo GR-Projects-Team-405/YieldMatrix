@@ -40,7 +40,7 @@ import ym32Routes from './modules/ym32/routes.js';
 export const app = express();
 app.disable('x-powered-by');
 app.use((req, res, next) => { req.requestId = randomUUID(); res.setHeader('X-Request-ID', req.requestId); next(); });
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
 app.use(express.json({ limit: '64kb' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'yieldmatrix-api', requestId: req.requestId }));
 app.get('/health', (req, res) => res.json({ status: 'ok', message: 'YieldMatrix API is running', requestId: req.requestId }));

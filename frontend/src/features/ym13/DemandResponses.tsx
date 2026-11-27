@@ -123,14 +123,14 @@ export default function DemandResponses() {
       <ConfirmDialog
         open={dialogOpen}
         title={selectedOffer?.action === 'accepted' ? 'Accept Offer?' : 'Reject Offer?'}
-        message={
+        description={
           selectedOffer?.action === 'accepted' 
             ? 'Are you sure you want to accept this farmer\'s offer? This will move it to the next stage.' 
             : 'Are you sure you want to reject this offer? This action cannot be undone.'
         }
         onCancel={() => setDialogOpen(false)}
         onConfirm={confirmAction}
-        confirmText={selectedOffer?.action === 'accepted' ? 'Yes, Accept' : 'Yes, Reject'}
+        confirmLabel={selectedOffer?.action === 'accepted' ? 'Yes, Accept' : 'Yes, Reject'}
         confirmVariant={selectedOffer?.action === 'accepted' ? 'primary' : 'danger'}
       />
     </ContentCard>
